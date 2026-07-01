@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LostArkPlayerController.h"
 #include "GameFramework/Pawn.h"
@@ -53,6 +53,9 @@ void ALostArkPlayerController::SetupInputComponent()
 		EnhancedInputComponent->BindAction(SetDestinationTouchAction, ETriggerEvent::Triggered, this, &ALostArkPlayerController::OnTouchTriggered);
 		EnhancedInputComponent->BindAction(SetDestinationTouchAction, ETriggerEvent::Completed, this, &ALostArkPlayerController::OnTouchReleased);
 		EnhancedInputComponent->BindAction(SetDestinationTouchAction, ETriggerEvent::Canceled, this, &ALostArkPlayerController::OnTouchReleased);
+
+		EnhancedInputComponent->BindAction(SetZoomInAction, ETriggerEvent::Triggered, this, &ALostArkPlayerController::OnZoomIn);
+		EnhancedInputComponent->BindAction(SetZoomOutAction, ETriggerEvent::Triggered, this, &ALostArkPlayerController::OnZoomOut);
 	}
 	else
 	{
@@ -122,4 +125,20 @@ void ALostArkPlayerController::OnTouchReleased()
 {
 	bIsTouch = false;
 	OnSetDestinationReleased();
+}
+
+void ALostArkPlayerController::OnZoomIn(const FInputActionValue& Value)
+{
+	ALostArkCharacter* Char = Cast<ALostArkCharacter>(GetPawn());
+	if (!Char) return;
+
+	Char->ZoomIn();
+}
+
+void ALostArkPlayerController::OnZoomOut(const FInputActionValue& Value)
+{
+	ALostArkCharacter* Char = Cast<ALostArkCharacter>(GetPawn());
+	if (!Char) return;
+
+	Char->ZoomOut();
 }

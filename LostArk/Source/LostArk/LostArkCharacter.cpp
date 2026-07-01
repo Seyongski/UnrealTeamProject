@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LostArkCharacter.h"
 #include "UObject/ConstructorHelpers.h"
@@ -43,9 +43,34 @@ ALostArkCharacter::ALostArkCharacter()
 	// Activate ticking in order to update the cursor every frame.
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
+
+	//set default camera distance
+	DesiredArmLength = 1400.f;
+	CameraBoom->TargetArmLength = 1400.f;
 }
 
 void ALostArkCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+	if (!CameraBoom) return;
+
+	CameraBoom->TargetArmLength = FMath::FInterpTo(
+		CameraBoom->TargetArmLength,
+		DesiredArmLength,
+		DeltaSeconds,
+		8.f //부드러움 강도 (클수록 빠름)
+	);
+}
+
+void ALostArkCharacter::ZoomIn()
+{
+	DesiredArmLength -= ZoomSpeed;
+	DesiredArmLength = FMath::Clamp(DesiredArmLength, MinZoom, MaxZoom);
+}
+
+void ALostArkCharacter::ZoomOut()
+{
+	DesiredArmLength += ZoomSpeed;
+	DesiredArmLength = FMath::Clamp(DesiredArmLength, MinZoom, MaxZoom);
 }

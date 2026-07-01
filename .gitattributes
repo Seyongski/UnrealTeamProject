@@ -1,0 +1,40 @@
+# ============================================================
+#  Git LFS 설정 - 대용량 바이너리 에셋 추적
+#  (에셋은 main 브랜치에 집중 관리)
+# ============================================================
+
+# --- Unreal 에셋/맵 ---
+*.uasset filter=lfs diff=lfs merge=lfs -text
+*.umap   filter=lfs diff=lfs merge=lfs -text
+
+# --- 텍스처 / 이미지 ---
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.bmp  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+
+# --- 3D 모델 / 애니메이션 ---
+*.fbx filter=lfs diff=lfs merge=lfs -text
+*.obj filter=lfs diff=lfs merge=lfs -text
+*.abc filter=lfs diff=lfs merge=lfs -text
+
+# --- 사운드 ---
+*.wav  filter=lfs diff=lfs merge=lfs -text
+*.mp3  filter=lfs diff=lfs merge=lfs -text
+*.ogg  filter=lfs diff=lfs merge=lfs -text
+
+# --- 폰트 / 미디어 ---
+*.ttf filter=lfs diff=lfs merge=lfs -text
+*.otf filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+
+# ============================================================
+#  라인엔딩 / 병합 규칙
+#  .uasset/.umap 은 바이너리 → 자동 병합 금지 (충돌 시 수동 해결)
+# ============================================================
+*.uasset -text merge=binary
+*.umap   -text merge=binary

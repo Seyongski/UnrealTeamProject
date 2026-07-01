@@ -1,0 +1,29 @@
+# CODEOWNERS — 폴더별 담당(자동 리뷰어 지정)
+# GitHub 사용자명은 확정되면 채운다. (@github-id 형태)
+#
+# 담당이 바뀌거나 브랜치명이 바뀌어도 이 파일의 경로 소유권은 그대로 유지된다.
+
+# 공용/핵심: 변경 시 팀 합의 필요 → 전원 리뷰 권장
+/docs/                                  @Seyongski
+/Source/*/Core/                         @Seyongski
+/Content/_Project/Core/                 @Seyongski
+/Content/_Project/GAS/Tags/             @Seyongski
+
+# 캐릭터 (담당 2명) — 확정 시 @id 추가
+# /Content/_Project/Characters/Warrior/   @char-a
+# /Content/_Project/Characters/Healer/    @char-a
+# /Content/_Project/Characters/Mage/      @char-b
+
+# 보스
+# /Content/_Project/Enemies/Boss/         @boss-dev
+
+# 일반몹 + UI
+# /Content/_Project/Enemies/Common/       @mob-ui-dev
+# /Content/_Project/UI/                   @mob-ui-dev
+
+# 레벨
+# /Content/_Project/Levels/               @level-dev
+
+# 에셋 통합 관리자 (main 에셋)
+# *.uasset                                @asset-manager
+# *.umap                                  @asset-manager

@@ -1,0 +1,42 @@
+# ============================================================
+#  Unreal Engine 5.3 - .gitignore
+# ============================================================
+
+# 빌드 산출물 / 중간 파일
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+.vscode/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# 사용자 로컬 설정
+Saved/Config/
+Config/*Local*
+
+# 플러그인 빌드 산출물 (플러그인 소스는 추적, 산출물은 제외)
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# 크래시/로그
+*.log
+*.tmp
+*.stackdump
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ============================================================
+#  주의: .uproject / Source / Content / Config(공용) 은 추적한다
+# ============================================================

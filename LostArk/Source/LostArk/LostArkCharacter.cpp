@@ -47,6 +47,35 @@ ALostArkCharacter::ALostArkCharacter()
 	//set default camera distance
 	DesiredArmLength = 1400.f;
 	CameraBoom->TargetArmLength = 1400.f;
+
+	AbilitySystemComponent = 
+		CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AttributeSet = CreateDefaultSubobject<ULostArkAttributeSet>(TEXT("AttributeSet"));
+}
+
+void ALostArkCharacter::BeginPlay()
+{
+	// Call the base class  
+	Super::BeginPlay();
+
+	if(AbilitySystemComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ASC OK"));
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		GiveDefaultAbilities();
+	}
+	else {
+		UE_LOG(LogTemp, Error, TEXT("ASC is NULL!"));
+	}
+
+	if (AbilitySystemComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ASC Initialized"));
+
+		// 테스트용: Ability 개수 확인
+		UE_LOG(LogTemp, Warning, TEXT("Granted Abilities: %d"),
+			AbilitySystemComponent->GetActivatableAbilities().Num());
+	}
 }
 
 void ALostArkCharacter::Tick(float DeltaSeconds)
@@ -136,4 +165,23 @@ void ALostArkCharacter::OnAttackFinished()
 	if (bIsAttackHeld) {
 		NormalAttack();
 	}
+}
+
+UAbilitySystemComponent* ALostArkCharacter::GetAbilitySystemComponent() const
+{
+	UE_LOG(LogTemp, Warning, TEXT("GetAbilitySystemComponent CALLED"));
+
+	return AbilitySystemComponent;
+}
+
+void ALostArkCharacter::GiveDefaultAbilities()
+{
+	if (!HasAuthority()) {
+		return;
+	}
+
+	if (DefaultAttackAbility) {
+		AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(DefaultAttackAbility, 1, 0));
+	}
+
 }

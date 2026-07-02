@@ -4,15 +4,19 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "AbilitySystemInterface.h"
+#include "AbilitySystemComponent.h"
+#include "LostArkAttributeSet.h"
 #include "LostArkCharacter.generated.h"
 
 UCLASS(Blueprintable)
-class ALostArkCharacter : public ACharacter
+class ALostArkCharacter : public ACharacter, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
 public:
 	ALostArkCharacter();
+	void BeginPlay();
 
 	// Called every frame.
 	virtual void Tick(float DeltaSeconds) override;
@@ -33,6 +37,15 @@ private:
 
 	bool bIsAttacking = false;
 	bool bInputBuffered = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS", meta = (AllowPrivateAccess = "true"))
+	UAbilitySystemComponent* AbilitySystemComponent;
+
+	UPROPERTY(EditDefaultsOnly, Category = "GAS")
+	TSubclassOf<UGameplayAbility> DefaultAttackAbility;
+
+	UPROPERTY()
+	UAttributeSet* AttributeSet;
 
 public:
 
@@ -58,10 +71,18 @@ public:
 
 	bool bIsAttackHeld = false;
 
+
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
 protected:
 	int32 ComboIndex = 0;
 	FTimerHandle ComboTimerHandle;
 
 	float AttackInterval = 0.4f; //평타간격... WeaponSpeed로 넣으면 됨
+
+	//void InitAbilitySystem();
+	void GiveDefaultAbilities();
+	//void InitializeAttributes();
+
 };
 

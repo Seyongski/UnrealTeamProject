@@ -74,3 +74,66 @@ void ALostArkCharacter::ZoomOut()
 	DesiredArmLength += ZoomSpeed;
 	DesiredArmLength = FMath::Clamp(DesiredArmLength, MinZoom, MaxZoom);
 }
+
+void ALostArkCharacter::NormalAttack()
+{
+	if (bIsAttacking) {
+		bInputBuffered = true;
+		return;
+	}
+	ComboIndex = (ComboIndex % 3) + 1;
+	ExecuteAttack(ComboIndex);
+
+}
+
+void ALostArkCharacter::ExecuteAttack(int32 Index)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Todo:Play Attack Anim!!Count : %d"), Index);
+
+	bIsAttacking = true;
+
+	//공격 간격 타이머(=애니메이션이 재생될 시간)
+	GetWorldTimerManager().ClearTimer(ComboTimerHandle);
+	GetWorldTimerManager().SetTimer(
+		ComboTimerHandle,
+		this,
+		&ALostArkCharacter::OnAttackFinished,
+		AttackInterval,
+		false
+	);
+
+	switch (Index) {
+	
+	case 1:
+		//PlayAnimMontage(Attack1Montage);
+		break;
+	case 2:
+		//PlayAnimMontage(Attack2Montage);
+		break;
+	case 3:
+		//PlayAnimMontage(Attack3Montage);
+		break;
+
+	default:
+		break;
+	}
+
+
+}
+
+void ALostArkCharacter::OnAttackFinished()
+{
+	bIsAttacking = false;
+
+	GetWorldTimerManager().ClearTimer(ComboTimerHandle);
+	if (bInputBuffered) {
+		bInputBuffered = false;
+		NormalAttack();
+		return;
+	}
+
+	//꾹눌렀을때
+	if (bIsAttackHeld) {
+		NormalAttack();
+	}
+}

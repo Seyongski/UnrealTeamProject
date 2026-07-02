@@ -31,6 +31,8 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class USpringArmComponent* CameraBoom;
 
+	bool bIsAttacking = false;
+	bool bInputBuffered = false;
 
 public:
 
@@ -48,5 +50,18 @@ public:
 
 	void ZoomIn();
 	void ZoomOut();
+
+	void NormalAttack(); //공격 입력 처리
+	void ExecuteAttack(int32 Index); //실제 공격 애님재생(몇번째 평타인지?)
+	void OnAttackFinished();
+
+
+	bool bIsAttackHeld = false;
+
+protected:
+	int32 ComboIndex = 0;
+	FTimerHandle ComboTimerHandle;
+
+	float AttackInterval = 0.4f; //평타간격... WeaponSpeed로 넣으면 됨
 };
 

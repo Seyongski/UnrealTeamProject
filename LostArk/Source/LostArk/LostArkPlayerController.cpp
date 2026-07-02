@@ -56,6 +56,12 @@ void ALostArkPlayerController::SetupInputComponent()
 
 		EnhancedInputComponent->BindAction(SetZoomInAction, ETriggerEvent::Triggered, this, &ALostArkPlayerController::OnZoomIn);
 		EnhancedInputComponent->BindAction(SetZoomOutAction, ETriggerEvent::Triggered, this, &ALostArkPlayerController::OnZoomOut);
+
+		// Setup mouse input events
+		EnhancedInputComponent->BindAction(SetAttackClickAction, ETriggerEvent::Started, this, &ALostArkPlayerController::OnAttackStarted);
+		EnhancedInputComponent->BindAction(SetAttackClickAction, ETriggerEvent::Completed, this, &ALostArkPlayerController::OnAttackReleased);
+		EnhancedInputComponent->BindAction(SetAttackClickAction, ETriggerEvent::Canceled, this, &ALostArkPlayerController::OnAttackReleased);
+
 	}
 	else
 	{
@@ -141,4 +147,24 @@ void ALostArkPlayerController::OnZoomOut(const FInputActionValue& Value)
 	if (!Char) return;
 
 	Char->ZoomOut();
+}
+
+void ALostArkPlayerController::OnAttackStarted()
+{
+	//플레이어 가져와서
+	ALostArkCharacter* LostArkPlayer = Cast<ALostArkCharacter>(GetPawn());
+	if (!LostArkPlayer) return;
+
+	//공격 호출
+	LostArkPlayer->bIsAttackHeld = true; //공격시작함
+	LostArkPlayer->NormalAttack();
+}
+
+void ALostArkPlayerController::OnAttackReleased()
+{
+	//플레이어 가져와서
+	ALostArkCharacter* LostArkPlayer = Cast<ALostArkCharacter>(GetPawn());
+	if (!LostArkPlayer) return;
+
+	LostArkPlayer->bIsAttackHeld = false; //공격끝났음
 }

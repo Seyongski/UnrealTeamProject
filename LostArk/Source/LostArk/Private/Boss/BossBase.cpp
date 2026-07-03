@@ -3,6 +3,9 @@
 
 #include "Boss/BossBase.h"
 #include "Boss/BackHeadDecalComponent.h"
+#include "Boss/BossAttributeSet.h"
+#include "Boss/Pattern/BossPatternComponent.h"
+#include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
 
 // Sets default values
@@ -20,6 +23,36 @@ ABossBase::ABossBase()
 	{
 		GetMesh()->SetReceivesDecals(false);
 	}
+
+	// GAS: ASC + 어트리뷰트 (다수 플레이어 대상 보스이므로 이펙트 복제는 Minimal)
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AbilitySystemComponent->SetIsReplicated(true);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+
+	AttributeSet = CreateDefaultSubobject<UBossAttributeSet>(TEXT("AttributeSet"));
+
+	// 패턴 흐름 브레인
+	PatternComponent = CreateDefaultSubobject<UBossPatternComponent>(TEXT("PatternComponent"));
+}
+
+UAbilitySystemComponent* ABossBase::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
+
+void ABossBase::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	// 서버: ActorInfo 초기화 -> 어트리뷰트 세팅 -> 체력 변화 구독
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		InitializeAttributes();
+
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UBossAttributeSet::GetHealthAttribute())
+			.AddUObject(this, &ABossBase::OnHealthChanged);
+	}
 }
 
 // Called when the game starts or when spawned
@@ -28,6 +61,47 @@ void ABossBase::BeginPlay()
 	Super::BeginPlay();
 
 	UpdateBackHeadDecal();
+
+	if (AbilitySystemComponent)
+	{
+		if (!HasAuthority())
+		{
+			// 클라이언트: 태그/큐 표현을 위해 ActorInfo 초기화
+			AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		}
+		else if (PatternComponent)
+		{
+			// 서버: 컴포넌트들이 BeginPlay(어빌리티 부여)를 마친 뒤 전투 시작
+			PatternComponent->StartCombat();
+		}
+	}
+}
+
+void ABossBase::InitializeAttributes()
+{
+	if (!AttributeSet)
+	{
+		return;
+	}
+
+	AttributeSet->InitMaxHealth(InitialMaxHealth);
+	AttributeSet->InitHealth(InitialMaxHealth);
+	AttributeSet->InitMaxStaggerGauge(InitialMaxStaggerGauge);
+	AttributeSet->InitStaggerGauge(InitialMaxStaggerGauge);
+}
+
+void ABossBase::OnHealthChanged(const FOnAttributeChangeData& Data)
+{
+	if (!AttributeSet || !PatternComponent)
+	{
+		return;
+	}
+
+	const float Max = AttributeSet->GetMaxHealth();
+	const float Percent = (Max > 0.f) ? (Data.NewValue / Max) * 100.f : 0.f;
+
+	// 전환은 예약만 됨(현재 패턴 완주 후 반영)
+	PatternComponent->NotifyHealthPercent(Percent);
 }
 
 void ABossBase::UpdateBackHeadDecal()

@@ -9,12 +9,62 @@
 
 class UAnimMontage;
 class UGameplayEffect;
-class UBossPatternAbility;
 
 /**
- * 패턴 1개의 "무엇을" 정의하는 원자적 데이터. (총 ~55개)
- * 흐름(다음 패턴)은 여기 두지 않는다 -> 여러 페이즈에서 재사용하기 위함.
- * 흐름은 UBossPhaseDataAsset 의 노드가 담당.
+ * 스텝 분기. 보스 ASC의 태그를 TagQuery로 평가해서 참이면 NextStepId로 이동.
+ * 몽타주 재생 '중' 조건이 충족되면 즉시 끊고 넘어간다(카운터 성공 -> 그로기 등).
+ */
+USTRUCT(BlueprintType)
+struct FPatternBranch
+{
+	GENERATED_BODY()
+
+	/** 보스 ASC 태그로 평가할 조건 (예: State.Boss.Countered 보유) */
+	UPROPERTY(EditDefaultsOnly, Category = "Branch")
+	FGameplayTagQuery Condition;
+
+	/** 조건 충족 시 이동할 스텝 */
+	UPROPERTY(EditDefaultsOnly, Category = "Branch")
+	FName NextStepId;
+};
+
+/**
+ * 패턴을 구성하는 몽타주 스텝 하나.
+ * 몽타주 1개를 재생하고, 재생 중/종료 시 분기 조건을 평가해 다음 스텝을 정한다.
+ */
+USTRUCT(BlueprintType)
+struct FPatternStep
+{
+	GENERATED_BODY()
+
+	/** 스텝 식별자 (분기 연결용) */
+	UPROPERTY(EditDefaultsOnly, Category = "Step")
+	FName StepId;
+
+	/** 이 스텝에서 재생할 몽타주 (소프트 레퍼런스: 현재 페이즈 것만 메모리에 로드됨) */
+	UPROPERTY(EditDefaultsOnly, Category = "Step")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	/** 이 몽타주 적중 시 적용할 데미지 GE (실제 적용은 애님노티파이 타이밍 예정) */
+	UPROPERTY(EditDefaultsOnly, Category = "Step")
+	TSubclassOf<UGameplayEffect> DamageEffect;
+
+	/** 이 몽타주 재생 중 보스에 부여할 윈도우 태그 (예: State.Boss.Counterable) */
+	UPROPERTY(EditDefaultsOnly, Category = "Step")
+	FGameplayTagContainer GrantedTagsDuringStep;
+
+	/** 조건 분기 (위에서부터 첫 매치 채택). 재생 중 충족되면 즉시 인터럽트 */
+	UPROPERTY(EditDefaultsOnly, Category = "Step")
+	TArray<FPatternBranch> Branches;
+
+	/** 분기 안 걸리고 몽타주가 정상 종료되면 이동할 스텝. 비우면 패턴 종료 */
+	UPROPERTY(EditDefaultsOnly, Category = "Step")
+	FName NextStepDefault;
+};
+
+/**
+ * 패턴 1개 = 몽타주 스텝들의 분기 그래프. (총 ~55개, 페이즈에서 가중치로 선택되어 재사용)
+ * 예) 기본 1->2->3, 2에서 카운터 성공 시 2 도중 끊고 1->2->4->5.
  */
 UCLASS(BlueprintType)
 class LOSTARK_API UPatternDataAsset : public UPrimaryDataAsset
@@ -26,31 +76,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern")
 	FName PatternId;
 
-	/** 실행 로직이 특수하면 전용 어빌리티로 오버라이드 (비우면 브레인의 기본 PatternAbility 사용) */
+	/** 시작 스텝 */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern")
-	TSubclassOf<UBossPatternAbility> AbilityOverride;
+	FName EntryStepId;
 
-	/** 재생할 몽타주 */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Visual")
-	TObjectPtr<UAnimMontage> Montage;
+	/** 스텝 그래프 */
+	UPROPERTY(EditDefaultsOnly, Category = "Pattern")
+	TArray<FPatternStep> Steps;
 
-	/** 예고(선딜) 시간 초 */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Timing")
-	float TelegraphTime = 1.0f;
-
-	/** 후딜 시간 초 */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Timing")
-	float RecoveryTime = 0.5f;
-
-	/** 적중 시 적용할 데미지 GameplayEffect */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Damage")
-	TSubclassOf<UGameplayEffect> DamageEffect;
-
-	/** 시전 중 보스에게 부여할 태그 (예: State.Boss.Counterable 카운터 윈도우) */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Tags")
-	FGameplayTagContainer GrantedTagsDuringCast;
-
-	/** 패턴 종료 시 이 태그가 보스에 있으면 '실패' 판정 (예: State.Boss.Countered / Groggy) */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Tags")
-	FGameplayTag FailTag;
+	/** StepId 로 스텝 찾기 (없으면 nullptr) */
+	const FPatternStep* FindStep(FName StepId) const;
 };

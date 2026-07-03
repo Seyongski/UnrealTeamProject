@@ -11,8 +11,8 @@
 // Sets default values
 ABossBase::ABossBase()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	// 현재 틱에서 하는 일이 없어 비활성화 (회전 추적 등 틱 로직 추가 시 다시 켤 것)
+	PrimaryActorTick.bCanEverTick = false;
 
 	// 백헤드 데칼: 캡슐(루트)에 부착 -> 보스 회전을 따라가며 앞=헤드 / 뒤=백 정렬
 	BackHeadDecal = CreateDefaultSubobject<UBackHeadDecalComponent>(TEXT("BackHeadDecal"));
@@ -48,10 +48,25 @@ void ABossBase::PossessedBy(AController* NewController)
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
-		InitializeAttributes();
 
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UBossAttributeSet::GetHealthAttribute())
-			.AddUObject(this, &ABossBase::OnHealthChanged);
+		// 재빙의 시 어트리뷰트 리셋/중복 바인딩/전투 재시작 방지
+		if (!bGASInitialized)
+		{
+			bGASInitialized = true;
+
+			InitializeAttributes();
+
+			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UBossAttributeSet::GetHealthAttribute())
+				.AddUObject(this, &ABossBase::OnHealthChanged);
+
+			// ASC 초기화가 끝난 지금 시점에 어빌리티 부여 + 전투 시작
+			// (전투 시작은 임시로 여기서. 이후 어그로/트리거 시점으로 옮기면 됨)
+			if (PatternComponent)
+			{
+				PatternComponent->InitializePatterns();
+				PatternComponent->StartCombat();
+			}
+		}
 	}
 }
 
@@ -62,18 +77,10 @@ void ABossBase::BeginPlay()
 
 	UpdateBackHeadDecal();
 
-	if (AbilitySystemComponent)
+	// 클라이언트: 태그/큐 표현을 위해 ActorInfo 초기화 (서버는 PossessedBy에서 처리)
+	if (AbilitySystemComponent && !HasAuthority())
 	{
-		if (!HasAuthority())
-		{
-			// 클라이언트: 태그/큐 표현을 위해 ActorInfo 초기화
-			AbilitySystemComponent->InitAbilityActorInfo(this, this);
-		}
-		else if (PatternComponent)
-		{
-			// 서버: 컴포넌트들이 BeginPlay(어빌리티 부여)를 마친 뒤 전투 시작
-			PatternComponent->StartCombat();
-		}
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
 }
 
@@ -117,17 +124,4 @@ void ABossBase::UpdateBackHeadDecal()
 	BackHeadDecal->UpdateRadius(GetCapsuleComponent()->GetScaledCapsuleRadius());
 }
 
-// Called every frame
-void ABossBase::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-}
-
-// Called to bind functionality to input
-void ABossBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-}
 

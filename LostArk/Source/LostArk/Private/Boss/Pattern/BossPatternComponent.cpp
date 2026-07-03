@@ -6,20 +6,19 @@
 #include "Boss/Pattern/PatternDataAsset.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Engine/AssetManager.h"
 
 UBossPatternComponent::UBossPatternComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UBossPatternComponent::BeginPlay()
+void UBossPatternComponent::InitializePatterns()
 {
-	Super::BeginPlay();
-
-	// 기본 패턴 어빌리티를 보스 ASC에 부여 (권한 있는 쪽에서만)
+	// 기본 패턴 어빌리티를 보스 ASC에 부여 (권한 있는 쪽에서만, 중복 방지)
 	if (UAbilitySystemComponent* ASC = GetASC())
 	{
-		if (DefaultPatternAbility && ASC->IsOwnerActorAuthoritative())
+		if (DefaultPatternAbility && ASC->IsOwnerActorAuthoritative() && !PatternAbilityHandle.IsValid())
 		{
 			PatternAbilityHandle = ASC->GiveAbility(
 				FGameplayAbilitySpec(DefaultPatternAbility, 1, INDEX_NONE, GetOwner()));
@@ -34,7 +33,8 @@ UAbilitySystemComponent* UBossPatternComponent::GetASC() const
 
 void UBossPatternComponent::StartCombat()
 {
-	if (Phases.Num() == 0)
+	// 이미 전투 중이면 무시 (재빙의 등으로 중복 호출 방지)
+	if (CurrentPhaseIndex != INDEX_NONE || Phases.Num() == 0)
 	{
 		return;
 	}
@@ -76,7 +76,13 @@ void UBossPatternComponent::EnterPhase(int32 PhaseIndex)
 	CurrentPhaseIndex = PhaseIndex;
 	UBossPhaseDataAsset* Phase = Phases[PhaseIndex];
 
-	// 전환 기믹이 있으면 먼저 실행 -> 끝나면 EntryNode 부터 시작
+	// 이 페이즈의 몽타주들 프리로드 + 이전 페이즈 몽타주 메모리 해제
+	PreloadPhaseAssets(Phase);
+
+	// 페이즈 태그 교체 (다른 시스템/어빌리티가 현재 페이즈를 태그로 조회 가능)
+	SwapPhaseTag(Phase->PhaseTag);
+
+	// 전환 기믹이 있으면 먼저 실행 -> 끝나면 일반 패턴 선택
 	if (Phase->TransitionGimmick)
 	{
 		bRunningTransition = true;
@@ -84,11 +90,30 @@ void UBossPatternComponent::EnterPhase(int32 PhaseIndex)
 	}
 	else
 	{
-		ActivateNode(Phase->EntryNodeId);
+		RunNextPattern();
 	}
 }
 
-void UBossPatternComponent::ActivateNode(FName NodeId)
+void UBossPatternComponent::SwapPhaseTag(const FGameplayTag& NewPhaseTag)
+{
+	UAbilitySystemComponent* ASC = GetASC();
+	if (!ASC)
+	{
+		return;
+	}
+
+	if (CurrentPhaseTag.IsValid())
+	{
+		ASC->RemoveLooseGameplayTag(CurrentPhaseTag);
+	}
+	if (NewPhaseTag.IsValid())
+	{
+		ASC->AddLooseGameplayTag(NewPhaseTag);
+	}
+	CurrentPhaseTag = NewPhaseTag;
+}
+
+void UBossPatternComponent::RunNextPattern()
 {
 	UBossPhaseDataAsset* Phase = Phases.IsValidIndex(CurrentPhaseIndex) ? Phases[CurrentPhaseIndex] : nullptr;
 	if (!Phase)
@@ -96,19 +121,11 @@ void UBossPatternComponent::ActivateNode(FName NodeId)
 		return;
 	}
 
-	const FBossPatternNode* Node = Phase->FindNode(NodeId);
-	if (!Node || !Node->Pattern)
+	if (UPatternDataAsset* Next = Phase->PickRandomWeighted())
 	{
-		// 갈 곳이 없으면 진입 노드로 되돌려 루프 (정책은 필요 시 변경)
-		if (NodeId != Phase->EntryNodeId && !Phase->EntryNodeId.IsNone())
-		{
-			ActivateNode(Phase->EntryNodeId);
-		}
-		return;
+		RunPatternData(Next);
 	}
-
-	CurrentNodeId = NodeId;
-	RunPatternData(Node->Pattern);
+	// 뽑을 패턴이 없으면 대기 (StartCombat/전환 시 다시 시도됨)
 }
 
 void UBossPatternComponent::RunPatternData(UPatternDataAsset* Data)
@@ -124,22 +141,69 @@ void UBossPatternComponent::RunPatternData(UPatternDataAsset* Data)
 
 void UBossPatternComponent::ActivateAbilityNow()
 {
-	if (UAbilitySystemComponent* ASC = GetASC())
+	UAbilitySystemComponent* ASC = GetASC();
+	if (!ASC)
 	{
-		ASC->TryActivateAbility(PatternAbilityHandle);
+		return;
+	}
+
+	// 발동 실패(그로기 등으로 Activation Blocked) 시 잠시 후 재시도
+	// -> 그로기가 풀릴 때까지 자연스럽게 대기하는 효과
+	if (!ASC->TryActivateAbility(PatternAbilityHandle))
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				ActivateRetryTimer, this, &UBossPatternComponent::ActivateAbilityNow, 0.5f, false);
+		}
 	}
 }
 
-void UBossPatternComponent::OnPatternAbilityFinished(EPatternResult Result)
+void UBossPatternComponent::PreloadPhaseAssets(const UBossPhaseDataAsset* Phase)
 {
-	// 1) 방금 끝난 게 페이즈 전환 기믹이면 -> 새 페이즈 진입 노드부터 시작
+	// 이 페이즈에서 재생될 수 있는 모든 몽타주 경로 수집
+	TArray<FSoftObjectPath> Paths;
+	auto CollectFromPattern = [&Paths](const UPatternDataAsset* Pattern)
+	{
+		if (!Pattern)
+		{
+			return;
+		}
+		for (const FPatternStep& Step : Pattern->Steps)
+		{
+			if (!Step.Montage.IsNull())
+			{
+				Paths.AddUnique(Step.Montage.ToSoftObjectPath());
+			}
+		}
+	};
+
+	CollectFromPattern(Phase->TransitionGimmick);
+	for (const FBossWeightedPattern& Weighted : Phase->Patterns)
+	{
+		CollectFromPattern(Weighted.Pattern);
+	}
+
+	// 이전 페이즈 핸들 해제 -> 이전 페이즈에서만 쓰던 몽타주는 GC 대상이 되어 메모리 반환
+	if (PhasePreloadHandle.IsValid())
+	{
+		PhasePreloadHandle->ReleaseHandle();
+		PhasePreloadHandle.Reset();
+	}
+
+	if (Paths.Num() > 0)
+	{
+		PhasePreloadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(MoveTemp(Paths));
+	}
+}
+
+void UBossPatternComponent::OnPatternAbilityFinished()
+{
+	// 1) 방금 끝난 게 페이즈 전환 기믹이면 -> 새 페이즈의 일반 패턴 시작
 	if (bRunningTransition)
 	{
 		bRunningTransition = false;
-		if (Phases.IsValidIndex(CurrentPhaseIndex))
-		{
-			ActivateNode(Phases[CurrentPhaseIndex]->EntryNodeId);
-		}
+		RunNextPattern();
 		return;
 	}
 
@@ -152,19 +216,6 @@ void UBossPatternComponent::OnPatternAbilityFinished(EPatternResult Result)
 		return;
 	}
 
-	// 3) 일반 분기: 성공/실패에 따라 다음 노드로
-	UBossPhaseDataAsset* Phase = Phases.IsValidIndex(CurrentPhaseIndex) ? Phases[CurrentPhaseIndex] : nullptr;
-	if (!Phase)
-	{
-		return;
-	}
-
-	const FBossPatternNode* Node = Phase->FindNode(CurrentNodeId);
-	if (!Node)
-	{
-		return;
-	}
-
-	const FName NextId = (Result == EPatternResult::Success) ? Node->NextOnSuccess : Node->NextOnFail;
-	ActivateNode(NextId);
+	// 3) 같은 페이즈에서 다음 패턴을 가중치로 선택
+	RunNextPattern();
 }

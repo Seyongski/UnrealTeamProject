@@ -8,11 +8,14 @@
 #include "BossAttributeSet.generated.h"
 
 // 어트리뷰트 접근자(Getter/Setter/Initter) 일괄 생성 매크로
+// (팀원의 다른 AttributeSet 헤더에서 같은 매크로를 정의해도 충돌하지 않도록 가드)
+#ifndef ATTRIBUTE_ACCESSORS
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
 	GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
 	GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
 	GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
 	GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
+#endif
 
 /**
  * 보스 전용 AttributeSet. (플레이어 셋과 분리 -> 머지 충돌 없음)

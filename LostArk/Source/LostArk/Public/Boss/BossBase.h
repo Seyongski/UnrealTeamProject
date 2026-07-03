@@ -32,12 +32,6 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
 	/** 캡슐 반경에 맞춰 백헤드 데칼 크기/위치 갱신. 캡슐 크기가 바뀔 때(버프 등) 호출 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|BackHead")
 	void UpdateBackHeadDecal();
@@ -72,4 +66,8 @@ protected:
 	/** 시작 최대 무력화 게이지 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Stats")
 	float InitialMaxStaggerGauge = 1000.f;
+
+private:
+	/** 재빙의 시 어트리뷰트 리셋/델리게이트 중복 바인딩/전투 재시작 방지 */
+	bool bGASInitialized = false;
 };

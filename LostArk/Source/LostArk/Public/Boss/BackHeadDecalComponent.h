@@ -30,8 +30,13 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnRegister() override;
 
 	// 데칼 머티리얼은 부모 UDecalComponent의 "Decal Material" 슬롯을 그대로 사용한다.
+
+	/** 지면 투영 방향(Pitch). 위로 쏘면(바닥에 안 찍히면) 부호를 반대로 바꿔볼 것 (-90 <-> +90) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BackHead")
+	float ProjectionPitch = -90.f;
 
 	/** 반경 대비 여백(cm) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BackHead")

@@ -32,9 +32,16 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
+	// Called every frame (기본 비활성. bDrawFacingDebug 켤 때만 틱)
+	virtual void Tick(float DeltaTime) override;
+
 	/** 캡슐 반경에 맞춰 백헤드 데칼 크기/위치 갱신. 캡슐 크기가 바뀔 때(버프 등) 호출 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|BackHead")
 	void UpdateBackHeadDecal();
+
+	/** 회전 검증용: 캡슐(액터) forward 방향을 화살표로 표시 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boss|Debug")
+	bool bDrawFacingDebug = false;
 
 protected:
 	/** 초기 체력/무력화 게이지를 어트리뷰트에 세팅 (서버) */

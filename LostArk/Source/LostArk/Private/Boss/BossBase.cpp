@@ -7,12 +7,14 @@
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "DrawDebugHelpers.h"
 
 // Sets default values
 ABossBase::ABossBase()
 {
-	// 현재 틱에서 하는 일이 없어 비활성화 (회전 추적 등 틱 로직 추가 시 다시 켤 것)
-	PrimaryActorTick.bCanEverTick = false;
+	// 기본 틱은 꺼두고(성능), 디버그 표시가 필요할 때만 BeginPlay에서 켠다
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	// 백헤드 데칼: 캡슐(루트)에 부착 -> 보스 회전을 따라가며 앞=헤드 / 뒤=백 정렬
 	BackHeadDecal = CreateDefaultSubobject<UBackHeadDecalComponent>(TEXT("BackHeadDecal"));
@@ -77,11 +79,30 @@ void ABossBase::BeginPlay()
 
 	UpdateBackHeadDecal();
 
+	// 회전 검증 디버그가 켜져 있을 때만 틱 활성화
+	SetActorTickEnabled(bDrawFacingDebug);
+
 	// 클라이언트: 태그/큐 표현을 위해 ActorInfo 초기화 (서버는 PossessedBy에서 처리)
 	if (AbilitySystemComponent && !HasAuthority())
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
+}
+
+void ABossBase::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!bDrawFacingDebug)
+	{
+		return;
+	}
+
+	// 캡슐(=액터, 루트) forward 를 화살표로. 캡슐이 실제로 얼마나 돌았는지 실시간 확인용
+	const FVector Origin = GetActorLocation();
+	const float Length = (GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleRadius() : 50.f) + 150.f;
+	DrawDebugDirectionalArrow(GetWorld(), Origin, Origin + GetActorForwardVector() * Length,
+		40.f, FColor::Yellow, false, -1.f, 0, 4.f);
 }
 
 void ABossBase::InitializeAttributes()

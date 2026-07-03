@@ -7,12 +7,16 @@ UBackHeadDecalComponent::UBackHeadDecalComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 
-	// 지면으로 투영되도록 회전. 에디터에서 방향 확인 후,
-	// 위로 투영되면 Pitch 부호를 반대로(+90) 바꾸면 된다.
-	SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
-
 	// 초기 크기 (실제 값은 BeginPlay/UpdateRadius에서 캡슐 반경으로 갱신)
 	DecalSize = FVector(ProjectionDepth, 100.f, 100.f);
+}
+
+void UBackHeadDecalComponent::OnRegister()
+{
+	Super::OnRegister();
+
+	// 지면 투영 방향 적용. ProjectionPitch 를 에디터에서 바꾸면 재등록되며 즉시 반영됨
+	SetRelativeRotation(FRotator(ProjectionPitch, 0.f, 0.f));
 }
 
 void UBackHeadDecalComponent::BeginPlay()

@@ -13,6 +13,7 @@ class UBossPhaseDataAsset;
 class UBossPatternAbility;
 class UPatternDataAsset;
 class UAbilitySystemComponent;
+class UBossTargetingComponent;
 
 /**
  * 보스 패턴 흐름 브레인.
@@ -77,4 +78,7 @@ private:
 	FGameplayAbilitySpecHandle PatternAbilityHandle;
 	FTimerHandle ActivateRetryTimer;			// 발동 실패(그로기 등) 시 재시도 타이머
 	TSharedPtr<FStreamableHandle> PhasePreloadHandle;	// 현재 페이즈 몽타주 로드 유지 핸들
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBossTargetingComponent> CachedTargeting;	// 타겟 선정용 (InitializePatterns에서 캐시)
 };

@@ -4,6 +4,7 @@
 #include "Boss/Pattern/BossPatternAbility.h"
 #include "Boss/Pattern/BossPhaseDataAsset.h"
 #include "Boss/Pattern/PatternDataAsset.h"
+#include "Boss/Targeting/BossTargetingComponent.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Engine/AssetManager.h"
@@ -23,6 +24,12 @@ void UBossPatternComponent::InitializePatterns()
 			PatternAbilityHandle = ASC->GiveAbility(
 				FGameplayAbilitySpec(DefaultPatternAbility, 1, INDEX_NONE, GetOwner()));
 		}
+	}
+
+	// 타겟팅 컴포넌트 캐시 (패턴 시작 시 선정에 사용)
+	if (AActor* Owner = GetOwner())
+	{
+		CachedTargeting = Owner->FindComponentByClass<UBossTargetingComponent>();
 	}
 }
 
@@ -131,6 +138,12 @@ void UBossPatternComponent::RunNextPattern()
 void UBossPatternComponent::RunPatternData(UPatternDataAsset* Data)
 {
 	ActivePatternData = Data;
+
+	// 패턴 시작 시 타겟 선정 (정책은 패턴 데이터에서)
+	if (Data && Data->bReselectTargetOnStart && CachedTargeting)
+	{
+		CachedTargeting->SelectTarget(Data->TargetPolicy);
+	}
 
 	// 어빌리티 종료 콜백 안에서 곧바로 재활성화하면 재진입 문제 -> 다음 틱에 활성화
 	if (UWorld* World = GetWorld())

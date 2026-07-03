@@ -11,6 +11,7 @@ class UBackHeadDecalComponent;
 class UAbilitySystemComponent;
 class UBossAttributeSet;
 class UBossPatternComponent;
+class UBossTargetingComponent;
 struct FOnAttributeChangeData;
 
 UCLASS()
@@ -65,6 +66,10 @@ protected:
 	/** 패턴 흐름 브레인 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Pattern")
 	TObjectPtr<UBossPatternComponent> PatternComponent;
+
+	/** 타겟 선정 + 추적 회전 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
+	TObjectPtr<UBossTargetingComponent> TargetingComponent;
 
 	/** 시작 최대 체력 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Stats")

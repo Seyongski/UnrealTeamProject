@@ -5,6 +5,7 @@
 #include "Boss/BackHeadDecalComponent.h"
 #include "Boss/BossAttributeSet.h"
 #include "Boss/Pattern/BossPatternComponent.h"
+#include "Boss/Targeting/BossTargetingComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
@@ -24,6 +25,10 @@ ABossBase::ABossBase()
 	if (GetMesh())
 	{
 		GetMesh()->SetReceivesDecals(false);
+
+		// 데디서버에서도 몽타주/노티파이/루트모션이 동작하도록 항상 포즈 틱
+		// (기본값 OnlyTickPoseWhenRendered 면 서버에서 안 렌더 -> 노티파이 안 불림)
+		GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	}
 
 	// GAS: ASC + 어트리뷰트 (다수 플레이어 대상 보스이므로 이펙트 복제는 Minimal)
@@ -35,6 +40,9 @@ ABossBase::ABossBase()
 
 	// 패턴 흐름 브레인
 	PatternComponent = CreateDefaultSubobject<UBossPatternComponent>(TEXT("PatternComponent"));
+
+	// 타겟 선정 + 추적 회전
+	TargetingComponent = CreateDefaultSubobject<UBossTargetingComponent>(TEXT("TargetingComponent"));
 }
 
 UAbilitySystemComponent* ABossBase::GetAbilitySystemComponent() const

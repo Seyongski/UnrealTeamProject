@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "Boss/Targeting/BossTargetingComponent.h"	// ETargetSelectPolicy
 #include "PatternDataAsset.generated.h"
 
 class UAnimMontage;
@@ -79,6 +80,14 @@ public:
 	/** 시작 스텝 */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern")
 	FName EntryStepId;
+
+	/** 패턴 시작 시 타겟을 새로 선정할지 (false면 직전 타겟 유지) */
+	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Targeting")
+	bool bReselectTargetOnStart = true;
+
+	/** 타겟 선정 정책 (근접/원거리/랜덤) */
+	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Targeting", meta = (EditCondition = "bReselectTargetOnStart"))
+	ETargetSelectPolicy TargetPolicy = ETargetSelectPolicy::Nearest;
 
 	/** 스텝 그래프 */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern")

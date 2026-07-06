@@ -156,7 +156,7 @@ void ALostArkPlayerController::OnAttackStarted()
 	if (!LostArkPlayer) return;
 
 	//공격 호출
-	LostArkPlayer->bIsAttackHeld = true; //공격시작함
+	LostArkPlayer->SetAttackHeld(true); //공격시작함
 	LostArkPlayer->NormalAttack();
 }
 
@@ -166,5 +166,5 @@ void ALostArkPlayerController::OnAttackReleased()
 	ALostArkCharacter* LostArkPlayer = Cast<ALostArkCharacter>(GetPawn());
 	if (!LostArkPlayer) return;
 
-	LostArkPlayer->bIsAttackHeld = false; //공격끝났음
+	LostArkPlayer->SetAttackHeld(false); //공격끝났음
 }

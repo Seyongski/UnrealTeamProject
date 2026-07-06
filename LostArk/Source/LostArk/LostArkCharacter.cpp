@@ -106,65 +106,34 @@ void ALostArkCharacter::ZoomOut()
 
 void ALostArkCharacter::NormalAttack()
 {
-	if (bIsAttacking) {
-		bInputBuffered = true;
-		return;
-	}
-	ComboIndex = (ComboIndex % 3) + 1;
-	ExecuteAttack(ComboIndex);
+	UE_LOG(LogTemp, Warning, TEXT("NormalAttack"));
+	bAttackBuffered = true;
 
-}
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!ASC) return;
 
-void ALostArkCharacter::ExecuteAttack(int32 Index)
-{
-	UE_LOG(LogTemp, Warning, TEXT("Todo:Play Attack Anim!!Count : %d"), Index);
+	const FGameplayTag AttackTag =
+		FGameplayTag::RequestGameplayTag("State.Attacking");
 
-	bIsAttacking = true;
-
-	//공격 간격 타이머(=애니메이션이 재생될 시간)
-	GetWorldTimerManager().ClearTimer(ComboTimerHandle);
-	GetWorldTimerManager().SetTimer(
-		ComboTimerHandle,
-		this,
-		&ALostArkCharacter::OnAttackFinished,
-		AttackInterval,
-		false
-	);
-
-	switch (Index) {
+	UE_LOG(LogTemp, Warning, TEXT("HasAttackTag = %d"),
+		ASC->HasMatchingGameplayTag(AttackTag));
 	
-	case 1:
-		//PlayAnimMontage(Attack1Montage);
-		break;
-	case 2:
-		//PlayAnimMontage(Attack2Montage);
-		break;
-	case 3:
-		//PlayAnimMontage(Attack3Montage);
-		break;
-
-	default:
-		break;
+	
+	if (!ASC->HasMatchingGameplayTag(
+		FGameplayTag::RequestGameplayTag("State.Attacking")))
+	{
+		ASC->TryActivateAbilityByClass(DefaultAttackAbility);
 	}
-
-
 }
 
-void ALostArkCharacter::OnAttackFinished()
+void ALostArkCharacter::SetAttackHeld(bool bHeld)
 {
-	bIsAttacking = false;
+	bIsAttackHeld = bHeld;
+}
 
-	GetWorldTimerManager().ClearTimer(ComboTimerHandle);
-	if (bInputBuffered) {
-		bInputBuffered = false;
-		NormalAttack();
-		return;
-	}
-
-	//꾹눌렀을때
-	if (bIsAttackHeld) {
-		NormalAttack();
-	}
+bool ALostArkCharacter::IsAttackHeld() const
+{
+	return bIsAttackHeld;
 }
 
 UAbilitySystemComponent* ALostArkCharacter::GetAbilitySystemComponent() const

@@ -35,11 +35,7 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class USpringArmComponent* CameraBoom;
 
-	bool bIsAttacking = false;
-	bool bInputBuffered = false;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS", meta = (AllowPrivateAccess = "true"))
-	UAbilitySystemComponent* AbilitySystemComponent;
+	bool bIsAttackHeld = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = "GAS")
 	TSubclassOf<UGameplayAbility> DefaultAttackAbility;
@@ -61,28 +57,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	float DesiredArmLength;
 
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS", meta = (AllowPrivateAccess = "true"))
+	UAbilitySystemComponent* AbilitySystemComponent;
+
 	void ZoomIn();
 	void ZoomOut();
 
 	void NormalAttack(); //공격 입력 처리
-	void ExecuteAttack(int32 Index); //실제 공격 애님재생(몇번째 평타인지?)
-	void OnAttackFinished();
+	void SetAttackHeld(bool bHeld);
+	bool IsAttackHeld() const;
 
-
-	bool bIsAttackHeld = false;
-
+	//눌림기록 저장
+	UPROPERTY()
+	bool bAttackBuffered = false;
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
 protected:
-	int32 ComboIndex = 0;
-	FTimerHandle ComboTimerHandle;
-
-	float AttackInterval = 0.4f; //평타간격... WeaponSpeed로 넣으면 됨
-
-	//void InitAbilitySystem();
 	void GiveDefaultAbilities();
-	//void InitializeAttributes();
 
 };
 

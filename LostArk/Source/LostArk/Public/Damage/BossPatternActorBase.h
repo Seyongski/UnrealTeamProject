@@ -32,16 +32,18 @@ enum class EAoeSpawnOrigin : uint8
 
 /**
  * 장판이 어떻게 움직이는가.
- * - Fixed  : 스폰 시점 위치에 고정 (일반 예고 장판)
- * - Follow : 매 틱 시전자(또는 소켓) 위치를 따라감 (몸통/무기 주변 장판)
- * - Homing : 타겟 위치로 서서히 이동 (유도 장판)
+ * - Fixed        : 스폰 시점 위치에 고정 (일반 예고 장판)
+ * - Follow       : 매 틱 시전자(또는 소켓) 위치를 따라감 (몸통/무기 주변 장판)
+ * - Homing       : 타겟 위치로 서서히 이동 (유도 장판)
+ * - FollowTarget : 매 틱 타겟 '발밑'에 부착되어 따라다님 (전하 변환장판 등)
  */
 UENUM(BlueprintType)
 enum class EAoeTargetingMode : uint8
 {
-	Fixed	UMETA(DisplayName = "고정"),
-	Follow	UMETA(DisplayName = "시전자 추적"),
-	Homing	UMETA(DisplayName = "타겟 유도")
+	Fixed		UMETA(DisplayName = "고정"),
+	Follow		UMETA(DisplayName = "시전자 추적"),
+	Homing		UMETA(DisplayName = "타겟 유도"),
+	FollowTarget	UMETA(DisplayName = "타겟 부착(발밑)")
 };
 
 /**
@@ -256,8 +258,14 @@ protected:
 	/** 한 번의 판정: 도형+높이+생존 필터 통과한 플레이어에게 GE 적용 */
 	virtual void PerformHitCheck();
 
-	/** 대상 1명에게 데미지+상태이상 GE 적용 (서버) */
-	void ApplyEffectsTo(AActor* Target);
+	/** 대상 1명에게 데미지+상태이상 GE 적용 (서버). 자식이 잡기/전하스왑 등으로 대체 가능 */
+	virtual void ApplyEffectsTo(AActor* Target);
+
+	/** 유지 종료 -> 이벤트 방송 + 파괴. 자식이 파괴 지연(잡기 유지 등)에 오버라이드 가능 */
+	virtual void FinishAoe();
+
+	/** 대상 발밑 위치 (Character면 캡슐 절반만큼 내림) */
+	static FVector GetFeetLocation(const AActor* Target);
 
 	/** 예고 비주얼 제거 */
 	void HideTelegraph();
@@ -284,6 +292,4 @@ private:
 	TSet<TWeakObjectPtr<AActor>> AlreadyHitActors;
 
 	bool bFinished = false;
-
-	void FinishAoe();
 };

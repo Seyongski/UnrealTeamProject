@@ -17,5 +17,12 @@ namespace LostArkTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Debuff_Shock, "State.Debuff.Shock", "감전 상태이상 (플레이어 대상)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Dead, "State.Dead", "사망 (타겟 후보 제외용)");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_Grabbed, "State.Player.Grabbed", "보스에게 잡힌 상태 (입력/이동 잠금은 플레이어 쪽에서 바인딩)");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Charge_Red, "State.Charge.Red", "빨간 전하 (조우 시 랜덤 부여)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Charge_Blue, "State.Charge.Blue", "파란 전하 (조우 시 랜덤 부여)");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_WeakPointExposed, "State.Boss.WeakPointExposed", "약점포착: 어디서 때려도 백/헤드어택 보너스 적용");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Damage, "Data.Damage", "SetByCaller: 데미지 GE에 실을 공격력계수");
 }

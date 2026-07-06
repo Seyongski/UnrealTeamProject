@@ -7,6 +7,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "ProceduralMeshComponent.h"
@@ -94,7 +95,7 @@ void ABossPatternActorBase::ResolveOrigin()
 	case EAoeSpawnOrigin::TargetLocation:
 		if (HomingTarget)
 		{
-			Loc = HomingTarget->GetActorLocation();
+			Loc = GetFeetLocation(HomingTarget);	// 장판은 발밑 기준
 		}
 		break;
 
@@ -209,10 +210,36 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 		}
 		break;
 
+	case EAoeTargetingMode::FollowTarget:
+		if (HomingTarget)
+		{
+			AttackCenter = GetFeetLocation(HomingTarget);
+			SetActorLocation(AttackCenter);
+		}
+		break;
+
 	case EAoeTargetingMode::Fixed:
 	default:
 		break;
 	}
+}
+
+FVector ABossPatternActorBase::GetFeetLocation(const AActor* Target)
+{
+	if (!Target)
+	{
+		return FVector::ZeroVector;
+	}
+
+	FVector Loc = Target->GetActorLocation();
+	if (const ACharacter* C = Cast<ACharacter>(Target))
+	{
+		if (const UCapsuleComponent* Capsule = C->GetCapsuleComponent())
+		{
+			Loc.Z -= Capsule->GetScaledCapsuleHalfHeight();
+		}
+	}
+	return Loc;
 }
 
 void ABossPatternActorBase::OnCastFinished()

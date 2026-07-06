@@ -23,4 +23,7 @@ namespace LostArkTags
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Debuff_Shock);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
+
+	// SetByCaller: 데미지 GE에 공격력계수를 실어 보내는 데이터 태그
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 }

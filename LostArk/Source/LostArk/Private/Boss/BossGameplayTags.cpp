@@ -16,4 +16,6 @@ namespace LostArkTags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Debuff_Shock, "State.Debuff.Shock", "감전 상태이상 (플레이어 대상)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Dead, "State.Dead", "사망 (타겟 후보 제외용)");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Damage, "Data.Damage", "SetByCaller: 데미지 GE에 실을 공격력계수");
 }

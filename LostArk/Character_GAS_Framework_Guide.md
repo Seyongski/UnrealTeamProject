@@ -15,12 +15,18 @@
 ### 스킬 베이스 (Abilities)
 * `LostArkGameplayAbility.h` / `LostArkGameplayAbility.cpp`
   * **설명**: 스킬 데미지 적용(`ApplyDamageInRadius`), 이펙트 할당 등 전투에 필요한 공통 로직이 구현된 최상위 스킬 클래스입니다.
+* `LostArkCharacterComboAttackAbility.h` / `LostArkCharacterComboAttackAbility.cpp`
+  * **설명**: 기본 평타(콤보 공격) 시스템을 구현한 어빌리티 클래스입니다. 캐릭터의 `Combo Attack Ability Class`에 할당되어 다단 히트와 입력 타이밍(Combo Window)을 처리합니다.
 
 ### 인터페이스 및 타입 (Interfaces & Types)
 * `LostArkCombatInterface.h`
   * **설명**: 전투 상태 변경 및 죽음 판정 등을 다른 클래스와 결합도(Coupling) 없이 통신하기 위한 인터페이스입니다.
 * `LostArkAbilityTypes.h`
   * **설명**: `ELostArkAbilityInputID` (키 입력 식별자) 및 `FLostArkSkillInputBind` (입력-스킬 매핑 구조체) 등 데이터 바인딩을 위한 필수 구조체가 정의되어 있습니다.
+
+### 애니메이션 노티파이 (Animation Utilities)
+* `LostArkAnimNotify_HitCheck.h` / `LostArkAnimNotify_HitCheck.cpp`
+  * **설명**: 몽타주 재생 중 정확한 타격 시점(Hit)에 데미지 판정을 내리기 위한 노티파이입니다. 몽타주 타임라인에 배치하면 어빌리티 내부로 `Gameplay.Event.HitCheck` 이벤트를 전송하여 데미지를 적용시킵니다.
 
 ---
 

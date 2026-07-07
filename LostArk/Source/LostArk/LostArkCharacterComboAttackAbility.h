@@ -52,8 +52,7 @@ private:
 	UFUNCTION()
 	void CloseComboWindow();
 
-	UFUNCTION()
-	void OnHitCheckReceived(FGameplayEventData Payload);
+
 
 	int32 CurrentComboIndex;
 	bool bIsComboWindowActive;

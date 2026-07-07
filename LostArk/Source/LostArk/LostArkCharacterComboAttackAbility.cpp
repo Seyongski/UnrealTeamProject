@@ -66,21 +66,7 @@ void ULostArkCharacterComboAttackAbility::ActivateAbility(const FGameplayAbility
 		}
 	}
 
-	if (DamageEffectClass)
-	{
-		UAbilityTask_WaitGameplayEvent* HitCheckTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-			this,
-			FGameplayTag::RequestGameplayTag(FName("Gameplay.Event.HitCheck"), false),
-			nullptr,
-			true,
-			true
-		);
-		if (HitCheckTask)
-		{
-			HitCheckTask->EventReceived.AddDynamic(this, &ULostArkCharacterComboAttackAbility::OnHitCheckReceived);
-			HitCheckTask->ReadyForActivation();
-		}
-	}
+	SetupHitCheckListener();
 
 	CurrentComboIndex = 0;
 	bIsComboWindowActive = false;
@@ -249,15 +235,4 @@ void ULostArkCharacterComboAttackAbility::EndAbility(const FGameplayAbilitySpecH
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-void ULostArkCharacterComboAttackAbility::OnHitCheckReceived(FGameplayEventData Payload)
-{
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!AvatarActor) return;
 
-	ApplyDamageInRadius(
-		AvatarActor->GetActorLocation(),
-		HitRadius,
-		DamageCoefficient,
-		AvatarActor
-	);
-}

@@ -116,7 +116,7 @@ void ALostArkPlayerController::OnTouchTriggered()
 {
 	bIsTouch = true;
 	OnSetDestinationTriggered();
-}
+}	
 
 void ALostArkPlayerController::OnTouchReleased()
 {

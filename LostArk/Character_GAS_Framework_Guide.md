@@ -14,9 +14,13 @@
 
 ### 스킬 베이스 (Abilities)
 * `LostArkGameplayAbility.h` / `LostArkGameplayAbility.cpp`
-  * **설명**: 스킬 데미지 적용(`ApplyDamageInRadius`), 이펙트 할당 등 전투에 필요한 공통 로직이 구현된 최상위 스킬 클래스입니다.
+  * **설명**: 최상위 어빌리티 클래스입니다. `FDamageShapeParams`를 통해 구(Sphere), 상자(Box), 원뿔(Cone) 형태의 범용 데미지 판정을 지원하며, `Gameplay.Event.HitCheck` 이벤트를 수신해 타격을 적용합니다.
+* `LostArkSkillGameplayAbility.h` / `LostArkSkillGameplayAbility.cpp`
+  * **설명**: 위 클래스를 상속받는 **일반 스킬(Q,W,E,R 등)의 최상위 베이스**입니다. 몽타주 재생, 스킬 돌진(Dash), 쿨타임 및 코스트(자원 소모) 적용 등 범용 스킬 로직을 제공합니다.
+* `LostArkComboSkillAbility.h` / `LostArkComboSkillAbility.cpp`
+  * **설명**: 여러 번 키를 눌러 연계하는 **콤보형 액티브 스킬**을 만들 때 사용하는 베이스입니다.
 * `LostArkCharacterComboAttackAbility.h` / `LostArkCharacterComboAttackAbility.cpp`
-  * **설명**: 기본 평타(콤보 공격) 시스템을 구현한 어빌리티 클래스입니다. 캐릭터의 `Combo Attack Ability Class`에 할당되어 다단 히트와 입력 타이밍(Combo Window)을 처리합니다.
+  * **설명**: 일반 스킬이 아닌 캐릭터의 **기본 평타(마우스 클릭) 콤보** 전용 어빌리티입니다. 캐릭터 베이스의 `Combo Attack Ability Class`에 할당되어 다단 히트를 처리합니다.
 
 ### 인터페이스 및 타입 (Interfaces & Types)
 * `LostArkCombatInterface.h`
@@ -43,10 +47,11 @@
 1. 부모 클래스로 `LostArkGameplayAbility`를 선택하여 새로운 Blueprint 스킬(예: `GA_Fireball`)을 생성합니다.
 2. `Event Activate Ability` 노드를 시작으로 애니메이션 몽타주 재생(`PlayMontageAndWait`), 파티클 스폰 등의 연출 로직을 구성합니다.
 3. 해당 블루프린트의 **Class Defaults(디테일 패널)** 에서 기획에 맞게 수치를 세팅합니다.
+   * `Damage Shape Params`: 타격 판정 형태(Sphere, Box, Cone)와 크기(Radius, Extent 등) 및 데미지 계수를 설정합니다. 디버그 라인을 켜고 끌 수 있습니다.
    * `Damage Effect Class`: 타격 시 적용할 데미지 이펙트(GE)
-   * `Hit Radius`: 타격 판정 범위
-   * `Damage Coefficient`: 데미지 계수 (예: 1.5면 공격력의 1.5배)
-4. 로직이 끝나면 반드시 `End Ability` 노드를 연결해 스킬을 종료시켜 줍니다.
+   * `Skill Montage`: 스킬 사용 시 재생할 애니메이션 몽타주
+   * `Dash`: 스킬 사용 중 앞으로 돌진할지 여부와 거리, 시간 등을 설정합니다.
+4. 로직이 끝나면 반드시 `End Ability` 노드를 연결해 스킬을 종료시켜 줍니다. (단, `LostArkSkillGameplayAbility`를 상속받은 경우 몽타주가 끝나면 자동으로 종료되도록 베이스에 구현되어 있습니다.)
 
 ### Step 3. 캐릭터에 스킬과 키 입력 연결하기
 1. Step 1에서 만든 캐릭터 블루프린트(`BP_Warrior`)를 엽니다.

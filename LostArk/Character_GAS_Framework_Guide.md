@@ -32,6 +32,14 @@
 * `LostArkAnimNotify_HitCheck.h` / `LostArkAnimNotify_HitCheck.cpp`
   * **설명**: 몽타주 재생 중 정확한 타격 시점(Hit)에 데미지 판정을 내리기 위한 노티파이입니다. 몽타주 타임라인에 배치하면 어빌리티 내부로 `Gameplay.Event.HitCheck` 이벤트를 전송하여 데미지를 적용시킵니다.
 
+### 몬스터 및 스포너 시스템 (Monsters & Spawners)
+* `LostArkMonster.h` / `LostArkMonster.cpp`, `LostArkMonsterAttackAbility.h` / `.cpp`
+  * **설명**: 상태머신(Spawn, Idle, Move, Attack, Dead)이 구현된 몬스터 베이스와 몬스터 전용 평타 어빌리티입니다.
+* `LostArkAIController.h` / `LostArkAIController.cpp`
+  * **설명**: 몬스터에 부착되어 플레이어를 탐지하고 거리에 따라 이동/공격을 판단하는 범용 AI 컨트롤러입니다.
+* `LostArkMonsterSpawner.h/cpp`, `LostArkObjectPoolSubsystem.h/cpp`
+  * **설명**: 몬스터를 지정된 위치 주변에 반복 스폰하는 스포너와, 생성(Spawn)/파괴(Destroy) 대신 메모리를 껐다 켜서 재사용하는 **오브젝트 풀링 최적화 시스템**입니다.
+
 ---
 
 ## 📖 2. 팀원용 베이스 사용 메뉴얼
@@ -70,6 +78,37 @@
 
 ---
 
-## 🛠 3. 설계 의도 및 주의사항
+## 👾 3. 몬스터 및 스포너 시스템 사용 가이드
+
+몬스터 역시 C++ 코드 수정 없이 블루프린트와 디테일 패널에서 데이터 기반으로 몬스터 군단을 쉽게 만들 수 있습니다.
+
+### Step 1. 신규 몬스터 생성 및 세팅
+1. 부모 클래스로 `LostArkMonster`를 상속받는 블루프린트를 생성합니다. (예: `BP_Goblin`)
+2. Mesh와 AnimInstance를 할당합니다.
+3. 블루프린트 디테일 패널에서 **Monster | Settings** 카테고리를 찾습니다.
+   * `Spawn Duration`: 스폰 애니메이션이 끝날 때까지 대기하는 시간(무적/이동불가 상태)
+   * `Base Attack Range`: 몬스터의 공격 사거리 (이 사거리 내에 플레이어가 오면 공격합니다)
+4. AI 컨트롤러 할당: **Pawn** 카테고리의 `AI Controller Class`를 `LostArkAIController`로 지정합니다.
+
+### Step 2. 몬스터 공격 어빌리티 생성
+1. 부모 클래스로 `LostArkMonsterAttackAbility`를 상속받아 몬스터 평타 어빌리티(예: `GA_GoblinAttack`)를 생성합니다.
+2. Step 1에서 만든 몬스터 블루프린트를 열어, **Monster | Abilities** 카테고리의 `Attack Ability Class`에 해당 어빌리티를 지정해 줍니다.
+
+### Step 3. 월드에 몬스터 스포너 배치
+1. 부모 클래스로 `LostArkMonsterSpawner`를 상속받는 블루프린트를 생성합니다. (예: `BP_GoblinSpawner`)
+2. 만든 스포너를 레벨(맵) 위에 드래그 앤 드롭으로 배치합니다.
+3. 스포너의 디테일 패널에서 스폰 규칙을 세팅합니다:
+   * `Monster Class`: 이 스포너가 생성할 몬스터 블루프린트 지정 (예: `BP_Goblin`)
+   * `Total Spawn Limit`: 총 몇 마리를 스폰할 것인지 (예: 50마리)
+   * `Spawn Count Per Batch`: 한 번 스폰될 때 몇 마리씩 무리지어 나올지 (예: 3마리)
+   * `Max Active Monsters`: 월드에 동시에 존재할 수 있는 최대 마릿수 (예: 10마리로 설정하면 10마리가 될 때까지 스폰하다가 죽으면 다시 채웁니다)
+   * `Spawn Radius`: 스포너를 중심으로 어느 반경 내에 무작위로 스폰될지 지정
+   * `Spawn Interval`: 스폰 쿨타임 (초 단위)
+
+> **💡 최적화 주의사항 (Object Pooling)**: 몬스터는 스폰/사망 시 렉을 유발하지 않도록 백그라운드 풀링(Pooling) 시스템을 자동으로 탑재하고 있습니다. 따라서 몬스터가 죽을 때 Blueprint 노드에서 임의로 `Destroy Actor`를 호출하지 마세요. 몬스터 베이스의 죽음 판정 로직이 끝나면 자동으로 풀(Pool)로 회수되어 재사용 대기 상태로 전환됩니다.
+
+---
+
+## 🛠 4. 설계 의도 및 주의사항
 * **핵심 로직 분리**: 전투 판정 및 상태 동기화 같은 복잡한 연산은 C++ 베이스에 모두 구현되어 있습니다. Blueprint에서는 오직 데이터 세팅과 비주얼 연출에만 집중하시면 됩니다.
 * **하드코딩 지양**: 캐릭터 블루프린트의 `SkillInputBinds`를 통해 데이터 기반으로 스킬이 관리됩니다. 코드를 수정할 필요 없이 인스펙터에서 스킬을 자유롭게 교체하고 테스트하세요.

@@ -3,6 +3,7 @@
 
 #include "Damage/BossAoe_Sector.h"
 #include "DrawDebugHelpers.h"
+#include "NiagaraComponent.h"
 
 bool ABossAoe_Sector::IsInsideShape(const FVector& WorldPoint) const
 {
@@ -104,4 +105,16 @@ void ABossAoe_Sector::DebugDrawShape() const
 		DrawDebugLine(GetWorld(), AttackCenter + Dir * InnerRadius, AttackCenter + Dir * Radius,
 			FColor::Green, false, 4.f, 0, 4.f);
 	}
+}
+
+void ABossAoe_Sector::ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const
+{
+	if (!NiagaraComp)
+	{
+		return;
+	}
+	NiagaraComp->SetFloatParameter(TEXT("Radius"), Radius);
+	NiagaraComp->SetFloatParameter(TEXT("InnerRatio"), Radius > KINDA_SMALL_NUMBER ? InnerRadius / Radius : 0.f);
+	NiagaraComp->SetFloatParameter(TEXT("StartAngleDeg"), StartAngle);
+	NiagaraComp->SetFloatParameter(TEXT("EndAngleDeg"), EndAngle);
 }

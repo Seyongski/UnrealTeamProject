@@ -3,6 +3,7 @@
 
 #include "Damage/BossAoe_Rect.h"
 #include "DrawDebugHelpers.h"
+#include "NiagaraComponent.h"
 
 bool ABossAoe_Rect::IsInsideShape(const FVector& WorldPoint) const
 {
@@ -42,4 +43,15 @@ void ABossAoe_Rect::DebugDrawShape() const
 	const FQuat Rot = FRotationMatrix::MakeFromXY(GetShapeForward(), GetShapeRight()).ToQuat();
 	DrawDebugBox(GetWorld(), Center, FVector(HalfLength, HalfWidth, 20.f), Rot,
 		FColor::Green, false, 4.f, 0, 4.f);
+}
+
+void ABossAoe_Rect::ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const
+{
+	if (!NiagaraComp)
+	{
+		return;
+	}
+	NiagaraComp->SetFloatParameter(TEXT("HalfLength"), HalfLength);
+	NiagaraComp->SetFloatParameter(TEXT("HalfWidth"), HalfWidth);
+	NiagaraComp->SetFloatParameter(TEXT("ForwardOffset"), ForwardOffset);
 }

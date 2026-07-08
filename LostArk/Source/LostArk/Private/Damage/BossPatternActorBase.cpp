@@ -12,6 +12,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "ProceduralMeshComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "CollisionQueryParams.h"
@@ -58,9 +60,17 @@ void ABossPatternActorBase::BeginPlay()
 	ResolveOrigin();
 
 	// 예고 비주얼 (즉발이 아닐 때만, 모든 머신에서 코스메틱으로 표시)
+	// TelegraphEffect 지정 시 VFX로 대체, 아니면 기존 프로시저럴 메시
 	if (!bInstant)
 	{
-		BuildTelegraph();
+		if (TelegraphEffect)
+		{
+			BuildTelegraphEffect();
+		}
+		else
+		{
+			BuildTelegraph();
+		}
 	}
 
 	OnAoeBegin.Broadcast();
@@ -155,6 +165,9 @@ void ABossPatternActorBase::ResolveOrigin()
 	ShapeRight = GetActorRightVector();
 	ShapeRight.Z = 0.f;
 	ShapeRight.Normalize();
+
+	// Spiral 모드: 나선 중심(직선 진행 위치)을 스폰 지점에서 시작
+	SpiralBasePos = AttackCenter;
 }
 
 FVector ABossPatternActorBase::GetCasterOriginLocation() const
@@ -218,6 +231,27 @@ UProceduralMeshComponent* ABossPatternActorBase::CreateTelegraphMesh(
 	return ProcMesh;
 }
 
+void ABossPatternActorBase::BuildTelegraphEffect()
+{
+	if (!TelegraphEffect)
+	{
+		return;
+	}
+
+	// 루트에 부착 -> Follow/Homing/Spiral 등 이동 시 액터와 함께 자동으로 따라옴 (메시 텔레그래프와 동일 원리)
+	UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAttached(
+		TelegraphEffect, GetRootComponent(), NAME_None,
+		FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset,
+		/*bAutoDestroy=*/false);
+
+	if (NC)
+	{
+		ConfigureTelegraphEffect(NC);	// 도형별 크기/각도 파라미터 주입 (자식 구현)
+	}
+
+	WarningComp = NC;	// UNiagaraComponent 도 UPrimitiveComponent 라 HideTelegraph 가 그대로 정리
+}
+
 void ABossPatternActorBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -253,6 +287,38 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 		if (HomingTarget)
 		{
 			AttackCenter = GetFeetLocation(HomingTarget);
+			SetActorLocation(AttackCenter);
+		}
+		break;
+
+	case EAoeTargetingMode::Spiral:
+		if (HomingTarget)
+		{
+			// 1) 직선 진행: 나선 중심을 타겟 쪽으로 전진 (Homing과 동일한 전진 로직)
+			const FVector Goal = HomingTarget->GetActorLocation();
+			SpiralBasePos = (HomingSpeed > 0.f)
+				? FMath::VInterpConstantTo(SpiralBasePos, Goal, DeltaTime, HomingSpeed)
+				: Goal;
+
+			// 2) 나선 궤도: 진행 방향에 수직인 평면(Right/Up)에서 각도 누적 + 반지름 감쇠
+			SpiralAngle += SpiralAngularSpeed * DeltaTime;
+
+			FVector Dir = Goal - SpiralBasePos;
+			Dir = Dir.IsNearlyZero() ? ShapeForward : Dir.GetSafeNormal();
+
+			FVector Right = FVector::CrossProduct(FVector::UpVector, Dir);
+			Right = Right.IsNearlyZero() ? ShapeRight : Right.GetSafeNormal();
+			const FVector Up = FVector::CrossProduct(Dir, Right).GetSafeNormal();
+
+			const float DistLeft = FVector::Dist(SpiralBasePos, Goal);
+			const float RadiusNow = (SpiralConvergeDistance > KINDA_SMALL_NUMBER)
+				? SpiralRadius * FMath::Clamp(DistLeft / SpiralConvergeDistance, 0.f, 1.f)
+				: SpiralRadius;
+
+			const float Rad = FMath::DegreesToRadians(SpiralAngle);
+			const FVector OrbitOffset = (Right * FMath::Cos(Rad) + Up * FMath::Sin(Rad)) * RadiusNow;
+
+			AttackCenter = SpiralBasePos + OrbitOffset;
 			SetActorLocation(AttackCenter);
 		}
 		break;

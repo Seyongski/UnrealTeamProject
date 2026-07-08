@@ -3,6 +3,7 @@
 
 #include "Damage/BossAoe_Circle.h"
 #include "DrawDebugHelpers.h"
+#include "NiagaraComponent.h"
 
 bool ABossAoe_Circle::IsInsideShape(const FVector& WorldPoint) const
 {
@@ -64,4 +65,15 @@ void ABossAoe_Circle::DebugDrawShape() const
 		DrawDebugCircle(GetWorld(), AttackCenter, InnerRadius, 48, FColor::Yellow, false, 4.f, 0, 4.f,
 			GetShapeRight(), GetShapeForward(), false);
 	}
+}
+
+void ABossAoe_Circle::ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const
+{
+	if (!NiagaraComp)
+	{
+		return;
+	}
+	// 나이아가라 시스템에 같은 이름의 User 파라미터(float)를 노출해두면 반영됨
+	NiagaraComp->SetFloatParameter(TEXT("Radius"), Radius);
+	NiagaraComp->SetFloatParameter(TEXT("InnerRatio"), Radius > KINDA_SMALL_NUMBER ? InnerRadius / Radius : 0.f);
 }

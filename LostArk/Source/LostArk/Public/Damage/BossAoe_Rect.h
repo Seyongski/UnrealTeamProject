@@ -32,4 +32,5 @@ protected:
 	virtual bool IsInsideShape(const FVector& WorldPoint) const override;
 	virtual void BuildTelegraph() override;
 	virtual void DebugDrawShape() const override;
+	virtual void ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const override;
 };

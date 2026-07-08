@@ -12,6 +12,8 @@ class UAbilitySystemComponent;
 class UPrimitiveComponent;
 class UProceduralMeshComponent;
 class UBossAoeEffect;
+class UNiagaraSystem;
+class UNiagaraComponent;
 
 /**
  * 장판을 '어디에' 생성할지. (스폰 원점 정책 — Base가 BeginPlay에서 해석)
@@ -35,8 +37,9 @@ enum class EAoeSpawnOrigin : uint8
  * 장판이 어떻게 움직이는가.
  * - Fixed        : 스폰 시점 위치에 고정 (일반 예고 장판)
  * - Follow       : 매 틱 시전자(또는 소켓) 위치를 따라감 (몸통/무기 주변 장판)
- * - Homing       : 타겟 위치로 서서히 이동 (유도 장판)
+ * - Homing       : 타겟 위치로 서서히 이동 (유도 장판). Duration>0 이어야 지속 추적처럼 보임
  * - FollowTarget : 매 틱 타겟 '발밑'에 부착되어 따라다님 (전하 변환장판 등)
+ * - Spiral       : 타겟을 향해 직선 이동하면서 나선형으로 회전 궤도를 그리며 접근 (유도탄/번개 낙하 등)
  */
 UENUM(BlueprintType)
 enum class EAoeTargetingMode : uint8
@@ -44,7 +47,8 @@ enum class EAoeTargetingMode : uint8
 	Fixed		UMETA(DisplayName = "고정"),
 	Follow		UMETA(DisplayName = "시전자 추적"),
 	Homing		UMETA(DisplayName = "타겟 유도"),
-	FollowTarget	UMETA(DisplayName = "타겟 부착(발밑)")
+	FollowTarget	UMETA(DisplayName = "타겟 부착(발밑)"),
+	Spiral		UMETA(DisplayName = "나선형 유도")
 };
 
 /**
@@ -182,8 +186,17 @@ protected:
 	 * 예고 비주얼 메시 생성. (자식 구현)
 	 * 로컬 좌표(X=Forward, Y=Right) 기준 정점/삼각형을 만들어 CreateTelegraphMesh(Verts, Tris)에 넘긴다.
 	 * 메시 자체가 도형이라 머티리얼 마스킹이 필요 없다(밋밋한 반투명 머티리얼이면 충분).
+	 * TelegraphEffect 가 지정된 경우 이 함수 대신 BuildTelegraphEffect+ConfigureTelegraphEffect 가 쓰인다.
 	 */
 	virtual void BuildTelegraph() {}
+
+	/**
+	 * VFX 예고(TelegraphEffect)에 도형 파라미터를 주입하는 훅. (자식 구현, 선택)
+	 * 나이아가라 시스템에 같은 이름의 User 파라미터(float)를 노출해두면 여기서 세팅한다.
+	 * 예: Circle -> "Radius"/"InnerRatio", Sector -> "Radius"/"StartAngleDeg"/"EndAngleDeg".
+	 * (VFX는 지오메트리 마스킹 없이 크기만 맞추면 되므로 도형 각각 노출 파라미터명만 맞추면 됨)
+	 */
+	virtual void ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const {}
 
 	// ═══════════════ 자식이 쓰는 헬퍼 ═══════════════
 
@@ -268,9 +281,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting")
 	EAoeTargetingMode TargetingMode = EAoeTargetingMode::Fixed;
 
-	/** Homing 이동 속도(cm/s). 0이면 순간 이동 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting", meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Homing"))
+	/** Homing/Spiral 진행 속도(cm/s). 타겟을 향한 직선 이동 속도. 0이면 순간 이동 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting",
+		meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Homing || TargetingMode == EAoeTargetingMode::Spiral"))
 	float HomingSpeed = 400.f;
+
+	/** 나선 궤도 반지름(cm). 진행 경로 기준 옆으로 도는 원의 크기 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting", meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Spiral", ClampMin = "0.0"))
+	float SpiralRadius = 200.f;
+
+	/** 나선 회전 각속도(도/초). 값이 클수록 촘촘하게 감아 돈다 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting", meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Spiral"))
+	float SpiralAngularSpeed = 360.f;
+
+	/**
+	 * 이 거리(cm) 이내로 타겟에 접근하면 나선 반지름이 0으로 수렴(직선으로 빨려들어가며 착탄).
+	 * 0이면 반지름이 줄지 않고 끝까지 같은 굵기로 나선 유지.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting", meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Spiral", ClampMin = "0.0"))
+	float SpiralConvergeDistance = 600.f;
 
 	/** 이 태그를 가진 플레이어는 대상에서 제외 (사망 등). 미설정 시 State.Dead 폴백 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting")
@@ -280,9 +309,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Debug")
 	bool bDrawDebugHitShape = false;
 
-	/** 예고 비주얼 머티리얼 (반투명 경고). 메시가 도형이라 마스킹 불필요 — Two Sided 반투명 빨강 권장 */
+	/** 예고 비주얼 머티리얼 (반투명 경고). 메시가 도형이라 마스킹 불필요 — Two Sided 반투명 빨강 권장. TelegraphEffect 지정 시 무시됨 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
 	TObjectPtr<UMaterialInterface> WarningMaterial;
+
+	/**
+	 * 지정하면 예고 비주얼을 프로시저럴 메시 대신 이 나이아가라 시스템으로 대체한다.
+	 * (예: 번개폭풍 VFX로 위험 표시를 대체). 위치/크기는 자동으로 판정 도형에 맞춰지고
+	 * (루트에 부착 -> Homing/Spiral 등 이동도 자동 추적), 도형별 세부 크기는
+	 * ConfigureTelegraphEffect 훅에서 나이아가라 User 파라미터로 주입한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
+	TObjectPtr<UNiagaraSystem> TelegraphEffect;
 
 	// ═══════════════ 런타임 상태 ═══════════════
 
@@ -327,6 +365,9 @@ protected:
 	/** 예고 비주얼 제거 */
 	void HideTelegraph();
 
+	/** TelegraphEffect 가 지정된 경우 나이아가라 컴포넌트를 루트에 부착 스폰 + ConfigureTelegraphEffect 호출 */
+	void BuildTelegraphEffect();
+
 	/** Follow/Homing 이동 처리 */
 	void UpdateCenter(float DeltaTime);
 
@@ -352,4 +393,10 @@ private:
 
 	/** CasterTagsOnHit 를 이미 부여했는지 (첫 적중 1회만) */
 	bool bCasterHitTagsApplied = false;
+
+	/** Spiral 모드: 나선 궤도의 중심이 되는 직선 진행 위치 (매 틱 타겟 쪽으로 전진) */
+	FVector SpiralBasePos = FVector::ZeroVector;
+
+	/** Spiral 모드: 누적 회전각(도) */
+	float SpiralAngle = 0.f;
 };

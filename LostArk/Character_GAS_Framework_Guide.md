@@ -22,6 +22,14 @@
 * `LostArkCharacterComboAttackAbility.h` / `LostArkCharacterComboAttackAbility.cpp`
   * **설명**: 일반 스킬이 아닌 캐릭터의 **기본 평타(마우스 클릭) 콤보** 전용 어빌리티입니다. 캐릭터 베이스의 `Combo Attack Ability Class`에 할당되어 다단 히트를 처리합니다.
 
+### 특수 스킬 베이스 (Special Abilities)
+* `LostArkSkill_Targeting.h/cpp` & `LostArkTargetActor_GroundSelect.h/cpp`
+  * **설명**: 지정한 마우스 위치(장판)에 데미지를 입히는 타겟팅 스킬 베이스와 바닥 데칼(장판) 액터입니다.
+* `LostArkSkill_Projectile.h/cpp` & `LostArkProjectile.h/cpp`
+  * **설명**: 스킬 사용 시 전방으로 날아가는 투사체(발사체)를 스폰하는 스킬 베이스와 투사체 물리/폭발 액터입니다.
+* `LostArkSkill_Charging.h/cpp`
+  * **설명**: 스킬 키를 꾹 누르는 시간(모으기)에 비례하여 데미지가 증폭되는 차징 스킬 베이스입니다.
+
 ### 인터페이스 및 타입 (Interfaces & Types)
 * `LostArkCombatInterface.h`
   * **설명**: 전투 상태 변경 및 죽음 판정 등을 다른 클래스와 결합도(Coupling) 없이 통신하기 위한 인터페이스입니다.
@@ -52,14 +60,14 @@
 3. 생성된 블루프린트를 열고, `Mesh` 컴포넌트에 원하는 Skeletal Mesh와 AnimInstance를 할당합니다.
 
 ### Step 2. 신규 스킬(어빌리티) 제작하기
-1. 부모 클래스로 `LostArkGameplayAbility`를 선택하여 새로운 Blueprint 스킬(예: `GA_Fireball`)을 생성합니다.
-2. `Event Activate Ability` 노드를 시작으로 애니메이션 몽타주 재생(`PlayMontageAndWait`), 파티클 스폰 등의 연출 로직을 구성합니다.
-3. 해당 블루프린트의 **Class Defaults(디테일 패널)** 에서 기획에 맞게 수치를 세팅합니다.
-   * `Damage Shape Params`: 타격 판정 형태(Sphere, Box, Cone)와 크기(Radius, Extent 등) 및 데미지 계수를 설정합니다. 디버그 라인을 켜고 끌 수 있습니다.
+1. 부모 클래스로 **`LostArkSkillGameplayAbility`**를 선택하여 새로운 Blueprint 스킬(예: `GA_Fireball`)을 생성합니다. (※ 구버전 `LostArkGameplayAbility`를 직접 상속받지 마세요!)
+2. 해당 블루프린트의 **Class Defaults(디테일 패널)** 에서 기획에 맞게 수치를 세팅합니다.
+   * `Damage Shape Params`: 타격 판정 형태(Sphere, Box, Cone)와 크기(Radius, Extent 등) 및 데미지 계수를 설정합니다. 
+     - **`ZTolerance`**: 오르막길이나 계단 등 높낮이가 다른 곳에서 몬스터가 맞지 않는 현상을 방지하는 Z축 상하 판정 허용 오차입니다. 기본값 200.
+     - 디버그 라인을 켜고 끌 수 있습니다.
    * `Damage Effect Class`: 타격 시 적용할 데미지 이펙트(GE)
    * `Skill Montage`: 스킬 사용 시 재생할 애니메이션 몽타주
    * `Dash`: 스킬 사용 중 앞으로 돌진할지 여부와 거리, 시간 등을 설정합니다.
-4. 로직이 끝나면 반드시 `End Ability` 노드를 연결해 스킬을 종료시켜 줍니다. (단, `LostArkSkillGameplayAbility`를 상속받은 경우 몽타주가 끝나면 자동으로 종료되도록 베이스에 구현되어 있습니다.)
 
 ### Step 3. 캐릭터에 스킬과 키 입력 연결하기
 1. Step 1에서 만든 캐릭터 블루프린트(`BP_Warrior`)를 엽니다.
@@ -109,6 +117,31 @@
 
 ---
 
-## 🛠 4. 설계 의도 및 주의사항
+## 🔮 4. 특수 스킬 시스템 (타겟팅, 투사체, 차징) 사용 가이드
+
+단순히 몽타주를 재생하고 전방에 데미지를 주는 스킬 외에, 특수한 로직을 가진 스킬들을 만들 수 있는 베이스가 추가되었습니다.
+
+### 🎯 4.1 타겟팅(장판) 스킬 만들기
+마우스 커서를 따라다니는 장판 범위를 표시하고, 클릭 시 해당 위치로 스킬을 시전합니다.
+1. 부모 클래스로 **`LostArkSkill_Targeting`**을 상속받아 스킬 블루프린트를 생성합니다.
+2. 디테일 패널의 **Targeting** 카테고리에서 `Target Actor Class`를 할당해야 합니다. (기본 제공되는 `LostArkTargetActor_GroundSelect` 혹은 이를 상속받은 커스텀 블루프린트)
+3. 해당 타겟 액터 블루프린트에서 `Target Radius`를 조절해 데칼(장판)의 크기를 조절할 수 있습니다.
+
+### ☄️ 4.2 발사체(투사체) 스킬 만들기
+전방으로 날아가는 마법학 발사체 등을 스폰합니다.
+1. 부모 클래스로 **`LostArkProjectile`**을 상속받는 발사체 블루프린트(예: `BP_FireballProjectile`)를 먼저 생성합니다. 해당 블루프린트에서 스피드, 모델링, 폭발 파티클, 폭발 반경(`Explode Radius`) 등을 세팅합니다.
+2. 부모 클래스로 **`LostArkSkill_Projectile`**을 상속받아 스킬 블루프린트를 생성합니다.
+3. 디테일 패널의 **Projectile** 카테고리에서 `Projectile Class`에 방금 만든 발사체 블루프린트를 할당합니다.
+
+### ⏳ 4.3 차징(모으기) 스킬 만들기
+스킬 키를 누르는 시간에 비례해 스킬의 데미지가 증폭됩니다.
+1. 부모 클래스로 **`LostArkSkill_Charging`**을 상속받아 스킬 블루프린트를 생성합니다.
+2. 디테일 패널의 **Charging** 카테고리에서 수치를 세팅합니다:
+   * `Max Charge Time`: 최대 충전 도달 시간(초)
+   * `Max Damage Multiplier`: 최대 충전 시 적용될 데미지 증폭 배수 (예: 2.0 = 데미지 2배)
+
+---
+
+## 🛠 5. 설계 의도 및 주의사항
 * **핵심 로직 분리**: 전투 판정 및 상태 동기화 같은 복잡한 연산은 C++ 베이스에 모두 구현되어 있습니다. Blueprint에서는 오직 데이터 세팅과 비주얼 연출에만 집중하시면 됩니다.
 * **하드코딩 지양**: 캐릭터 블루프린트의 `SkillInputBinds`를 통해 데이터 기반으로 스킬이 관리됩니다. 코드를 수정할 필요 없이 인스펙터에서 스킬을 자유롭게 교체하고 테스트하세요.

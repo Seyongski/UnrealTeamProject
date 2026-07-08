@@ -28,6 +28,10 @@ void ALostArkTargetActor_GroundSelect::StartTargeting(UGameplayAbility* Ability)
 	Super::StartTargeting(Ability);
 	UE_LOG(LogTemp, Warning, TEXT("[TargetActor] StartTargeting Called!"));
 
+	// 블루프린트에서 회전값이 오버라이드되어 찌그러지는 문제를 방지하기 위해 
+	// 런타임에 바닥 수직 방향(-90, 0, 0)으로 회전을 강제 리셋합니다.
+	DecalComponent->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+
 	DecalComponent->DecalSize = FVector(1000.f, TargetRadius, TargetRadius);
 	DecalComponent->SetVisibility(true);
 	SetActorTickEnabled(true);

@@ -3,6 +3,7 @@
 #include "Boss/Pattern/BossPatternAbility.h"
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Pattern/PatternDataAsset.h"
+#include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 
@@ -216,6 +217,20 @@ void UBossPatternAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 {
 	bStepActive = false;
 	CleanupStep();
+
+	// 패턴 결과 태그(State.Boss.PatternResult.*) 일괄 제거 -> 다음 패턴 Branch 로 안 샘
+	// (장판/잡기가 AddLooseGameplayTags 로 부여한 것. 카운트 무관하게 0으로 리셋)
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		FGameplayTagContainer OwnedTags;
+		ASC->GetOwnedGameplayTags(OwnedTags);
+		const FGameplayTagContainer ResultTags =
+			OwnedTags.Filter(FGameplayTagContainer(LostArkTags::State_Boss_PatternResult));
+		for (const FGameplayTag& Tag : ResultTags)
+		{
+			ASC->SetLooseGameplayTagCount(Tag, 0);
+		}
+	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

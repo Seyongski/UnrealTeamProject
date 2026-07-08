@@ -40,6 +40,10 @@ void UAnimNotify_BossSpawnAoe::Notify(USkeletalMeshComponent* MeshComp, UAnimSeq
 	}
 	SpawnTM.AddToTranslation(SpawnTM.GetRotation().RotateVector(LocationOffset));
 
+	// 시전자(거대 보스) 스케일이 AOE 액터에 실리면 데칼/판정 크기가 왜곡된다.
+	// AOE 는 월드 cm 절대값으로 판정하므로 항상 스케일 1로 스폰.
+	SpawnTM.SetScale3D(FVector::OneVector);
+
 	// 타겟 = 보스 타겟팅 컴포넌트의 현재 타겟 (Homing/Target 원점용)
 	AActor* Target = nullptr;
 	if (const UBossTargetingComponent* Targeting = Boss->FindComponentByClass<UBossTargetingComponent>())
@@ -65,6 +69,14 @@ void UAnimNotify_BossSpawnAoe::Notify(USkeletalMeshComponent* MeshComp, UAnimSeq
 	if (bOverrideCommon)
 	{
 		Aoe->ApplyCommonOverride(CommonOverride);	// 패턴별 공통값 주입
+	}
+	if (bOverrideGrab)
+	{
+		// OnHitEffect 는 Instanced 라 이 스폰 인스턴스만 덮어씀 (BP 클래스 디폴트는 불변)
+		if (UBossAoeGrabEffect* Grab = Cast<UBossAoeGrabEffect>(Aoe->GetOnHitEffect()))
+		{
+			Grab->ApplyOverride(GrabOverride);
+		}
 	}
 	ConfigureAoe(Aoe);	// 도형별 파라미터 주입 (BeginPlay 전)
 	Aoe->FinishSpawning(SpawnTM);

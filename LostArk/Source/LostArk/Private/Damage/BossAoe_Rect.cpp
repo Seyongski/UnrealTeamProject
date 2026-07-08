@@ -2,6 +2,7 @@
 
 
 #include "Damage/BossAoe_Rect.h"
+#include "DrawDebugHelpers.h"
 
 bool ABossAoe_Rect::IsInsideShape(const FVector& WorldPoint) const
 {
@@ -32,4 +33,13 @@ void ABossAoe_Rect::BuildTelegraph()
 	TArray<int32> Triangles = { 0, 1, 2,  0, 2, 3 };
 
 	CreateTelegraphMesh(Vertices, Triangles);
+}
+
+void ABossAoe_Rect::DebugDrawShape() const
+{
+	// 판정과 동일: 중심 = AttackCenter + Forward*ForwardOffset, 반extent = (HalfLength, HalfWidth)
+	const FVector Center = AttackCenter + GetShapeForward() * ForwardOffset;
+	const FQuat Rot = FRotationMatrix::MakeFromXY(GetShapeForward(), GetShapeRight()).ToQuat();
+	DrawDebugBox(GetWorld(), Center, FVector(HalfLength, HalfWidth, 20.f), Rot,
+		FColor::Green, false, 4.f, 0, 4.f);
 }

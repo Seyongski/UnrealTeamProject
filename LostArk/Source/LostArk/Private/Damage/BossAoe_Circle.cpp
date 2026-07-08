@@ -2,6 +2,7 @@
 
 
 #include "Damage/BossAoe_Circle.h"
+#include "DrawDebugHelpers.h"
 
 bool ABossAoe_Circle::IsInsideShape(const FVector& WorldPoint) const
 {
@@ -11,6 +12,7 @@ bool ABossAoe_Circle::IsInsideShape(const FVector& WorldPoint) const
 
 void ABossAoe_Circle::BuildTelegraph()
 {
+	// 로컬 좌표(X=Forward, Y=Right). 메시 자체가 원/도넛 모양.
 	TArray<FVector> Vertices;
 	TArray<int32> Triangles;
 
@@ -50,4 +52,16 @@ void ABossAoe_Circle::BuildTelegraph()
 	}
 
 	CreateTelegraphMesh(Vertices, Triangles);
+}
+
+void ABossAoe_Circle::DebugDrawShape() const
+{
+	// 판정과 동일: AttackCenter 중심, 바깥/안쪽 반지름. 바닥 평면(우측/전방 축)에 그림
+	DrawDebugCircle(GetWorld(), AttackCenter, Radius, 48, FColor::Green, false, 4.f, 0, 4.f,
+		GetShapeRight(), GetShapeForward(), false);
+	if (InnerRadius > KINDA_SMALL_NUMBER)
+	{
+		DrawDebugCircle(GetWorld(), AttackCenter, InnerRadius, 48, FColor::Yellow, false, 4.f, 0, 4.f,
+			GetShapeRight(), GetShapeForward(), false);
+	}
 }

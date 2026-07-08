@@ -13,7 +13,7 @@
  * - InnerRadius > 0 이면 안쪽이 비어 "도넛 조각" (환형 부채꼴)
  * 확장 예시: IsInsideShape/BuildTelegraph 두 개만 구현.
  */
-UCLASS()
+UCLASS(Blueprintable)
 class LOSTARK_API ABossAoe_Sector : public ABossPatternActorBase
 {
 	GENERATED_BODY()
@@ -38,4 +38,5 @@ public:
 protected:
 	virtual bool IsInsideShape(const FVector& WorldPoint) const override;
 	virtual void BuildTelegraph() override;
+	virtual void DebugDrawShape() const override;
 };

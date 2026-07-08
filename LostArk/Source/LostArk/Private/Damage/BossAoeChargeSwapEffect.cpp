@@ -1,24 +1,18 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Damage/BossAoe_ChargeSwap.h"
+#include "Damage/BossAoeChargeSwapEffect.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 
-ABossAoe_ChargeSwap::ABossAoe_ChargeSwap()
+UBossAoeChargeSwapEffect::UBossAoeChargeSwapEffect()
 {
-	// 발밑 부착 + 만료 시 1회 전원 판정 (베이스의 CastTime 후 1회 판정 시맨틱과 일치)
-	TargetingMode = EAoeTargetingMode::FollowTarget;
-	SpawnOrigin = EAoeSpawnOrigin::TargetLocation;
-	Duration = 0.f;
-	bSingleHitPerTarget = true;
-
 	RedTag = LostArkTags::State_Charge_Red;
 	BlueTag = LostArkTags::State_Charge_Blue;
 }
 
-void ABossAoe_ChargeSwap::ApplyEffectsTo(AActor* Target)
+void UBossAoeChargeSwapEffect::OnHit(ABossPatternActorBase* /*Aoe*/, AActor* Target)
 {
 	// 데미지 GE 대신 전하 스왑만 수행
 	UAbilitySystemComponent* ASC =

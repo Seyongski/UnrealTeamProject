@@ -2,6 +2,7 @@
 
 
 #include "Damage/BossAoe_Sector.h"
+#include "DrawDebugHelpers.h"
 
 bool ABossAoe_Sector::IsInsideShape(const FVector& WorldPoint) const
 {
@@ -29,7 +30,7 @@ bool ABossAoe_Sector::IsInsideShape(const FVector& WorldPoint) const
 
 void ABossAoe_Sector::BuildTelegraph()
 {
-	// 로컬 좌표(X=Forward, Y=Right). 각도 A 방향 = (cos A, sin A)
+	// 로컬 좌표(X=Forward, Y=Right). 각도 A 방향 = (cos A, sin A). 메시 자체가 부채꼴.
 	TArray<FVector> Vertices;
 	TArray<int32> Triangles;
 
@@ -71,4 +72,36 @@ void ABossAoe_Sector::BuildTelegraph()
 	}
 
 	CreateTelegraphMesh(Vertices, Triangles);
+}
+
+void ABossAoe_Sector::DebugDrawShape() const
+{
+	// 판정과 동일 규약: 각도 A 방향 = Forward*cos(A) + Right*sin(A) (전방=0°, 우측 +)
+	const int32 Seg = 24;
+	FVector PrevOut = FVector::ZeroVector, PrevIn = FVector::ZeroVector;
+	for (int32 i = 0; i <= Seg; ++i)
+	{
+		const float A = FMath::DegreesToRadians(FMath::Lerp(StartAngle, EndAngle, (float)i / Seg));
+		const FVector Dir = GetShapeForward() * FMath::Cos(A) + GetShapeRight() * FMath::Sin(A);
+		const FVector Out = AttackCenter + Dir * Radius;
+		const FVector In = AttackCenter + Dir * InnerRadius;
+		if (i > 0)
+		{
+			DrawDebugLine(GetWorld(), PrevOut, Out, FColor::Green, false, 4.f, 0, 4.f);	// 바깥 호
+			if (InnerRadius > KINDA_SMALL_NUMBER)
+			{
+				DrawDebugLine(GetWorld(), PrevIn, In, FColor::Green, false, 4.f, 0, 4.f);	// 안쪽 호
+			}
+		}
+		PrevOut = Out;
+		PrevIn = In;
+	}
+	// 양 측면 경계선
+	for (float A : { StartAngle, EndAngle })
+	{
+		const float Rad = FMath::DegreesToRadians(A);
+		const FVector Dir = GetShapeForward() * FMath::Cos(Rad) + GetShapeRight() * FMath::Sin(Rad);
+		DrawDebugLine(GetWorld(), AttackCenter + Dir * InnerRadius, AttackCenter + Dir * Radius,
+			FColor::Green, false, 4.f, 0, 4.f);
+	}
 }

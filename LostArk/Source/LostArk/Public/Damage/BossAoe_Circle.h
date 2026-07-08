@@ -11,7 +11,7 @@
  * - InnerRadius > 0 이면 도넛(안쪽 InnerRadius 는 안전지대)
  * 새 도형을 추가하려면 이 클래스처럼 IsInsideShape/BuildTelegraph 만 구현하면 됨.
  */
-UCLASS()
+UCLASS(Blueprintable)
 class LOSTARK_API ABossAoe_Circle : public ABossPatternActorBase
 {
 	GENERATED_BODY()
@@ -28,4 +28,5 @@ public:
 protected:
 	virtual bool IsInsideShape(const FVector& WorldPoint) const override;
 	virtual void BuildTelegraph() override;
+	virtual void DebugDrawShape() const override;
 };

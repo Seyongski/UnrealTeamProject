@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "Damage/BossPatternActorBase.h"	// FBossAoeCommonOverride
+#include "Damage/BossAoeGrabEffect.h"		// FBossGrabOverride
 #include "AnimNotify_BossSpawnAoe.generated.h"
 
 class ABossPatternActorBase;
@@ -52,6 +53,18 @@ protected:
 	/** 패턴별 공통값 (bOverrideCommon 켤 때만 적용) */
 	UPROPERTY(EditAnywhere, Category = "Aoe|Common", meta = (EditCondition = "bOverrideCommon"))
 	FBossAoeCommonOverride CommonOverride;
+
+	/**
+	 * 켜면 아래 값으로 잡기 행동(OnHitEffect가 UBossAoeGrabEffect 인 경우)의 파라미터를 이 스폰 1회에만 덮어씀.
+	 * 같은 도형+잡기 BP를 몽타주마다 다른 소켓/유지시간/방향으로 재사용할 때 사용
+	 * (BP 클래스 디폴트는 그대로 유지됨). OnHitEffect 가 잡기가 아니면 무시된다.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Grab")
+	bool bOverrideGrab = false;
+
+	/** 잡기 파라미터 오버라이드 (bOverrideGrab 켤 때만 적용) */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Grab", meta = (EditCondition = "bOverrideGrab"))
+	FBossGrabOverride GrabOverride;
 
 	/** 초기 스폰 트랜스폼 기준 소켓 (지정 시 이 소켓 위치, 아니면 보스 액터 위치) */
 	UPROPERTY(EditAnywhere, Category = "Aoe")

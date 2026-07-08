@@ -13,7 +13,7 @@
  * - ForwardOffset : 중심을 전방으로 밀어 '보스 앞 직사각형' 표현 (0이면 중심 대칭)
  * 도형 확장 예시: IsInsideShape/BuildTelegraph 두 개만 구현.
  */
-UCLASS()
+UCLASS(Blueprintable)
 class LOSTARK_API ABossAoe_Rect : public ABossPatternActorBase
 {
 	GENERATED_BODY()
@@ -31,4 +31,5 @@ public:
 protected:
 	virtual bool IsInsideShape(const FVector& WorldPoint) const override;
 	virtual void BuildTelegraph() override;
+	virtual void DebugDrawShape() const override;
 };

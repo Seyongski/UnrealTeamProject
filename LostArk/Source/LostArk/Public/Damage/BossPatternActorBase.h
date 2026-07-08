@@ -11,6 +11,7 @@ class UGameplayEffect;
 class UAbilitySystemComponent;
 class UPrimitiveComponent;
 class UProceduralMeshComponent;
+class UBossAoeEffect;
 
 /**
  * 장판을 '어디에' 생성할지. (스폰 원점 정책 — Base가 BeginPlay에서 해석)
@@ -124,6 +125,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Aoe")
 	void ApplyCommonOverride(const FBossAoeCommonOverride& Override);
 
+	// ─── 행동 오브젝트(UBossAoeEffect)가 쓰는 공개 API ───
+
+	/** 시전자(보스) */
+	FORCEINLINE AActor* GetCaster() const { return Caster; }
+
+	/** 판정 중심(월드) */
+	FORCEINLINE const FVector& GetAttackCenter() const { return AttackCenter; }
+
+	/** 스폰 시 캐싱된 평면 전방(던지기 방향 폴백 등) */
+	FORCEINLINE FVector GetShapeForwardVector() const { return ShapeForward; }
+
+	/** 스폰 시 캐싱된 평면 우측(각도 계산용) */
+	FORCEINLINE FVector GetShapeRightVector() const { return ShapeRight; }
+
+	/** 기본 데미지+상태이상 GE 적용 (서버). 행동 오브젝트가 데미지가 필요할 때 호출(잡기 해제 시 등) */
+	void ApplyDamageAndStatus(AActor* Target);
+
+	/** 실제 파괴(이벤트 방송 + Destroy). 행동 오브젝트가 파괴 타이밍을 제어할 때 호출(잡기 해제 후) */
+	void DestroyAoeNow();
+
+	/** 적중 시 행동 오브젝트 (노티파이/외부에서 잡기 해제 등 접근용) */
+	FORCEINLINE UBossAoeEffect* GetOnHitEffect() const { return OnHitEffect; }
+
+	/** 시전자(보스) ASC에 루스 태그 부여 (패턴 결과 보고용. 패턴 어빌리티가 종료 시 PatternResult 하위 일괄 제거) */
+	void AddCasterLooseTags(const FGameplayTagContainer& InTags);
+
 	// ─── 이벤트 (콤보/연계/이펙트 트리거용) ───
 	UPROPERTY(BlueprintAssignable, Category = "Aoe|Events")
 	FOnAoeBegin OnAoeBegin;
@@ -146,9 +173,15 @@ protected:
 	virtual bool IsInsideShape(const FVector& WorldPoint) const { return false; }
 
 	/**
+	 * 실제 판정 도형을 디버그 라인으로 그린다. (자식 구현; 베이스는 아무것도 안 그림)
+	 * bDrawDebugHitShape 가 켜졌을 때 PerformHitCheck 에서 호출 -> 데칼 크기와 판정 크기 비교용.
+	 */
+	virtual void DebugDrawShape() const {}
+
+	/**
 	 * 예고 비주얼 메시 생성. (자식 구현)
-	 * 로컬 좌표(X=Forward, Y=Right) 기준 정점/삼각형만 만들어
-	 * CreateTelegraphMesh(Verts, Tris) 에 넘기면 끝.
+	 * 로컬 좌표(X=Forward, Y=Right) 기준 정점/삼각형을 만들어 CreateTelegraphMesh(Verts, Tris)에 넘긴다.
+	 * 메시 자체가 도형이라 머티리얼 마스킹이 필요 없다(밋밋한 반투명 머티리얼이면 충분).
 	 */
 	virtual void BuildTelegraph() {}
 
@@ -160,11 +193,28 @@ protected:
 
 	/**
 	 * 로컬 좌표 정점/삼각형으로 텔레그래프 프로시저럴 메시를 만들어 WarningComp에 등록.
-	 * (NewObject/Register/Attach/Material 처리를 대신 해줌 -> 자식은 지오메트리만 계산)
+	 * (NewObject/Register/Attach/바닥스냅/Material 처리를 대신 해줌 -> 자식은 지오메트리만 계산)
 	 */
 	UProceduralMeshComponent* CreateTelegraphMesh(const TArray<FVector>& Vertices, const TArray<int32>& Triangles);
 
 	// ═══════════════ 설정 프로퍼티 ═══════════════
+
+	/**
+	 * 적중 시 행동. null 이면 아래 Damage/Status GE 를 그대로 적용(기본).
+	 * 잡기/전하스왑 등은 여기에 해당 UBossAoeEffect 인스턴스를 지정 -> 어떤 도형에든 붙는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Instanced, Category = "Aoe|Behavior")
+	TObjectPtr<UBossAoeEffect> OnHitEffect;
+
+	/**
+	 * 1명 이상 적중 시 시전자(보스) ASC에 부여할 태그 (첫 적중에 1회).
+	 * 스텝 Branch(TagQuery) 조건용 — 예: State.Boss.PatternResult.AoeHit 를 넣으면
+	 * '이 장판에 맞은 사람이 있으면 다음 몽타주 진행' 분기를 만들 수 있다.
+	 * State.Boss.PatternResult 하위 태그는 패턴 종료 시 자동 제거된다.
+	 * (잡기 성공 태그는 잡기 행동이 자동 부여하므로 따로 설정 불필요)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Behavior")
+	FGameplayTagContainer CasterTagsOnHit;
 
 	/** 스폰 원점 정책 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Spawn")
@@ -226,7 +276,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting")
 	FGameplayTag DeadTag;
 
-	/** 예고 비주얼 머티리얼 (반투명 경고). CreateTelegraphMesh 가 자동 적용 */
+	/** 켜면 판정 도형을 라인으로 그린다(판정 크기 vs 데칼 크기 확인용). 서버에서만 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Debug")
+	bool bDrawDebugHitShape = false;
+
+	/** 예고 비주얼 머티리얼 (반투명 경고). 메시가 도형이라 마스킹 불필요 — Two Sided 반투명 빨강 권장 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
 	TObjectPtr<UMaterialInterface> WarningMaterial;
 
@@ -255,13 +309,16 @@ protected:
 	/** 예고 종료 시점(CastTime 경과) 콜백: 예고 제거 -> 첫 판정 -> 유지/소멸 결정 */
 	void OnCastFinished();
 
-	/** 한 번의 판정: 도형+높이+생존 필터 통과한 플레이어에게 GE 적용 */
+	/** 액터 파괴 시 행동 오브젝트 정리 훅 호출 */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** 한 번의 판정: 도형+높이+생존 필터 통과한 플레이어에게 적용 */
 	virtual void PerformHitCheck();
 
-	/** 대상 1명에게 데미지+상태이상 GE 적용 (서버). 자식이 잡기/전하스왑 등으로 대체 가능 */
-	virtual void ApplyEffectsTo(AActor* Target);
+	/** 적중 시 행동 디스패치: OnHitEffect 있으면 위임, 없으면 ApplyDamageAndStatus */
+	void ApplyEffectsTo(AActor* Target);
 
-	/** 유지 종료 -> 이벤트 방송 + 파괴. 자식이 파괴 지연(잡기 유지 등)에 오버라이드 가능 */
+	/** 유지 종료 진입점: 행동 오브젝트가 파괴를 가로채면(OnFinish=true) 멈추고, 아니면 DestroyAoeNow */
 	virtual void FinishAoe();
 
 	/** 대상 발밑 위치 (Character면 캡슐 절반만큼 내림) */
@@ -292,4 +349,7 @@ private:
 	TSet<TWeakObjectPtr<AActor>> AlreadyHitActors;
 
 	bool bFinished = false;
+
+	/** CasterTagsOnHit 를 이미 부여했는지 (첫 적중 1회만) */
+	bool bCasterHitTagsApplied = false;
 };

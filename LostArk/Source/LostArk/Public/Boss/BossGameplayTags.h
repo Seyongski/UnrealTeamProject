@@ -34,6 +34,12 @@ namespace LostArkTags
 	// 약점포착: 지형 파괴 후 보스에 부여 -> 어디서 때려도 백/헤드어택 보너스
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_WeakPointExposed);
 
+	// 패턴 결과: 패턴 진행 중 보스에 부여되는 일시 태그. 스텝 Branch(TagQuery)가 평가하고,
+	// 패턴 어빌리티가 종료될 때 하위 태그 전부 자동 제거 (다음 패턴으로 안 샘)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_Grabbed);	// 잡기 성공 (1명 이상)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_AoeHit);	// 장판 적중 (1명 이상)
+
 	// SetByCaller: 데미지 GE에 공격력계수를 실어 보내는 데이터 태그
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 }

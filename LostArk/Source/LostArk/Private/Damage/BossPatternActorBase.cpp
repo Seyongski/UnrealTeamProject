@@ -2,6 +2,7 @@
 
 
 #include "Damage/BossPatternActorBase.h"
+#include "Damage/BossAoeEffect.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -11,6 +12,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "ProceduralMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "CollisionQueryParams.h"
 
@@ -129,6 +131,23 @@ void ABossPatternActorBase::ResolveOrigin()
 	SetActorLocationAndRotation(Loc, Rot);
 	AttackCenter = Loc;
 
+	// AttackCenter.Z 를 바닥으로 스냅. 높이 게이트(|P.Z - AttackCenter.Z| <= HeightTolerance)를
+	// 보스 캡슐 크기가 아니라 '바닥' 기준으로 만든다(캡슐을 키워도 판정이 안 흔들리게).
+	// XY 도형 판정은 Z 를 무시하므로 영향 없음.
+	if (UWorld* World = GetWorld())
+	{
+		FHitResult GroundHit;
+		FCollisionQueryParams GParams(SCENE_QUERY_STAT(AoeCenterGround), false);
+		if (Caster) { GParams.AddIgnoredActor(Caster); }
+		GParams.AddIgnoredActor(this);
+		const FVector Start = AttackCenter + FVector(0, 0, 200.f);
+		const FVector End = AttackCenter - FVector(0, 0, 5000.f);
+		if (World->LineTraceSingleByChannel(GroundHit, Start, End, ECC_Visibility, GParams))
+		{
+			AttackCenter.Z = GroundHit.ImpactPoint.Z;
+		}
+	}
+
 	ShapeForward = GetActorForwardVector();
 	ShapeForward.Z = 0.f;
 	ShapeForward.Normalize();
@@ -159,8 +178,28 @@ UProceduralMeshComponent* ABossPatternActorBase::CreateTelegraphMesh(
 	UProceduralMeshComponent* ProcMesh = NewObject<UProceduralMeshComponent>(this);
 	ProcMesh->RegisterComponent();
 	ProcMesh->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
-	ProcMesh->SetRelativeLocation(FVector(0.f, 0.f, 5.f));
 	ProcMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 시전자(거대 보스) 스케일이 액터에 실려오면 메시가 그만큼 커진다(판정은 월드 cm라 무관).
+	// 스케일 1로 고정해 판정과 크기를 일치시킨다.
+	ProcMesh->SetWorldScale3D(FVector::OneVector);
+
+	// 바닥 스냅: 스폰 높이가 허리여도 메시를 바닥 위(+5cm)에 눕힌다. XY 는 판정 중심 그대로.
+	FVector MeshCenter = AttackCenter;
+	if (UWorld* World = GetWorld())
+	{
+		FHitResult GroundHit;
+		FCollisionQueryParams GParams(SCENE_QUERY_STAT(TelegraphGround), false);
+		if (Caster) { GParams.AddIgnoredActor(Caster); }
+		GParams.AddIgnoredActor(this);
+		const FVector TraceStart = MeshCenter + FVector(0, 0, 200.f);
+		const FVector TraceEnd = MeshCenter - FVector(0, 0, 2000.f);
+		if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, GParams))
+		{
+			MeshCenter.Z = GroundHit.ImpactPoint.Z;
+		}
+	}
+	ProcMesh->SetWorldLocation(MeshCenter + FVector(0, 0, 5.f));
 
 	TArray<FVector> Normals;
 	TArray<FVector2D> UVs;
@@ -280,11 +319,23 @@ void ABossPatternActorBase::PerformHitCheck()
 		return;
 	}
 
+	// 판정 도형을 눈으로 확인 (데칼 크기와 비교용)
+	if (bDrawDebugHitShape)
+	{
+		DebugDrawShape();
+	}
+
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 	{
 		APlayerController* PC = It->Get();
 		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
 		if (!Pawn)
+		{
+			continue;
+		}
+
+		// 시전자(보스) 본인은 판정 제외 (자기 장판에 맞거나 잡히면 안 됨)
+		if (Pawn == Caster)
 		{
 			continue;
 		}
@@ -314,13 +365,44 @@ void ABossPatternActorBase::PerformHitCheck()
 			continue;
 		}
 
+		// 적중 확정: 첫 적중이면 보스에 결과 태그 부여 (Branch 조건용)
+		if (!bCasterHitTagsApplied && !CasterTagsOnHit.IsEmpty())
+		{
+			bCasterHitTagsApplied = true;
+			AddCasterLooseTags(CasterTagsOnHit);
+		}
+
 		ApplyEffectsTo(Pawn);
 		AlreadyHitActors.Add(Pawn);
 		OnAoeHitActor.Broadcast(Pawn);
 	}
 }
 
+void ABossPatternActorBase::AddCasterLooseTags(const FGameplayTagContainer& InTags)
+{
+	if (InTags.IsEmpty())
+	{
+		return;
+	}
+	if (UAbilitySystemComponent* CasterASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Caster))
+	{
+		CasterASC->AddLooseGameplayTags(InTags);
+	}
+}
+
 void ABossPatternActorBase::ApplyEffectsTo(AActor* Target)
+{
+	// 행동 오브젝트가 지정돼 있으면 위임(잡기/전하스왑 등), 없으면 기본 데미지+상태이상
+	if (OnHitEffect)
+	{
+		OnHitEffect->OnHit(this, Target);
+		return;
+	}
+	ApplyDamageAndStatus(Target);
+}
+
+void ABossPatternActorBase::ApplyDamageAndStatus(AActor* Target)
 {
 	UAbilitySystemComponent* TargetASC =
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
@@ -399,6 +481,23 @@ void ABossPatternActorBase::FinishAoe()
 	{
 		return;
 	}
+
+	// 행동 오브젝트가 파괴를 가로채면(잡기 유지 등) 여기서 멈춘다.
+	// 이후 그 오브젝트가 스스로 DestroyAoeNow() 를 호출해 파괴 타이밍을 제어.
+	if (OnHitEffect && OnHitEffect->OnFinish(this))
+	{
+		return;
+	}
+
+	DestroyAoeNow();
+}
+
+void ABossPatternActorBase::DestroyAoeNow()
+{
+	if (bFinished)
+	{
+		return;
+	}
 	bFinished = true;
 
 	GetWorldTimerManager().ClearTimer(TickTimerHandle);
@@ -406,4 +505,15 @@ void ABossPatternActorBase::FinishAoe()
 
 	OnAoeEnd.Broadcast();
 	Destroy();
+}
+
+void ABossPatternActorBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 해제 전에 외부 요인으로 파괴되면 행동 오브젝트가 안전 복구(잡은 대상 부착 해제 등)
+	if (OnHitEffect)
+	{
+		OnHitEffect->OnEndPlay(this);
+	}
+
+	Super::EndPlay(EndPlayReason);
 }

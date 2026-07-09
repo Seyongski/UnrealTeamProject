@@ -8,6 +8,8 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/RootMotionSource.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "GameFramework/PlayerController.h"
 
 ULostArkSkillGameplayAbility::ULostArkSkillGameplayAbility()
 {
@@ -18,6 +20,10 @@ ULostArkSkillGameplayAbility::ULostArkSkillGameplayAbility()
 	DashDistance = 500.f;
 	DashDuration = 0.5f;
 	bIgnoreCollisionDuringDash = true;
+	bInvincibleDuringDash = false;
+
+	bRotateToMouseOnActivate = true;
+	bAbortNavigationMove = true;
 
 	AbilityTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
 	AbilityTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Skill")));
@@ -47,23 +53,24 @@ void ULostArkSkillGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHan
 		ASC->CancelAbilities(&HasTags, &BlockTags, this);
 	}
 
-	APawn* AvatarPawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
-	if (AvatarPawn)
-	{
-		AController* Controller = AvatarPawn->GetController();
-		if (Controller)
-		{
-			Controller->StopMovement();
-		}
-	}
+	HandleActivationBasics(ActorInfo);
 
-	if (bApplyDashForce && AvatarPawn)
+	if (bApplyDashForce && ActorInfo->AvatarActor.IsValid())
 	{
-		if (bIgnoreCollisionDuringDash)
+		APawn* AvatarPawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
+		if (bIgnoreCollisionDuringDash && AvatarPawn)
 		{
 			if (ACharacter* AvatarChar = Cast<ACharacter>(AvatarPawn))
 			{
 				AvatarChar->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+			}
+		}
+
+		if (bInvincibleDuringDash)
+		{
+			if (UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get())
+			{
+				ASC->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Invincible")));
 			}
 		}
 
@@ -140,6 +147,14 @@ void ULostArkSkillGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle H
 		{
 			AvatarChar->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 		}
+
+		if (bInvincibleDuringDash)
+		{
+			if (UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get())
+			{
+				ASC->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Invincible")));
+			}
+		}
 	}
 
 	if (CurrentPlayTask)
@@ -163,5 +178,58 @@ void ULostArkSkillGameplayAbility::OnMontageInterrupted()
 {
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
+
+void ULostArkSkillGameplayAbility::HandleActivationBasics(const FGameplayAbilityActorInfo* ActorInfo)
+{
+	if (!ActorInfo) return;
+
+	APawn* AvatarPawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
+	if (AvatarPawn)
+	{
+		AController* Controller = AvatarPawn->GetController();
+		if (Controller)
+		{
+			Controller->StopMovement();
+			
+			if (bAbortNavigationMove)
+			{
+				if (UPathFollowingComponent* PathFollowingComp = Controller->FindComponentByClass<UPathFollowingComponent>())
+				{
+					PathFollowingComp->AbortMove(*Controller, FPathFollowingResultFlags::MovementStop);
+				}
+			}
+		}
+
+		if (bRotateToMouseOnActivate)
+		{
+			if (APlayerController* PC = Cast<APlayerController>(Controller))
+			{
+				FHitResult HitResult;
+				if (PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+				{
+					FVector TargetLoc = HitResult.ImpactPoint;
+					FVector Dir = TargetLoc - AvatarPawn->GetActorLocation();
+					Dir.Z = 0.f;
+					if (!Dir.IsNearlyZero())
+					{
+						AvatarPawn->SetActorRotation(Dir.Rotation());
+					}
+				}
+			}
+		}
+	}
+}
+
+UGameplayEffect* ULostArkSkillGameplayAbility::GetCooldownGameplayEffect() const
+{
+	if (CooldownEffectClass)
+	{
+		return CooldownEffectClass->GetDefaultObject<UGameplayEffect>();
+	}
+	return Super::GetCooldownGameplayEffect();
+}
+
+
+
 
 

@@ -53,7 +53,7 @@ ALostArkCharacter::ALostArkCharacter()
 	AttributeSet = CreateDefaultSubobject<ULostArkAttributeSet>(TEXT("AttributeSet"));
 
 	WeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
-	WeaponMesh->SetupAttachment(GetMesh(), TEXT("b_wp_1"));
+	WeaponMesh->SetupAttachment(GetMesh(), TEXT("b_weapon_rhand"));
 
 	bIsLeftFootForward = true;
 	bIsDead = false;

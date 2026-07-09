@@ -67,7 +67,17 @@
      - 디버그 라인을 켜고 끌 수 있습니다.
    * `Damage Effect Class`: 타격 시 적용할 데미지 이펙트(GE)
    * `Skill Montage`: 스킬 사용 시 재생할 애니메이션 몽타주
-   * `Dash`: 스킬 사용 중 앞으로 돌진할지 여부와 거리, 시간 등을 설정합니다.
+   * `Skill | Dash`: 스킬 사용 중 전방 돌진 기능입니다. 돌진 여부(`bApplyDashForce`), 거리, 시간, 몹 관통(`bIgnoreCollisionDuringDash`), 무적 적용(`bInvincibleDuringDash`) 등을 설정합니다.
+   * `Skill | Cooldown & Cost`: 스킬 쿨타임(`Cooldown Effect Class`)과 마나 등 자원 소모(`Cost Effect Class`)를 적용할 수 있습니다.
+   * `Skill | Control`: 스킬 시전 시 마우스 방향으로 캐릭터가 자동 회전(`bRotateToMouseOnActivate`)하는 기능과, 마우스 클릭 이동 중 스킬 사용 시 이동을 즉각 멈추는(`bAbortNavigationMove`) 편의 기능이 제공됩니다.
+
+#### 💡 [참고] 스킬 쿨타임(Cooldown) 완벽 적용 가이드
+쿨타임을 정상적으로 작동시키려면 언리얼 엔진 GAS의 규칙에 따라 다음 **3가지 세팅**이 모두 연결되어야 합니다.
+1. **쿨타임 GE(Gameplay Effect) 생성**: `GameplayEffect`를 상속받는 블루프린트(예: `GE_FireballCooldown`)를 만듭니다.
+2. **GE 세팅**: 해당 블루프린트를 열고, `Duration Policy`를 **Has Duration**으로 변경 후 쿨타임 시간(예: 5.0초)을 입력합니다. 그리고 하단의 **GrantedTags**에 이 스킬만의 고유한 쿨타임 태그(예: `Cooldown.Skill.Fireball`)를 추가합니다.
+3. **어빌리티(GA) 세팅**: 스킬 블루프린트(`GA_Fireball`)로 돌아와서 두 곳을 채워줍니다.
+   - 디테일 패널 `Skill | Cooldown & Cost` 탭의 **Cooldown Effect Class**에 방금 만든 `GE_FireballCooldown` 할당.
+   - 디테일 패널 `Tags` 탭의 **Cooldown Tags** 항목에도 동일한 쿨타임 태그(`Cooldown.Skill.Fireball`) 할당.
 
 ### Step 3. 캐릭터에 스킬과 키 입력 연결하기
 1. Step 1에서 만든 캐릭터 블루프린트(`BP_Warrior`)를 엽니다.

@@ -4,6 +4,7 @@
 #include "Boss/BossBase.h"
 #include "Boss/BackHeadDecalComponent.h"
 #include "Boss/BossAttributeSet.h"
+#include "Boss/Combat/BossCounterComponent.h"
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
 #include "AbilitySystemComponent.h"
@@ -43,6 +44,9 @@ ABossBase::ABossBase()
 
 	// 타겟 선정 + 추적 회전
 	TargetingComponent = CreateDefaultSubobject<UBossTargetingComponent>(TEXT("TargetingComponent"));
+
+	// 카운터 창/판정
+	CounterComponent = CreateDefaultSubobject<UBossCounterComponent>(TEXT("CounterComponent"));
 }
 
 UAbilitySystemComponent* ABossBase::GetAbilitySystemComponent() const

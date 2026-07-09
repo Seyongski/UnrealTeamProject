@@ -10,6 +10,7 @@
 class UBackHeadDecalComponent;
 class UAbilitySystemComponent;
 class UBossAttributeSet;
+class UBossCounterComponent;
 class UBossPatternComponent;
 class UBossTargetingComponent;
 struct FOnAttributeChangeData;
@@ -44,6 +45,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boss|Debug")
 	bool bDrawFacingDebug = false;
 
+	/** 위치 판정 존 각도 (UBossCombatStatics 가 읽어감) */
+	float GetHeadZoneHalfAngle() const { return HeadZoneHalfAngle; }
+	float GetBackZoneHalfAngle() const { return BackZoneHalfAngle; }
+
 protected:
 	/** 초기 체력/무력화 게이지를 어트리뷰트에 세팅 (서버) */
 	void InitializeAttributes();
@@ -70,6 +75,18 @@ protected:
 	/** 타겟 선정 + 추적 회전 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
 	TObjectPtr<UBossTargetingComponent> TargetingComponent;
+
+	/** 카운터 창/판정 (창 열림은 AnimNotifyState_BossCounter 가 토글) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Combat")
+	TObjectPtr<UBossCounterComponent> CounterComponent;
+
+	/** 헤드어택 존: 보스 정면 기준 반각(도). 백헤드 데칼 표시 각도와 맞춰둘 것 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Combat", meta = (ClampMin = "0", ClampMax = "180"))
+	float HeadZoneHalfAngle = 45.f;
+
+	/** 백어택 존: 보스 후면 기준 반각(도) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Combat", meta = (ClampMin = "0", ClampMax = "180"))
+	float BackZoneHalfAngle = 45.f;
 
 	/** 시작 최대 체력 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Stats")

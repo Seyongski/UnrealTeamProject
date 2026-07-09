@@ -38,6 +38,20 @@ protected:
 	 */
 	virtual void ConfigureAoe(ABossPatternActorBase* Aoe) const {}
 
+	/**
+	 * 스폰 공통 준비: 서버 권위/월드/타겟/베이스 스폰 트랜스폼(소켓·오프셋·스케일 반영)을 계산.
+	 * 방사형 등 여러 개를 스폰하는 서브클래스가 재사용. 스폰 불가(클라/월드 없음 등)면 false.
+	 */
+	bool PrepareSpawn(USkeletalMeshComponent* MeshComp, class UWorld*& OutWorld,
+		AActor*& OutBoss, AActor*& OutTarget, FTransform& OutBaseTM) const;
+
+	/**
+	 * 주어진 트랜스폼으로 AoeClass 액터 1개를 Deferred 스폰 + InitAoe/오버라이드/ConfigureAoe/FinishSpawning.
+	 * 방사형 노티파이가 방향만 바꿔 여러 번 호출한다.
+	 */
+	ABossPatternActorBase* SpawnAoeActor(class UWorld* World, AActor* Boss,
+		AActor* Target, const FTransform& SpawnTM) const;
+
 	/** 스폰할 장판 액터 클래스 (BP_Aoe_Circle / _Rect / _Sector ...) */
 	UPROPERTY(EditAnywhere, Category = "Aoe")
 	TSubclassOf<ABossPatternActorBase> AoeClass;

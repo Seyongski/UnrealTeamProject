@@ -12,22 +12,37 @@ void UAnimNotify_BossSpawnAoe::Notify(USkeletalMeshComponent* MeshComp, UAnimSeq
 {
 	Super::Notify(MeshComp, Animation, EventReference);
 
+	UWorld* World = nullptr;
+	AActor* Boss = nullptr;
+	AActor* Target = nullptr;
+	FTransform SpawnTM;
+	if (!PrepareSpawn(MeshComp, World, Boss, Target, SpawnTM))
+	{
+		return;
+	}
+
+	SpawnAoeActor(World, Boss, Target, SpawnTM);
+}
+
+bool UAnimNotify_BossSpawnAoe::PrepareSpawn(USkeletalMeshComponent* MeshComp, UWorld*& OutWorld,
+	AActor*& OutBoss, AActor*& OutTarget, FTransform& OutBaseTM) const
+{
 	AActor* Boss = MeshComp ? MeshComp->GetOwner() : nullptr;
 	if (!Boss || !AoeClass)
 	{
-		return;
+		return false;
 	}
 
 	// 스폰/판정은 서버 권위에서만 (복제로 클라 전파)
 	if (!Boss->HasAuthority())
 	{
-		return;
+		return false;
 	}
 
 	UWorld* World = Boss->GetWorld();
 	if (!World)
 	{
-		return;
+		return false;
 	}
 
 	// 초기 스폰 트랜스폼: 소켓 지정 시 소켓, 아니면 보스 위치 (+오프셋)
@@ -51,18 +66,23 @@ void UAnimNotify_BossSpawnAoe::Notify(USkeletalMeshComponent* MeshComp, UAnimSeq
 		Target = Targeting->GetCurrentTarget();
 	}
 
-	FActorSpawnParameters Params;
-	Params.Owner = Boss;
-	Params.Instigator = Cast<APawn>(Boss);
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	OutWorld = World;
+	OutBoss = Boss;
+	OutTarget = Target;
+	OutBaseTM = SpawnTM;
+	return true;
+}
 
+ABossPatternActorBase* UAnimNotify_BossSpawnAoe::SpawnAoeActor(UWorld* World, AActor* Boss,
+	AActor* Target, const FTransform& SpawnTM) const
+{
 	// InitAoe 를 BeginPlay(ResolveOrigin) 이전에 호출하려면 Deferred 스폰 사용
 	ABossPatternActorBase* Aoe = World->SpawnActorDeferred<ABossPatternActorBase>(
 		AoeClass, SpawnTM, Boss, Cast<APawn>(Boss),
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!Aoe)
 	{
-		return;
+		return nullptr;
 	}
 
 	Aoe->InitAoe(Boss, Target, DamageCoefficient);
@@ -80,6 +100,7 @@ void UAnimNotify_BossSpawnAoe::Notify(USkeletalMeshComponent* MeshComp, UAnimSeq
 	}
 	ConfigureAoe(Aoe);	// 도형별 파라미터 주입 (BeginPlay 전)
 	Aoe->FinishSpawning(SpawnTM);
+	return Aoe;
 }
 
 FString UAnimNotify_BossSpawnAoe::GetNotifyName_Implementation() const

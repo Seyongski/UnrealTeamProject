@@ -21,6 +21,13 @@ namespace LostArkTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Groggy);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_TrackTarget);
 
+	// 카운터 창: AnimNotifyState_BossCounter 가 구간 동안 부여.
+	// 부모(State.Boss.Counterable)로 매치하면 종류 무관 "카운터 창 열림"만 감지되므로
+	// 플레이어/UI 쪽은 가짜 카운터를 구분할 수 없다(의도된 설계)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Counterable_Normal);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Counterable_Multi);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Counterable_Fake);
+
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Debuff_Shock);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
 
@@ -40,6 +47,18 @@ namespace LostArkTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_Grabbed);	// 잡기 성공 (1명 이상)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_AoeHit);	// 장판 적중 (1명 이상)
 
+	// 카운터 결과 (수명이 서로 다른 3종 — BossCounterComponent 가 발행)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_Countered);		// 진짜 카운터 성공. 패턴 종료까지 유지 -> 그로기 분기용
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_FakeCountered);	// '이 창에서' 가짜를 침. 창이 닫히면 제거 -> 즉시 분기용
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_CounterFailed);	// 기믹 실패 확정. 패턴 종료까지 유지 -> 남은 카운터 창 전부 무시
+
+	// 플레이어 카운터 스킬 적중 이벤트: 스킬 쪽은 보스 상태를 몰라도 되고,
+	// 적중 시 SendGameplayEventToActor(보스, 이 태그, Instigator=플레이어) 만 보내면 된다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Boss_CounterHit);
+
 	// SetByCaller: 데미지 GE에 공격력계수를 실어 보내는 데이터 태그
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
+
+	// SetByCaller: 지속시간형 GE(그로기 등)에 지속시간(초)을 실어 보내는 데이터 태그
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Duration);
 }

@@ -59,6 +59,9 @@ void ABossPatternActorBase::BeginPlay()
 	// 스폰 원점 해석 (위치/회전 확정 + Forward/Right 캐싱)
 	ResolveOrigin();
 
+	// 본체 VFX (지정 시): 수명 내내 루트에 붙어 이동을 따라감 (예고와 무관, 즉발이어도 표시)
+	SpawnBodyEffect();
+
 	// 예고 비주얼 (즉발이 아닐 때만, 모든 머신에서 코스메틱으로 표시)
 	// TelegraphEffect 지정 시 VFX로 대체, 아니면 기존 프로시저럴 메시
 	if (!bInstant)
@@ -166,6 +169,9 @@ void ABossPatternActorBase::ResolveOrigin()
 	ShapeRight.Z = 0.f;
 	ShapeRight.Normalize();
 
+	// Straight 모드: 스폰 시 전방을 발사 방향으로 캐싱 (수평 등속 직진, 추적 없음)
+	LaunchDirection = ShapeForward;
+
 	// Spiral 모드: 나선 중심(직선 진행 위치)을 스폰 지점에서 시작
 	SpiralBasePos = AttackCenter;
 }
@@ -252,6 +258,21 @@ void ABossPatternActorBase::BuildTelegraphEffect()
 	WarningComp = NC;	// UNiagaraComponent 도 UPrimitiveComponent 라 HideTelegraph 가 그대로 정리
 }
 
+void ABossPatternActorBase::SpawnBodyEffect()
+{
+	if (!BodyEffect)
+	{
+		return;
+	}
+
+	// 루트에 부착 -> Straight/Homing 이동 시 액터와 함께 따라옴. 예고와 달리 수명 내내 유지.
+	// bAutoDestroy=true: 액터가 Destroy 되면 나이아가라도 함께 정리(잔여 파티클은 자연 소멸).
+	BodyComp = UNiagaraFunctionLibrary::SpawnSystemAttached(
+		BodyEffect, GetRootComponent(), NAME_None,
+		FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset,
+		/*bAutoDestroy=*/true);
+}
+
 void ABossPatternActorBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -319,6 +340,15 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 			const FVector OrbitOffset = (Right * FMath::Cos(Rad) + Up * FMath::Sin(Rad)) * RadiusNow;
 
 			AttackCenter = SpiralBasePos + OrbitOffset;
+			SetActorLocation(AttackCenter);
+		}
+		break;
+
+	case EAoeTargetingMode::Straight:
+		// 타겟 없이 스폰 방향으로 등속 직진 (수평). 추적하지 않음.
+		if (HomingSpeed > 0.f)
+		{
+			AttackCenter += LaunchDirection * HomingSpeed * DeltaTime;
 			SetActorLocation(AttackCenter);
 		}
 		break;

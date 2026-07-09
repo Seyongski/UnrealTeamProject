@@ -40,6 +40,7 @@ enum class EAoeSpawnOrigin : uint8
  * - Homing       : 타겟 위치로 서서히 이동 (유도 장판). Duration>0 이어야 지속 추적처럼 보임
  * - FollowTarget : 매 틱 타겟 '발밑'에 부착되어 따라다님 (전하 변환장판 등)
  * - Spiral       : 타겟을 향해 직선 이동하면서 나선형으로 회전 궤도를 그리며 접근 (유도탄/번개 낙하 등)
+ * - Straight     : 타겟 없이 스폰 방향(Forward)으로 등속 직진. 추적하지 않음 (방사형 투사체/번개 등)
  */
 UENUM(BlueprintType)
 enum class EAoeTargetingMode : uint8
@@ -48,7 +49,8 @@ enum class EAoeTargetingMode : uint8
 	Follow		UMETA(DisplayName = "시전자 추적"),
 	Homing		UMETA(DisplayName = "타겟 유도"),
 	FollowTarget	UMETA(DisplayName = "타겟 부착(발밑)"),
-	Spiral		UMETA(DisplayName = "나선형 유도")
+	Spiral		UMETA(DisplayName = "나선형 유도"),
+	Straight	UMETA(DisplayName = "직선 발사")
 };
 
 /**
@@ -281,9 +283,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting")
 	EAoeTargetingMode TargetingMode = EAoeTargetingMode::Fixed;
 
-	/** Homing/Spiral 진행 속도(cm/s). 타겟을 향한 직선 이동 속도. 0이면 순간 이동 */
+	/** Homing/Spiral/Straight 진행 속도(cm/s). Homing/Spiral은 타겟을 향한, Straight는 발사 방향으로의 이동 속도. 0이면 정지 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting",
-		meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Homing || TargetingMode == EAoeTargetingMode::Spiral"))
+		meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Homing || TargetingMode == EAoeTargetingMode::Spiral || TargetingMode == EAoeTargetingMode::Straight"))
 	float HomingSpeed = 400.f;
 
 	/** 나선 궤도 반지름(cm). 진행 경로 기준 옆으로 도는 원의 크기 */
@@ -322,6 +324,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
 	TObjectPtr<UNiagaraSystem> TelegraphEffect;
 
+	/**
+	 * 예고와 별개로, 액터가 살아있는 동안 계속 루트에 붙어 함께 이동하는 '본체' VFX.
+	 * (직선 발사 투사체의 번개 몸통 등). BeginPlay에서 스폰되어 소멸 시 함께 정리된다.
+	 * TelegraphEffect(예고, 판정 시작 시 제거)와 달리 수명 내내 유지되고 Straight/Homing 이동을 따라간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Body")
+	TObjectPtr<UNiagaraSystem> BodyEffect;
+
 	// ═══════════════ 런타임 상태 ═══════════════
 
 	/** 시전자(보스). 데미지 Instigator, 스폰원점/Follow 기준 */
@@ -338,6 +348,10 @@ protected:
 	/** 자식이 예고 비주얼을 저장하는 컴포넌트 (HideTelegraph 시 파괴) */
 	UPROPERTY(Transient)
 	TObjectPtr<UPrimitiveComponent> WarningComp;
+
+	/** BodyEffect 로 스폰된 본체 VFX 컴포넌트 (액터 소멸 시 AutoDestroy) */
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> BodyComp;
 
 	// ═══════════════ 내부 로직 ═══════════════
 
@@ -368,6 +382,9 @@ protected:
 	/** TelegraphEffect 가 지정된 경우 나이아가라 컴포넌트를 루트에 부착 스폰 + ConfigureTelegraphEffect 호출 */
 	void BuildTelegraphEffect();
 
+	/** BodyEffect 가 지정된 경우 본체 VFX 를 루트에 부착 스폰 (수명 내내 유지, 이동 추종) */
+	void SpawnBodyEffect();
+
 	/** Follow/Homing 이동 처리 */
 	void UpdateCenter(float DeltaTime);
 
@@ -380,6 +397,7 @@ protected:
 private:
 	FVector ShapeForward = FVector::ForwardVector;	// 스폰 시 캐싱된 평면 전방
 	FVector ShapeRight = FVector::RightVector;		// 스폰 시 캐싱된 평면 우측
+	FVector LaunchDirection = FVector::ForwardVector;	// Straight 모드 발사 방향(스폰 Forward, 수평)
 
 	FTimerHandle CastTimerHandle;	// 예고->첫 판정
 	FTimerHandle TickTimerHandle;	// 유지 중 틱뎀

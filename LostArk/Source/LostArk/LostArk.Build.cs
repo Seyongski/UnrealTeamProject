@@ -11,7 +11,8 @@ public class LostArk : ModuleRules
         PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore",
 			"GameplayAbilities","GameplayTags","GameplayTasks","NavigationSystem", "AIModule", "Niagara", "EnhancedInput", "ProceduralMeshComponent" });
 
-		// 모듈 루트(LostArkGameMode.h 등 템플릿 헤더)를 인클루드 경로에 추가 -> 하위 폴더 헤더에서 참조 가능
+		// 모듈 루트(LostArk.h 모듈 헤더)를 인클루드 경로에 추가.
+		// 그 외 헤더는 Public/<Category>/ 아래에 있으므로 "Category/Header.h" 서브패스로 참조.
 		PublicIncludePaths.Add(ModuleDirectory);
     }
 }

@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Boss/Notifies/AnimNotify_BossSpawnRect.h"
-#include "Damage/BossAoe_Rect.h"
+#include "Boss/Damage/BossAoe_Rect.h"
 
 void UAnimNotify_BossSpawnRect::ConfigureAoe(ABossPatternActorBase* Aoe) const
 {

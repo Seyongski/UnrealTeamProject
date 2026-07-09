@@ -40,6 +40,7 @@ protected:
 	UPROPERTY()
 	class UAbilityTask_PlayMontageAndWait* CurrentPlayTask;
 
+public:
 	UFUNCTION()
 	virtual void OnMontageCompleted();
 

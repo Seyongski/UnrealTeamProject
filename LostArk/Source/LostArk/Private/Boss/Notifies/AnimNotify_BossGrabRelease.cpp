@@ -1,8 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Boss/Notifies/AnimNotify_BossGrabRelease.h"
-#include "Damage/BossPatternActorBase.h"
-#include "Damage/BossAoeGrabEffect.h"
+#include "Boss/Damage/BossPatternActorBase.h"
+#include "Boss/Damage/BossAoeGrabEffect.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
 

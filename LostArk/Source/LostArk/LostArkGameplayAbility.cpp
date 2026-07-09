@@ -31,12 +31,15 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 	QueryParams.AddIgnoredActor(InstigatorActor);
 
 	FVector ForwardDir = Rotation.Vector();
+	ForwardDir.Z = 0.f;
+	ForwardDir.Normalize();
+
 	FVector ShapeCenter = Origin + ForwardDir * DamageShapeParams.ForwardOffset;
 
 	if (DamageShapeParams.ShapeType == EDamageShape::Sphere || DamageShapeParams.ShapeType == EDamageShape::Cone)
 	{
 		FCollisionShape CollisionShape;
-		CollisionShape.SetSphere(DamageShapeParams.Radius);
+		CollisionShape.SetCapsule(DamageShapeParams.Radius, DamageShapeParams.ZTolerance);
 
 		TArray<FOverlapResult> Overlaps;
 		World->OverlapMultiByObjectType(Overlaps, ShapeCenter, FQuat::Identity, ObjectQueryParams, CollisionShape, QueryParams);
@@ -46,10 +49,21 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 			AActor* HitActor = Overlap.GetActor();
 			if (HitActor && HitActor != InstigatorActor && HitActor->GetClass() != InstigatorActor->GetClass())
 			{
+				FVector HitLocation = HitActor->GetActorLocation();
+				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) > DamageShapeParams.ZTolerance)
+				{
+					continue;
+				}
+
 				if (DamageShapeParams.ShapeType == EDamageShape::Cone)
 				{
-					FVector DirToTarget = (HitActor->GetActorLocation() - ShapeCenter).GetSafeNormal();
-					float DotP = FVector::DotProduct(ForwardDir, DirToTarget);
+					FVector2D DirToTarget((HitLocation.X - ShapeCenter.X), (HitLocation.Y - ShapeCenter.Y));
+					DirToTarget.Normalize();
+					
+					FVector2D ForwardDir2D(ForwardDir.X, ForwardDir.Y);
+					ForwardDir2D.Normalize();
+
+					float DotP = FVector2D::DotProduct(ForwardDir2D, DirToTarget);
 					float Angle = FMath::RadiansToDegrees(FMath::Acos(DotP));
 					if (Angle <= DamageShapeParams.ConeAngleDegrees * 0.5f)
 					{
@@ -57,6 +71,67 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 					}
 				}
 				else
+				{
+					float DistSq2D = FVector::DistSquaredXY(ShapeCenter, HitLocation);
+					if (DistSq2D <= FMath::Square(DamageShapeParams.Radius))
+					{
+						OverlappedActors.AddUnique(HitActor);
+					}
+				}
+			}
+		}
+
+#if ENABLE_DRAW_DEBUG
+		if (DamageShapeParams.bShowDebugLines)
+		{
+			FVector DrawCenter = ShapeCenter; 
+
+			if (DamageShapeParams.ShapeType == EDamageShape::Sphere)
+			{
+				DrawDebugCircle(World, DrawCenter, DamageShapeParams.Radius, 32, FColor::Red, false, 2.0f, 0, 2.0f, FVector(0,1,0), FVector(1,0,0), false);
+			}
+			else if (DamageShapeParams.ShapeType == EDamageShape::Cone)
+			{
+				float HalfAngleRad = FMath::DegreesToRadians(DamageShapeParams.ConeAngleDegrees * 0.5f);
+				FVector LeftDir = ForwardDir.RotateAngleAxis(-DamageShapeParams.ConeAngleDegrees * 0.5f, FVector::UpVector);
+				FVector RightDir = ForwardDir.RotateAngleAxis(DamageShapeParams.ConeAngleDegrees * 0.5f, FVector::UpVector);
+				
+				DrawDebugLine(World, DrawCenter, DrawCenter + LeftDir * DamageShapeParams.Radius, FColor::Orange, false, 2.0f, 0, 2.0f);
+				DrawDebugLine(World, DrawCenter, DrawCenter + RightDir * DamageShapeParams.Radius, FColor::Orange, false, 2.0f, 0, 2.0f);
+				
+				const int32 ArcSegments = 16;
+				float AngleStep = DamageShapeParams.ConeAngleDegrees / ArcSegments;
+				FVector PrevPoint = DrawCenter + LeftDir * DamageShapeParams.Radius;
+				for (int32 i = 1; i <= ArcSegments; ++i)
+				{
+					FVector NextDir = ForwardDir.RotateAngleAxis(-DamageShapeParams.ConeAngleDegrees * 0.5f + (AngleStep * i), FVector::UpVector);
+					FVector NextPoint = DrawCenter + NextDir * DamageShapeParams.Radius;
+					DrawDebugLine(World, PrevPoint, NextPoint, FColor::Orange, false, 2.0f, 0, 2.0f);
+					PrevPoint = NextPoint;
+				}
+			}
+		}
+#endif
+	}
+	else if (DamageShapeParams.ShapeType == EDamageShape::Box)
+	{
+		FCollisionShape CollisionShape;
+		FVector BoxExtent = DamageShapeParams.BoxExtent;
+		BoxExtent.Z = DamageShapeParams.ZTolerance;
+		CollisionShape.SetBox(FVector3f(BoxExtent));
+
+		FRotator FlatRotation(0.f, Rotation.Yaw, 0.f);
+
+		TArray<FOverlapResult> Overlaps;
+		World->OverlapMultiByObjectType(Overlaps, ShapeCenter, FlatRotation.Quaternion(), ObjectQueryParams, CollisionShape, QueryParams);
+
+		for (const FOverlapResult& Overlap : Overlaps)
+		{
+			AActor* HitActor = Overlap.GetActor();
+			if (HitActor && HitActor != InstigatorActor && HitActor->GetClass() != InstigatorActor->GetClass())
+			{
+				FVector HitLocation = HitActor->GetActorLocation();
+				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) <= DamageShapeParams.ZTolerance)
 				{
 					OverlappedActors.AddUnique(HitActor);
 				}
@@ -66,39 +141,9 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 #if ENABLE_DRAW_DEBUG
 		if (DamageShapeParams.bShowDebugLines)
 		{
-			if (DamageShapeParams.ShapeType == EDamageShape::Sphere)
-		{
-			DrawDebugSphere(World, ShapeCenter, DamageShapeParams.Radius, 32, FColor::Red, false, 2.0f, 0, 2.0f);
-		}
-			else if (DamageShapeParams.ShapeType == EDamageShape::Cone)
-			{
-				float HalfAngleRad = FMath::DegreesToRadians(DamageShapeParams.ConeAngleDegrees * 0.5f);
-				DrawDebugCone(World, ShapeCenter, ForwardDir, DamageShapeParams.Radius, HalfAngleRad, HalfAngleRad, 32, FColor::Orange, false, 2.0f, 0, 2.0f);
-			}
-		}
-#endif
-	}
-	else if (DamageShapeParams.ShapeType == EDamageShape::Box)
-	{
-		FCollisionShape CollisionShape;
-		CollisionShape.SetBox(FVector3f(DamageShapeParams.BoxExtent));
-
-		TArray<FOverlapResult> Overlaps;
-		World->OverlapMultiByObjectType(Overlaps, ShapeCenter, Rotation.Quaternion(), ObjectQueryParams, CollisionShape, QueryParams);
-
-		for (const FOverlapResult& Overlap : Overlaps)
-		{
-			AActor* HitActor = Overlap.GetActor();
-			if (HitActor && HitActor != InstigatorActor && HitActor->GetClass() != InstigatorActor->GetClass())
-			{
-				OverlappedActors.AddUnique(HitActor);
-			}
-		}
-
-#if ENABLE_DRAW_DEBUG
-		if (DamageShapeParams.bShowDebugLines)
-		{
-			DrawDebugBox(World, ShapeCenter, DamageShapeParams.BoxExtent, Rotation.Quaternion(), FColor::Purple, false, 2.0f, 0, 2.0f);
+			FVector FlatBoxExtent = BoxExtent;
+			FlatBoxExtent.Z = 1.0f;
+			DrawDebugBox(World, ShapeCenter, FlatBoxExtent, FlatRotation.Quaternion(), FColor::Purple, false, 2.0f, 0, 2.0f);
 		}
 #endif
 	}

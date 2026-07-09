@@ -37,6 +37,9 @@ struct FDamageShapeParams
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage Shape|Debug")
 	bool bShowDebugLines = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage Shape")
+	float ZTolerance = 200.f;
 };
 
 UCLASS()

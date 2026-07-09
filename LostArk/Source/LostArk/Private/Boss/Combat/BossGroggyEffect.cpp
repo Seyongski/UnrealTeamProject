@@ -14,8 +14,12 @@ UBossGroggyEffect::UBossGroggyEffect()
 	DurationMagnitude = FGameplayEffectModifierMagnitude(DurationSetByCaller);
 
 	// 지속 중 대상(보스)에 State.Boss.Groggy 부여
-	UTargetTagsGameplayEffectComponent& TargetTags = FindOrAddComponent<UTargetTagsGameplayEffectComponent>();
+	// (FindOrAddComponent 는 내부가 NewObject 라 UObject 생성자 안에서 사용 불가 -> CDO 생성 시 페이탈.
+	//  생성자에서는 CreateDefaultSubobject 로 만들어 GEComponents 에 직접 등록해야 한다)
+	UTargetTagsGameplayEffectComponent* TargetTags =
+		CreateDefaultSubobject<UTargetTagsGameplayEffectComponent>(TEXT("TargetTags"));
 	FInheritedTagContainer TagChanges;
 	TagChanges.AddTag(LostArkTags::State_Boss_Groggy.GetTag());
-	TargetTags.SetAndApplyTargetTagChanges(TagChanges);
+	TargetTags->SetAndApplyTargetTagChanges(TagChanges);
+	GEComponents.Add(TargetTags);
 }

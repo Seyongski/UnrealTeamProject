@@ -34,26 +34,26 @@ public:
 	void SetBoss(AActor* InBoss) { Boss = InBoss; }
 
 	/** 탑다운 내려보는 각도(도). 음수=아래. 기존 템플릿 카메라 피치에 맞춰 조정 */
-	UPROPERTY(EditDefaultsOnly, Category = "Camera", meta = (ClampMin = "-89.0", ClampMax = "0.0"))
+	UPROPERTY(EditAnywhere, Category = "Camera", meta = (ClampMin = "-89.0", ClampMax = "0.0"))
 	float Pitch = -55.f;
 
 	/** 붐 길이(포커스 지점 -> 카메라 거리, cm). 클수록 멀리서 봄 */
-	UPROPERTY(EditDefaultsOnly, Category = "Camera", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, Category = "Camera", meta = (ClampMin = "0.0"))
 	float BoomLength = 900.f;
 
 	/** 포커스 지점 높이 오프셋(cm). 플레이어를 화면 아래쪽에 두려면 올림 */
-	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	UPROPERTY(EditAnywhere, Category = "Camera")
 	float FocusHeightOffset = 100.f;
 
 	/** 포커스를 보스 쪽으로 당기는 비율 0~1 (0=플레이어 중심, 커질수록 보스가 화면에 더 들어옴) */
-	UPROPERTY(EditDefaultsOnly, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "0.9"))
+	UPROPERTY(EditAnywhere, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "0.9"))
 	float FocusBiasToBoss = 0.25f;
 
 	/** 위치/회전 보간 속도 (클수록 즉각적) */
-	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	UPROPERTY(EditAnywhere, Category = "Camera")
 	float LocationInterpSpeed = 7.f;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	UPROPERTY(EditAnywhere, Category = "Camera")
 	float RotationInterpSpeed = 7.f;
 
 protected:

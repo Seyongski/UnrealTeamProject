@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
@@ -37,6 +37,8 @@ public:
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	virtual void BeginPlay() override;
+
 	virtual void Die() override;
 
 	virtual bool IsDead() const override { return bIsDead; }
@@ -47,6 +49,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Character|Abilities")
 	void RequestComboAttackInput();
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Weapon")
+	void SetWeaponEquipped(bool bIsEquipped);
 
 	FORCEINLINE class UCameraComponent* GetTopDownCameraComponent() const { return TopDownCameraComponent; }
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -66,6 +71,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	class USkeletalMeshComponent* WeaponMesh;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+	FName WeaponEquippedSocketName = FName("b_wp_1");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+	FName WeaponUnequippedSocketName = FName("b_wp_back");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+	float SheathWeaponTimeout = 5.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+	class UAnimMontage* SheathWeaponMontage;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Abilities")
 	TSubclassOf<class UGameplayAbility> ComboAttackAbilityClass;
 
@@ -84,6 +101,11 @@ protected:
 private:
 	void OnSkillInputPressed(ELostArkAbilityInputID InputID);
 	void OnSkillInputReleased(ELostArkAbilityInputID InputID);
+
+	void OnAttackingTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void PlaySheathWeaponMontage();
+
+	FTimerHandle SheathWeaponTimerHandle;
 
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))

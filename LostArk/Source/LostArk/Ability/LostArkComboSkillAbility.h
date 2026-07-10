@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkSkillGameplayAbility.h"
@@ -26,38 +26,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Combo", meta = (ClampMin = "0.1"))
 	float ComboInputTimeout;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
-	TSoftClassPtr<class ALostArkShadowClone> ShadowCloneClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
-	TSoftObjectPtr<class UAnimMontage> LeftCloneMontage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
-	TSoftObjectPtr<class UAnimMontage> RightCloneMontage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
-	float CloneSpawnOffsetForward;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
-	float CloneSpawnOffsetRight;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
-	FDamageShapeParams CloneDamageShapeParams;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Dash")
-	float FinalDashDistance;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Dash")
-	float FinalDashDuration;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Dash")
-	FDamageShapeParams FinalDashDamageShapeParams;
-
 protected:
-	virtual void OnHitCheckReceived(FGameplayEventData Payload) override;
+	virtual void PlayComboSegment(int32 Index);
+	int32 CurrentComboIndex;
 
 private:
-	void PlayComboSegment(int32 Index);
 
 	UFUNCTION()
 	void OnComboMontageCompleted();
@@ -71,13 +44,9 @@ private:
 	UFUNCTION()
 	void CloseComboWindow();
 
-	int32 CurrentComboIndex;
 	bool bIsComboWindowActive;
 	bool bHasPendingComboInput;
 
 	FTimerHandle ComboWindowOpenTimerHandle;
 	FTimerHandle ComboWindowCloseTimerHandle;
 };
-
-
-

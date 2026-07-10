@@ -1,6 +1,4 @@
 #include "LostArk/Ability/LostArkComboSkillAbility.h"
-#include "LostArk/Actor/LostArkShadowClone.h"
-#include "LostArk/Character/LostArkCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
@@ -21,11 +19,6 @@ ULostArkComboSkillAbility::ULostArkComboSkillAbility()
 	ComboWindowOpenRatio = 0.5f;
 	ComboInputTimeout = 0.8f;
 	bIgnoreCollisionDuringDash = false;
-	
-	CloneSpawnOffsetForward = 0.f;
-	CloneSpawnOffsetRight = 150.f;
-	FinalDashDistance = 600.f;
-	FinalDashDuration = 0.3f;
 }
 
 void ULostArkComboSkillAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -47,7 +40,15 @@ void ULostArkComboSkillAbility::ActivateAbility(const FGameplayAbilitySpecHandle
 		ASC->CancelAbilities(&HasTags, &BlockTags, this);
 	}
 
-	HandleActivationBasics(ActorInfo);
+	APawn* AvatarPawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
+	if (AvatarPawn)
+	{
+		AController* Controller = AvatarPawn->GetController();
+		if (Controller)
+		{
+			Controller->StopMovement();
+		}
+	}
 
 	SetupHitCheckListener();
 
@@ -85,7 +86,7 @@ void ULostArkComboSkillAbility::PlayComboSegment(int32 Index)
 		CurrentPlayTask = nullptr;
 	}
 
-	if (Index == 0 || Index == 2)
+	if (Index == 0)
 	{
 		APawn* AvatarPawn = Cast<APawn>(CurrentActorInfo->AvatarActor.Get());
 		if (AvatarPawn)
@@ -101,16 +102,14 @@ void ULostArkComboSkillAbility::PlayComboSegment(int32 Index)
 			if (bApplyDashForce)
 			{
 				FVector DashDirection = AvatarPawn->GetActorForwardVector();
-				float TargetDist = (Index == 2) ? FinalDashDistance : DashDistance;
-				float TargetDur = (Index == 2) ? FinalDashDuration : DashDuration;
-				float CalcDashSpeed = TargetDur > 0.f ? (TargetDist / TargetDur) : 0.f;
+				float CalcDashSpeed = DashDuration > 0.f ? (DashDistance / DashDuration) : 0.f;
 
 				UAbilityTask_ApplyRootMotionConstantForce* ForceTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
 					this,
 					TEXT("ComboSkillDashForceTask"),
 					DashDirection,
 					CalcDashSpeed,
-					TargetDur,
+					DashDuration,
 					false,
 					nullptr,
 					ERootMotionFinishVelocityMode::SetVelocity,
@@ -126,7 +125,7 @@ void ULostArkComboSkillAbility::PlayComboSegment(int32 Index)
 			}
 		}
 	}
-	else if (Index == 1)
+	else
 	{
 		APawn* AvatarPawn = Cast<APawn>(CurrentActorInfo->AvatarActor.Get());
 		if (AvatarPawn)
@@ -134,51 +133,6 @@ void ULostArkComboSkillAbility::PlayComboSegment(int32 Index)
 			if (ACharacter* AvatarChar = Cast<ACharacter>(AvatarPawn))
 			{
 				AvatarChar->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
-			}
-
-			if (!ShadowCloneClass.IsNull())
-			{
-				UClass* LoadedShadowCloneClass = ShadowCloneClass.LoadSynchronous();
-				USkeletalMeshComponent* SourceMesh = AvatarPawn->FindComponentByClass<USkeletalMeshComponent>();
-				ALostArkCharacter* LAChar = Cast<ALostArkCharacter>(AvatarPawn);
-				USkeletalMeshComponent* SourceWeapon = LAChar ? LAChar->GetWeaponMesh() : nullptr;
-
-				if (LoadedShadowCloneClass && SourceMesh)
-				{
-					FVector PlayerLoc = AvatarPawn->GetActorLocation();
-					FRotator PlayerRot = AvatarPawn->GetActorRotation();
-					FVector ForwardVector = FRotationMatrix(PlayerRot).GetScaledAxis(EAxis::X);
-					FVector RightVector = FRotationMatrix(PlayerRot).GetScaledAxis(EAxis::Y);
-					
-					FActorSpawnParameters SpawnParams;
-					SpawnParams.Owner = AvatarPawn;
-					SpawnParams.Instigator = AvatarPawn;
-					SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-					// Left Clone
-					if (!LeftCloneMontage.IsNull())
-					{
-						FVector LeftLoc = PlayerLoc + ForwardVector * CloneSpawnOffsetForward - RightVector * CloneSpawnOffsetRight;
-						LeftLoc.Z = SourceMesh->GetComponentLocation().Z;
-						ALostArkShadowClone* LeftClone = GetWorld()->SpawnActor<ALostArkShadowClone>(LoadedShadowCloneClass, LeftLoc, PlayerRot, SpawnParams);
-						if (LeftClone)
-						{
-							LeftClone->InitShadow(SourceMesh, SourceWeapon, LeftCloneMontage.LoadSynchronous(), 1.f, 0.f, 0.f, GetAbilitySystemComponentFromActorInfo(), DamageEffectClass, CloneDamageShapeParams);
-						}
-					}
-
-					// Right Clone
-					if (!RightCloneMontage.IsNull())
-					{
-						FVector RightLoc = PlayerLoc + ForwardVector * CloneSpawnOffsetForward + RightVector * CloneSpawnOffsetRight;
-						RightLoc.Z = SourceMesh->GetComponentLocation().Z;
-						ALostArkShadowClone* RightClone = GetWorld()->SpawnActor<ALostArkShadowClone>(LoadedShadowCloneClass, RightLoc, PlayerRot, SpawnParams);
-						if (RightClone)
-						{
-							RightClone->InitShadow(SourceMesh, SourceWeapon, RightCloneMontage.LoadSynchronous(), 1.f, 0.f, 0.f, GetAbilitySystemComponentFromActorInfo(), DamageEffectClass, CloneDamageShapeParams);
-						}
-					}
-				}
 			}
 		}
 	}
@@ -209,7 +163,7 @@ void ULostArkComboSkillAbility::PlayComboSegment(int32 Index)
 	CurrentPlayTask->OnCancelled.AddDynamic(this, &ULostArkComboSkillAbility::OnComboMontageInterrupted);
 	CurrentPlayTask->ReadyForActivation();
 
-	if (Index >= 0 && Index < ComboMontages.Num() - 1)
+	if (Index > 0 && Index < 4)
 	{
 		const float MontageLength = MontageToPlay->GetPlayLength();
 		GetWorld()->GetTimerManager().SetTimer(
@@ -252,7 +206,11 @@ void ULostArkComboSkillAbility::CloseComboWindow()
 
 void ULostArkComboSkillAbility::OnComboMontageCompleted()
 {
-	if (bHasPendingComboInput && ComboMontages.IsValidIndex(CurrentComboIndex + 1))
+	if (CurrentComboIndex == 0)
+	{
+		PlayComboSegment(1);
+	}
+	else if (bHasPendingComboInput && ComboMontages.IsValidIndex(CurrentComboIndex + 1))
 	{
 		PlayComboSegment(CurrentComboIndex + 1);
 	}
@@ -260,19 +218,6 @@ void ULostArkComboSkillAbility::OnComboMontageCompleted()
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 	}
-}
-
-void ULostArkComboSkillAbility::OnHitCheckReceived(FGameplayEventData Payload)
-{
-	FDamageShapeParams OldParams = DamageShapeParams;
-	if (CurrentComboIndex == 2)
-	{
-		DamageShapeParams = FinalDashDamageShapeParams;
-	}
-
-	Super::OnHitCheckReceived(Payload);
-
-	DamageShapeParams = OldParams;
 }
 
 void ULostArkComboSkillAbility::OnComboMontageInterrupted()
@@ -310,6 +255,3 @@ void ULostArkComboSkillAbility::EndAbility(const FGameplayAbilitySpecHandle Hand
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
-
-
-

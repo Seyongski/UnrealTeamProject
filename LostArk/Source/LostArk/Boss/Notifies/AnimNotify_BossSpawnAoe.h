@@ -9,6 +9,8 @@
 #include "AnimNotify_BossSpawnAoe.generated.h"
 
 class ABossPatternActorBase;
+class UNiagaraSystem;
+class UParticleSystem;
 
 /**
  * 몽타주 특정 프레임에 보스 AOE 장판 액터를 스폰하는 노티파이.
@@ -87,4 +89,16 @@ protected:
 	/** 스폰 위치 오프셋 (소켓/보스 로컬 기준) */
 	UPROPERTY(EditAnywhere, Category = "Aoe")
 	FVector LocationOffset = FVector::ZeroVector;
+
+	/**
+	 * 본체 VFX(나이아가라)를 이 노티파이에서 지정. 켜면 AoeClass BP 의 BodyEffect 를 덮어쓴다.
+	 * 같은 장판 BP 를 패턴마다 다른 몸통 이펙트로 쓰고 싶을 때 사용(예: 뻗어나가는 원장판을
+	 * 빨간 경고 대신 토네이도 등 이펙트로). 비우면 BP 기본값 유지.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Body")
+	TObjectPtr<UNiagaraSystem> BodyEffectOverride = nullptr;
+
+	/** 본체 VFX(캐스케이드 UParticleSystem)를 이 노티파이에서 지정. 토네이도 등 기존 캐스케이드 에셋용. 비우면 BP 기본값 유지 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Body")
+	TObjectPtr<UParticleSystem> BodyEffectCascadeOverride = nullptr;
 };

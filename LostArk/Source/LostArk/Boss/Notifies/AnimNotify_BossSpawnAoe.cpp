@@ -98,6 +98,12 @@ ABossPatternActorBase* UAnimNotify_BossSpawnAoe::SpawnAoeActor(UWorld* World, AA
 			Grab->ApplyOverride(GrabOverride);
 		}
 	}
+	// 본체 VFX 노티파이 오버라이드 (BeginPlay 의 SpawnBodyEffect 전에 주입, null 은 BP 기본 유지)
+	if (BodyEffectOverride || BodyEffectCascadeOverride)
+	{
+		Aoe->SetBodyEffectOverride(BodyEffectOverride, BodyEffectCascadeOverride);
+	}
+
 	ConfigureAoe(Aoe);	// 도형별 파라미터 주입 (BeginPlay 전)
 	Aoe->FinishSpawning(SpawnTM);
 	return Aoe;

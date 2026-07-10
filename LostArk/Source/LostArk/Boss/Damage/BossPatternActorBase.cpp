@@ -14,6 +14,8 @@
 #include "ProceduralMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Particles/ParticleSystemComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "CollisionQueryParams.h"
@@ -50,6 +52,34 @@ void ABossPatternActorBase::ApplyCommonOverride(const FBossAoeCommonOverride& Ov
 	bSingleHitPerTarget = Override.bSingleHitPerTarget;
 	bInstant = Override.bInstant;
 	TargetingMode = Override.TargetingMode;
+}
+
+void ABossPatternActorBase::SetupStraightProjectile(float Speed, float Range, float HitInterval, float InCastTime)
+{
+	// BP 클래스 설정(SpawnOrigin/TargetingMode)이 무엇이든 '스폰 트랜스폼 방향 직진'을 보장.
+	// SpawnOrigin 이 CasterLocation 등이면 ResolveOrigin 이 위치/회전을 보스 것으로 덮어써
+	// 방사형 부채가 전부 같은 방향으로 뭉개지므로 반드시 SpawnTransform 으로 고정한다.
+	TargetingMode = EAoeTargetingMode::Straight;
+	SpawnOrigin = EAoeSpawnOrigin::SpawnTransform;
+
+	HomingSpeed = FMath::Max(Speed, 1.f);
+	Duration = FMath::Max(Range, 1.f) / HomingSpeed;	// 사거리 소진 = 수명 종료
+	TickInterval = FMath::Max(HitInterval, 0.02f);		// 비행 중 판정 주기
+	CastTime = FMath::Max(InCastTime, 0.f);
+	bInstant = (CastTime <= KINDA_SMALL_NUMBER);		// 대기 없으면 예고 스킵하고 즉시 발사
+}
+
+void ABossPatternActorBase::SetBodyEffectOverride(UNiagaraSystem* InNiagara, UParticleSystem* InCascade)
+{
+	// BeginPlay(SpawnBodyEffect) 전에 호출되어야 반영됨. null 인자는 BP 기본값 유지.
+	if (InNiagara)
+	{
+		BodyEffect = InNiagara;
+	}
+	if (InCascade)
+	{
+		BodyEffectCascade = InCascade;
+	}
 }
 
 void ABossPatternActorBase::BeginPlay()
@@ -260,17 +290,25 @@ void ABossPatternActorBase::BuildTelegraphEffect()
 
 void ABossPatternActorBase::SpawnBodyEffect()
 {
-	if (!BodyEffect)
+	// 루트에 부착 -> Straight/Homing 이동 시 액터와 함께 따라옴. 예고와 달리 수명 내내 유지.
+	// bAutoDestroy=true: 액터가 Destroy 되면 파티클도 함께 정리(잔여 파티클은 자연 소멸).
+	if (BodyEffect)
 	{
-		return;
+		BodyComp = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			BodyEffect, GetRootComponent(), NAME_None,
+			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset,
+			/*bAutoDestroy=*/true);
 	}
 
-	// 루트에 부착 -> Straight/Homing 이동 시 액터와 함께 따라옴. 예고와 달리 수명 내내 유지.
-	// bAutoDestroy=true: 액터가 Destroy 되면 나이아가라도 함께 정리(잔여 파티클은 자연 소멸).
-	BodyComp = UNiagaraFunctionLibrary::SpawnSystemAttached(
-		BodyEffect, GetRootComponent(), NAME_None,
-		FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset,
-		/*bAutoDestroy=*/true);
+	// 캐스케이드 본체 (토네이도 등 기존 UParticleSystem 에셋용)
+	if (BodyEffectCascade)
+	{
+		BodyCascadeComp = UGameplayStatics::SpawnEmitterAttached(
+			BodyEffectCascade, GetRootComponent(), NAME_None,
+			FVector::ZeroVector, FRotator::ZeroRotator, FVector::OneVector,
+			EAttachLocation::KeepRelativeOffset,
+			/*bAutoDestroy=*/true);
+	}
 }
 
 void ABossPatternActorBase::Tick(float DeltaTime)
@@ -346,7 +384,8 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 
 	case EAoeTargetingMode::Straight:
 		// 타겟 없이 스폰 방향으로 등속 직진 (수평). 추적하지 않음.
-		if (HomingSpeed > 0.f)
+		// 예고(CastTime) 중에는 제자리 대기, 시전이 끝나야 발사된다.
+		if (bCastFinished && HomingSpeed > 0.f)
 		{
 			AttackCenter += LaunchDirection * HomingSpeed * DeltaTime;
 			SetActorLocation(AttackCenter);
@@ -379,17 +418,24 @@ FVector ABossPatternActorBase::GetFeetLocation(const AActor* Target)
 
 void ABossPatternActorBase::OnCastFinished()
 {
+	bCastFinished = true;	// Straight 투사체는 이때부터 전진 시작
+
 	HideTelegraph();
 
 	// 첫 판정
 	PerformHitCheck();
 
-	// 유지형이면 틱뎀 반복 + 수명 타이머, 아니면 즉시 종료
-	if (Duration > KINDA_SMALL_NUMBER && TickInterval > KINDA_SMALL_NUMBER)
+	// 유지형이면 수명 타이머 + (틱 주기 지정 시) 틱뎀 반복, 아니면 즉시 종료.
+	// 주의: 틱 주기 미지정이어도 Duration 이 있으면 살아있어야 한다
+	// (이전엔 Duration>0 && TickInterval==0 이면 즉시 소멸해 투사체가 생성 직후 사라지는 버그).
+	if (Duration > KINDA_SMALL_NUMBER)
 	{
-		GetWorldTimerManager().SetTimer(
-			TickTimerHandle, this, &ABossPatternActorBase::PerformHitCheck,
-			TickInterval, true);
+		if (TickInterval > KINDA_SMALL_NUMBER)
+		{
+			GetWorldTimerManager().SetTimer(
+				TickTimerHandle, this, &ABossPatternActorBase::PerformHitCheck,
+				TickInterval, true);
+		}
 
 		GetWorldTimerManager().SetTimer(
 			LifeTimerHandle, this, &ABossPatternActorBase::FinishAoe,
@@ -449,8 +495,10 @@ void ABossPatternActorBase::PerformHitCheck()
 
 		const FVector P = Pawn->GetActorLocation();
 
-		// 높이(Z) 체크
-		if (FMath::Abs(P.Z - AttackCenter.Z) > HeightTolerance)
+		// 높이(Z) 체크. 단, bIgnoreHeightCheck 이거나 행동(잡기 등)이 높이 무시를 요구하면 스킵.
+		// (보스 캡슐/메시 크기가 바뀌면 스폰 높이가 흔들려 XY 범위 안이어도 걸러지는 문제 방지)
+		const bool bSkipHeight = bIgnoreHeightCheck || (OnHitEffect && OnHitEffect->IgnoresAoeHeight());
+		if (!bSkipHeight && FMath::Abs(P.Z - AttackCenter.Z) > HeightTolerance)
 		{
 			continue;
 		}

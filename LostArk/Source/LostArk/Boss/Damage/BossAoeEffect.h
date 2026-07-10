@@ -36,4 +36,11 @@ public:
 
 	/** 액터 파괴 시 정리(잡은 대상 복구 등) */
 	virtual void OnEndPlay(ABossPatternActorBase* Aoe) {}
+
+	/**
+	 * 이 행동이 붙은 장판은 높이(Z) 판정을 무시해야 하는가.
+	 * true면 베이스 PerformHitCheck 가 XY 도형만으로 판정한다(보스 크기 변동에 강건).
+	 * 잡기처럼 '범위 안이면 무조건 잡아야' 하는 행동이 override 해서 true 를 돌려준다.
+	 */
+	virtual bool IgnoresAoeHeight() const { return false; }
 };

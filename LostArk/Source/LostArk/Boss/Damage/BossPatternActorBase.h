@@ -14,6 +14,8 @@ class UProceduralMeshComponent;
 class UBossAoeEffect;
 class UNiagaraSystem;
 class UNiagaraComponent;
+class UParticleSystem;
+class UParticleSystemComponent;
 
 /**
  * 장판을 '어디에' 생성할지. (스폰 원점 정책 — Base가 BeginPlay에서 해석)
@@ -130,6 +132,28 @@ public:
 	/** 패턴별 공통값 오버라이드 주입 (스폰 노티파이가 BeginPlay 전에 호출) */
 	UFUNCTION(BlueprintCallable, Category = "Aoe")
 	void ApplyCommonOverride(const FBossAoeCommonOverride& Override);
+
+	/**
+	 * 직선 투사체 셋업. 방사형(Radial) 등 투사체 스폰 노티파이가 BeginPlay 전에 호출해
+	 * BP 클래스 설정과 무관하게 '스폰 트랜스폼 방향으로 등속 직진'을 강제한다.
+	 *  - TargetingMode=Straight, SpawnOrigin=SpawnTransform 고정
+	 *    (BP가 CasterLocation 등으로 돼 있으면 방사 방향/위치가 보스 것으로 덮여 전부 뭉개지는 사고 방지)
+	 *  - 수명 = Range / Speed (사거리 끝까지 날아간 뒤 소멸)
+	 * @param Speed       진행 속도(cm/s)
+	 * @param Range       사거리(cm). 이만큼 이동하면 소멸
+	 * @param HitInterval 비행 중 판정 주기(초)
+	 * @param InCastTime  발사 전 대기(초). 0이면 예고 없이 즉시 발사, >0이면 예고 후 발사
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetupStraightProjectile(float Speed, float Range, float HitInterval, float InCastTime);
+
+	/**
+	 * 본체 VFX 를 이 스폰 1회에만 덮어씀 (스폰 노티파이가 BeginPlay 전에 호출).
+	 * BP 클래스에 박힌 BodyEffect 대신 노티파이(패턴)마다 다른 몸통 이펙트를 쓸 때 사용.
+	 * null 인자는 무시(해당 종류는 BP 기본값 유지). 나이아가라/캐스케이드 각각 지정 가능.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetBodyEffectOverride(UNiagaraSystem* InNiagara, UParticleSystem* InCascade);
 
 	// ─── 행동 오브젝트(UBossAoeEffect)가 쓰는 공개 API ───
 
@@ -271,6 +295,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
 	bool bSingleHitPerTarget = true;
 
+	/**
+	 * 켜면 높이(Z) 게이트를 건너뛰고 XY 도형(Radius/각도)만으로 판정한다.
+	 * 보스 캡슐/메시 크기에 따라 스폰 높이가 흔들려 판정이 어긋나는 패턴(특히 잡기)에서 사용.
+	 * 잡기 행동(UBossAoeGrabEffect)은 이 값과 무관하게 항상 높이를 무시한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
+	bool bIgnoreHeightCheck = false;
+
 	/** 즉발: 예고 장판 비주얼을 표시하지 않음 (판정 타이밍은 CastTime 그대로) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
 	bool bInstant = false;
@@ -332,6 +364,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Body")
 	TObjectPtr<UNiagaraSystem> BodyEffect;
 
+	/**
+	 * BodyEffect 의 캐스케이드(UParticleSystem) 버전. 토네이도처럼 기존 Cascade 파티클을
+	 * 본체로 쓸 때 지정 (Niagara 와 둘 다 지정하면 둘 다 스폰됨).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Body")
+	TObjectPtr<UParticleSystem> BodyEffectCascade;
+
 	// ═══════════════ 런타임 상태 ═══════════════
 
 	/** 시전자(보스). 데미지 Instigator, 스폰원점/Follow 기준 */
@@ -352,6 +391,10 @@ protected:
 	/** BodyEffect 로 스폰된 본체 VFX 컴포넌트 (액터 소멸 시 AutoDestroy) */
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> BodyComp;
+
+	/** BodyEffectCascade 로 스폰된 본체 캐스케이드 컴포넌트 */
+	UPROPERTY(Transient)
+	TObjectPtr<UParticleSystemComponent> BodyCascadeComp;
 
 	// ═══════════════ 내부 로직 ═══════════════
 
@@ -408,6 +451,9 @@ private:
 	TSet<TWeakObjectPtr<AActor>> AlreadyHitActors;
 
 	bool bFinished = false;
+
+	/** CastTime 경과(OnCastFinished) 여부. Straight 투사체는 이때부터 전진(예고 중엔 제자리) */
+	bool bCastFinished = false;
 
 	/** CasterTagsOnHit 를 이미 부여했는지 (첫 적중 1회만) */
 	bool bCasterHitTagsApplied = false;

@@ -4,7 +4,7 @@
 #include "Boss/Raid/BossRaidGameMode.h"
 #include "Boss/Raid/BossRaidGameState.h"
 #include "Boss/Raid/BossArenaCamera.h"
-#include "Boss/Raid/ArenaSliceActor.h"
+#include "Monster/ArenaSliceActor.h"
 #include "Boss/BossBase.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"

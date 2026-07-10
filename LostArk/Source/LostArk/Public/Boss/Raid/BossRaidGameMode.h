@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "LostArkGameMode.h"
+#include "Core/LostArkGameMode.h"
 #include "BossRaidGameMode.generated.h"
 
 class ABossBase;

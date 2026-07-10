@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Boss/Raid/ArenaKillVolume.h"
+#include "Monster/ArenaKillVolume.h"
 #include "Boss/BossGameplayTags.h"
 #include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"

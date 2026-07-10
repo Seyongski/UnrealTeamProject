@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Boss/Raid/ArenaSliceActor.h"
+#include "Monster/ArenaSliceActor.h"
 #include "Boss/Raid/BossRaidGameState.h"
 #include "Components/StaticMeshComponent.h"
 #include "NavModifierComponent.h"

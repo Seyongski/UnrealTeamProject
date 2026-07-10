@@ -4,8 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Animation/AnimNotifies/AnimNotify.h"
-#include "Damage/BossPatternActorBase.h"	// FBossAoeCommonOverride
-#include "Damage/BossAoeGrabEffect.h"		// FBossGrabOverride
+#include "Boss/Damage/BossPatternActorBase.h"	// FBossAoeCommonOverride
+#include "Boss/Damage/BossAoeGrabEffect.h"		// FBossGrabOverride
 #include "AnimNotify_BossSpawnAoe.generated.h"
 
 class ABossPatternActorBase;

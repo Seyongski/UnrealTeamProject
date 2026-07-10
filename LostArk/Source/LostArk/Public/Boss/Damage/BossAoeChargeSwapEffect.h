@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Damage/BossAoeEffect.h"
+#include "Boss/Damage/BossAoeEffect.h"
 #include "GameplayTagContainer.h"
 #include "BossAoeChargeSwapEffect.generated.h"
 

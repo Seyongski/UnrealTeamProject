@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Damage/BossAoe_Rect.h"
+#include "Boss/Damage/BossAoe_Rect.h"
 #include "DrawDebugHelpers.h"
 #include "NiagaraComponent.h"
 

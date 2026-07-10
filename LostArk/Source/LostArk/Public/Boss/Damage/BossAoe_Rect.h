@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Damage/BossPatternActorBase.h"
+#include "Boss/Damage/BossPatternActorBase.h"
 #include "BossAoe_Rect.generated.h"
 
 /**

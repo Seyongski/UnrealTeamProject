@@ -1,8 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Damage/BossPatternActorBase.h"
-#include "Damage/BossAoeEffect.h"
+#include "Boss/Damage/BossPatternActorBase.h"
+#include "Boss/Damage/BossAoeEffect.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"

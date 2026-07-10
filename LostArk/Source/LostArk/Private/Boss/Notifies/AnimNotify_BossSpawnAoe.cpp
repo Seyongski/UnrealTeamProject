@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Boss/Notifies/AnimNotify_BossSpawnAoe.h"
-#include "Damage/BossPatternActorBase.h"
+#include "Boss/Damage/BossPatternActorBase.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Actor.h"

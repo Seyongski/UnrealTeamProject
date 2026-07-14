@@ -109,7 +109,7 @@ void UBossCounterComponent::HandleCounterEvent(const FGameplayEventData* Payload
 	NotifyCounterAttackHit(Attacker);
 }
 
-void UBossCounterComponent::NotifyCounterAttackHit(AActor* Attacker)
+void UBossCounterComponent::NotifyCounterAttackHit(AActor* Attacker, bool bBypassHeadZone)
 {
 	AActor* Owner = GetOwner();
 	if (!Owner || !Owner->HasAuthority() || !bWindowOpen || !Attacker)
@@ -124,7 +124,8 @@ void UBossCounterComponent::NotifyCounterAttackHit(AActor* Attacker)
 	}
 
 	// (중요) 카운터는 약점포착 상태여도 '실제 헤드 존' 적중만 인정 (순수 지오메트리 판정)
-	if (!UBossCombatStatics::IsHeadZoneHit(Owner, Attacker->GetActorLocation()))
+	// bBypassHeadZone 은 임시 디버그 강제 카운터 전용 (프로덕션 경로는 항상 false)
+	if (!bBypassHeadZone && !UBossCombatStatics::IsHeadZoneHit(Owner, Attacker->GetActorLocation()))
 	{
 		return;
 	}

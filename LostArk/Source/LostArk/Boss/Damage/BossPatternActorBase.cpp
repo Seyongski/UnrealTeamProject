@@ -4,6 +4,7 @@
 #include "Boss/Damage/BossPatternActorBase.h"
 #include "Boss/Damage/BossAoeEffect.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Raid/BossRaidGameState.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Components/PrimitiveComponent.h"
@@ -51,6 +52,7 @@ void ABossPatternActorBase::ApplyCommonOverride(const FBossAoeCommonOverride& Ov
 	HeightTolerance = Override.HeightTolerance;
 	bSingleHitPerTarget = Override.bSingleHitPerTarget;
 	bInstant = Override.bInstant;
+	bKeepTelegraphWhileActive = Override.bKeepTelegraphWhileActive;
 	TargetingMode = Override.TargetingMode;
 }
 
@@ -177,19 +179,8 @@ void ABossPatternActorBase::ResolveOrigin()
 	// AttackCenter.Z 를 바닥으로 스냅. 높이 게이트(|P.Z - AttackCenter.Z| <= HeightTolerance)를
 	// 보스 캡슐 크기가 아니라 '바닥' 기준으로 만든다(캡슐을 키워도 판정이 안 흔들리게).
 	// XY 도형 판정은 Z 를 무시하므로 영향 없음.
-	if (UWorld* World = GetWorld())
-	{
-		FHitResult GroundHit;
-		FCollisionQueryParams GParams(SCENE_QUERY_STAT(AoeCenterGround), false);
-		if (Caster) { GParams.AddIgnoredActor(Caster); }
-		GParams.AddIgnoredActor(this);
-		const FVector Start = AttackCenter + FVector(0, 0, 200.f);
-		const FVector End = AttackCenter - FVector(0, 0, 5000.f);
-		if (World->LineTraceSingleByChannel(GroundHit, Start, End, ECC_Visibility, GParams))
-		{
-			AttackCenter.Z = GroundHit.ImpactPoint.Z;
-		}
-	}
+	AttackCenter.Z = ResolveGroundZ(AttackCenter);
+	SetActorLocation(AttackCenter);	// 액터/부착 메시(예고·본체)도 바닥으로 내려 함께 스냅
 
 	ShapeForward = GetActorForwardVector();
 	ShapeForward.Z = 0.f;
@@ -204,6 +195,103 @@ void ABossPatternActorBase::ResolveOrigin()
 
 	// Spiral 모드: 나선 중심(직선 진행 위치)을 스폰 지점에서 시작
 	SpiralBasePos = AttackCenter;
+}
+
+bool ABossPatternActorBase::TraceGroundZ(const FVector& At, float& OutZ) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	// bTraceComplex=true: 머지된 바닥 메시(SM_MERGED_*)는 심플 콜리전이 없고 복합(트라이앵글)
+	// 콜리전만 있는 경우가 많다. 기본 라인트레이스는 심플만 검사하므로 이걸 켜야 실제 바닥을 맞춘다.
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(AoeGroundTrace), /*bTraceComplex=*/true);
+	if (Caster) { Params.AddIgnoredActor(Caster); }
+	Params.AddIgnoredActor(this);
+
+	// 채널 응답이 아니라 '오브젝트 타입'으로 질의 -> 바닥이 Visibility 를 Block 안 해도 잡힘.
+	// 걸을 수 있는 바닥은 대부분 WorldStatic, 이동 플랫폼 등은 WorldDynamic.
+	FCollisionObjectQueryParams ObjParams;
+	ObjParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+	// 거대 보스 캡슐 중심에서 시작해도 확실히 바닥 위에서 아래로 훑도록 넉넉히
+	const FVector Start = At + FVector(0.f, 0.f, 500.f);
+	const FVector End = At - FVector(0.f, 0.f, 5000.f);
+
+	FHitResult Hit;
+	if (World->LineTraceSingleByObjectType(Hit, Start, End, ObjParams, Params))
+	{
+		// 뭘 잡았는지 1회 로그 -> 엉뚱한 지오메트리(투명 볼륨/부착 액터 등)를 잡는 문제 진단용
+		if (!bGroundTraceLogged)
+		{
+			bGroundTraceLogged = true;
+			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 바닥 트레이스 적중: 액터=%s 컴포넌트=%s ImpactZ=%.1f (기준 Z=%.1f)"),
+				*GetName(), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()),
+				Hit.ImpactPoint.Z, At.Z);
+		}
+		OutZ = Hit.ImpactPoint.Z;
+		return true;
+	}
+
+	return false;	// 실패 시 로그는 ResolveGroundZ 가 폴백 수치와 함께 남긴다
+}
+
+float ABossPatternActorBase::ResolveGroundZ(const FVector& At) const
+{
+	// 절대 Z 고정: 트레이스/발밑 무시하고 지정한 월드 Z 를 그대로 바닥으로 사용 (가장 확실)
+	if (bUseAbsoluteGroundZ)
+	{
+		if (!bGroundTraceLogged)
+		{
+			bGroundTraceLogged = true;
+			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 절대 바닥 Z 사용: %.1f"), *GetName(), AbsoluteGroundZ);
+		}
+		return AbsoluteGroundZ;
+	}
+
+	// 강제 폴백: 트레이스가 이상한 걸 잡을 때 수동 제어 (오프셋이 반드시 적용됨)
+	float TracedZ = 0.f;
+	if (!bForceGroundFallback && TraceGroundZ(At, TracedZ))
+	{
+		return TracedZ;
+	}
+
+	// 폴백 1순위: 아레나 바닥 높이의 단일 진실 = GameState.ArenaFloorZ (디자이너가 GameState BP에 지정).
+	// 0 이면 미설정으로 보고 다음 폴백으로 넘어간다.
+	// (각 BP 에 절대 Z 를 박지 않아도 이 한 값만 맞추면 모든 장판이 따라옴)
+	if (const ABossRaidGameState* GS = GetWorld() ? GetWorld()->GetGameState<ABossRaidGameState>() : nullptr)
+	{
+		if (!FMath::IsNearlyZero(GS->ArenaFloorZ))
+		{
+			const float ArenaZ = GS->ArenaFloorZ + GroundFallbackZOffset;
+			if (!bGroundTraceLogged)
+			{
+				bGroundTraceLogged = true;
+				UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 폴백 Z(아레나): ArenaFloorZ=%.1f + 오프셋=%.1f => %.1f"),
+					*GetName(), GS->ArenaFloorZ, GroundFallbackZOffset, ArenaZ);
+			}
+			return ArenaZ;
+		}
+	}
+
+	// 폴백 2순위: 시전자(보스) 발밑 Z + 수동 보정 (GameState 조차 없을 때)
+	if (Caster)
+	{
+		const float FeetZ = GetFeetLocation(Caster).Z;
+		const float FinalZ = FeetZ + GroundFallbackZOffset;
+		if (!bGroundTraceLogged)
+		{
+			bGroundTraceLogged = true;
+			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 폴백 Z(발밑): 발밑=%.1f + 오프셋=%.1f => %.1f"),
+				*GetName(), FeetZ, GroundFallbackZOffset, FinalZ);
+		}
+		return FinalZ;
+	}
+
+	return At.Z;
 }
 
 FVector ABossPatternActorBase::GetCasterOriginLocation() const
@@ -233,22 +321,11 @@ UProceduralMeshComponent* ABossPatternActorBase::CreateTelegraphMesh(
 	// 스케일 1로 고정해 판정과 크기를 일치시킨다.
 	ProcMesh->SetWorldScale3D(FVector::OneVector);
 
-	// 바닥 스냅: 스폰 높이가 허리여도 메시를 바닥 위(+5cm)에 눕힌다. XY 는 판정 중심 그대로.
+	// 바닥 스냅: AttackCenter 는 ResolveOrigin 에서 이미 바닥으로 스냅됐으므로 그 Z 를 그대로 쓴다.
+	// (예고 표시 유지 패턴에서 액터가 Follow 로 이동하면 부착된 메시가 자동으로 함께 따라감)
 	FVector MeshCenter = AttackCenter;
-	if (UWorld* World = GetWorld())
-	{
-		FHitResult GroundHit;
-		FCollisionQueryParams GParams(SCENE_QUERY_STAT(TelegraphGround), false);
-		if (Caster) { GParams.AddIgnoredActor(Caster); }
-		GParams.AddIgnoredActor(this);
-		const FVector TraceStart = MeshCenter + FVector(0, 0, 200.f);
-		const FVector TraceEnd = MeshCenter - FVector(0, 0, 2000.f);
-		if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, GParams))
-		{
-			MeshCenter.Z = GroundHit.ImpactPoint.Z;
-		}
-	}
-	ProcMesh->SetWorldLocation(MeshCenter + FVector(0, 0, 5.f));
+	MeshCenter.Z = AttackCenter.Z + TelegraphZOffset;
+	ProcMesh->SetWorldLocation(MeshCenter);
 
 	TArray<FVector> Normals;
 	TArray<FVector2D> UVs;
@@ -298,6 +375,18 @@ void ABossPatternActorBase::SpawnBodyEffect()
 			BodyEffect, GetRootComponent(), NAME_None,
 			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset,
 			/*bAutoDestroy=*/true);
+
+		if (BodyComp)
+		{
+			// 본체 VFX 가 스스로 연출 타이밍을 전환할 수 있게 공통 타이밍 주입.
+			// 예: 전기 장벽 — 구체 2개는 즉시, 그 사이 전기 빔은 CastTime 경과(폭발) 후 Duration 동안.
+			BodyComp->SetFloatParameter(TEXT("CastTime"), CastTime);
+			BodyComp->SetFloatParameter(TEXT("Duration"), Duration);
+
+			// 도형 파라미터(Rect 의 HalfLength/ForwardOffset 등)도 예고와 동일 훅으로 주입
+			// -> 구체를 장판 양 끝(ForwardOffset±HalfLength)에 배치하는 식으로 크기를 판정과 일치시킨다.
+			ConfigureTelegraphEffect(BodyComp);
+		}
 	}
 
 	// 캐스케이드 본체 (토네이도 등 기존 UParticleSystem 에셋용)
@@ -325,6 +414,8 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 		if (Caster)
 		{
 			AttackCenter = GetCasterOriginLocation();
+			// 시전자(보스) XY·회전은 따라가되 Z 는 바닥으로 스냅 -> 회전 장판이 허공에 안 뜬다
+			AttackCenter.Z = ResolveGroundZ(AttackCenter);
 			SetActorLocationAndRotation(AttackCenter, Caster->GetActorRotation());
 			ShapeForward = GetActorForwardVector(); ShapeForward.Z = 0.f; ShapeForward.Normalize();
 			ShapeRight = GetActorRightVector();     ShapeRight.Z = 0.f;   ShapeRight.Normalize();
@@ -420,7 +511,13 @@ void ABossPatternActorBase::OnCastFinished()
 {
 	bCastFinished = true;	// Straight 투사체는 이때부터 전진 시작
 
-	HideTelegraph();
+	// 유지 표시 패턴(회전 장판 등)은 예고를 남겨 위험지대를 계속 보여준다.
+	// (유지시간이 없으면 남길 이유가 없으므로 기존대로 제거. 액터 소멸 시 컴포넌트도 함께 정리됨)
+	const bool bKeepTelegraph = bKeepTelegraphWhileActive && Duration > KINDA_SMALL_NUMBER;
+	if (!bKeepTelegraph)
+	{
+		HideTelegraph();
+	}
 
 	// 첫 판정
 	PerformHitCheck();

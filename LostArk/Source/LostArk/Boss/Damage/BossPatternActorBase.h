@@ -88,6 +88,10 @@ struct FBossAoeCommonOverride
 	UPROPERTY(EditAnywhere)
 	bool bInstant = false;
 
+	/** 유지시간 동안 예고 비주얼을 계속 표시 (회전 장판 등 지속 위험지대용) */
+	UPROPERTY(EditAnywhere)
+	bool bKeepTelegraphWhileActive = false;
+
 	/** 장판 이동 방식 */
 	UPROPERTY(EditAnywhere)
 	EAoeTargetingMode TargetingMode = EAoeTargetingMode::Fixed;
@@ -307,6 +311,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
 	bool bInstant = false;
 
+	/**
+	 * 켜면 CastTime 경과 후에도 예고 비주얼을 파괴하지 않고 유지시간(Duration) 내내 표시한다.
+	 * 보스를 따라 도는 회전 장판처럼 '지금 위험한 지대'를 계속 보여줘야 하는 패턴용.
+	 * (예고 컴포넌트는 루트에 붙어 있어 Follow 회전/이동을 자동 추종, 액터 소멸 시 함께 정리)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
+	bool bKeepTelegraphWhileActive = false;
+
 	/** 수직 판정 허용 오차(cm). |대상.Z - 중심.Z| 가 이 값 이하일 때만 적중 (공중 대상 제외) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit", meta = (ClampMin = "0.0"))
 	float HeightTolerance = 200.f;
@@ -434,6 +446,54 @@ protected:
 	/** 스폰/Follow 시 시전자 기준 위치 (소켓 지정 시 소켓, 아니면 액터 위치) */
 	FVector GetCasterOriginLocation() const;
 
+	/**
+	 * At 위치의 바닥 Z 를 구한다 (위에서 아래로 트레이스). 성공 시 OutZ 채우고 true.
+	 * 오브젝트 타입(WorldStatic/WorldDynamic) 쿼리라 바닥 메시의 Visibility 응답과 무관하게 잡힌다.
+	 * (거대 보스 캡슐 높이만큼 위에서 쏘고 충분히 아래까지 내려감)
+	 */
+	bool TraceGroundZ(const FVector& At, float& OutZ) const;
+
+	/**
+	 * At 위치의 바닥 Z 를 항상 반환 (폴백 포함).
+	 *  1) TraceGroundZ 성공 시 그 값
+	 *  2) 실패 시 시전자(보스) 발밑 Z — 보스는 아레나 바닥에 서 있으므로 바닥 높이와 같다
+	 *     (머지 바닥 메시에 콜리전이 없어 트레이스가 아예 안 잡히는 경우 대비)
+	 *  3) 시전자도 없으면 At.Z 그대로
+	 */
+	float ResolveGroundZ(const FVector& At) const;
+
+	/** 예고/본체 메시를 바닥에서 살짝 띄우는 오프셋(cm). Z-파이팅 방지 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph", meta = (ClampMin = "0.0"))
+	float TelegraphZOffset = 5.f;
+
+	/**
+	 * 바닥 트레이스 실패 시 폴백 Z(시전자 캡슐 발밑)에 더할 수동 보정(cm).
+	 * 보스가 중앙 구덩이에 잠겨 있어 발밑이 실제 아레나 바닥보다 낮으면 그 차이만큼 +로 올린다.
+	 * (BP 디폴트에서 맵에 맞게 한 번 맞춰두면 됨. 트레이스가 잡히는 위치에선 사용되지 않음)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
+	float GroundFallbackZOffset = 0.f;
+
+	/**
+	 * 켜면 바닥 트레이스를 아예 건너뛰고 항상 '시전자 발밑 Z + GroundFallbackZOffset' 을 바닥으로 사용.
+	 * 트레이스가 엉뚱한 것(투명 볼륨/부착 무기/구덩이 밑바닥 등)을 잡아 높이가 이상할 때
+	 * 수동으로 확실하게 제어하는 스위치. (켜면 오프셋이 반드시 적용됨)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
+	bool bForceGroundFallback = false;
+
+	/**
+	 * 켜면 바닥 Z 를 '월드 절대값(AbsoluteGroundZ)' 으로 고정한다. 트레이스/발밑 무시.
+	 * 보스가 중앙 구덩이에 잠긴 평평한 아레나처럼 바닥 높이가 일정할 때 가장 확실한 방법.
+	 * (로그에서 확인한 실제 바닥 Z 를 그대로 넣으면 됨)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
+	bool bUseAbsoluteGroundZ = false;
+
+	/** bUseAbsoluteGroundZ 가 켜졌을 때 사용할 바닥의 월드 Z (cm) */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn", meta = (EditCondition = "bUseAbsoluteGroundZ"))
+	float AbsoluteGroundZ = 0.f;
+
 	/** 대상이 생존 상태인지 (DeadTag 없으면 생존 간주) */
 	bool IsAlive(const AActor* Target) const;
 
@@ -457,6 +517,9 @@ private:
 
 	/** CasterTagsOnHit 를 이미 부여했는지 (첫 적중 1회만) */
 	bool bCasterHitTagsApplied = false;
+
+	/** 바닥 트레이스 결과를 이번 수명에 1회만 로그 (Follow 매 틱 스팸 방지, 진단용) */
+	mutable bool bGroundTraceLogged = false;
 
 	/** Spiral 모드: 나선 궤도의 중심이 되는 직선 진행 위치 (매 틱 타겟 쪽으로 전진) */
 	FVector SpiralBasePos = FVector::ZeroVector;

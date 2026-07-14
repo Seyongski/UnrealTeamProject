@@ -58,9 +58,10 @@ public:
 	/** 카운터 창 닫기 (NotifyEnd + 패턴 스텝 정리에서 호출, 중복 호출 안전) */
 	void CloseWindow();
 
-	/** 카운터 스킬 적중 보고 (Event.Boss.CounterHit 수신 시 자동 호출되지만 직접 호출도 가능) */
+	/** 카운터 스킬 적중 보고 (Event.Boss.CounterHit 수신 시 자동 호출되지만 직접 호출도 가능)
+	 *  bBypassHeadZone: [임시 디버그용] 헤드존 지오메트리 판정을 건너뜀 (기본 false, 프로덕션은 항상 false) */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Counter")
-	void NotifyCounterAttackHit(AActor* Attacker);
+	void NotifyCounterAttackHit(AActor* Attacker, bool bBypassHeadZone = false);
 
 	UFUNCTION(BlueprintPure, Category = "Boss|Counter")
 	bool IsWindowOpen() const { return bWindowOpen; }

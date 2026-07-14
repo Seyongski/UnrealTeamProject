@@ -10,6 +10,7 @@ void ABossRaidGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ABossRaidGameState, DestroyedSliceMask);
 	DOREPLIFETIME(ABossRaidGameState, SliceCount);
 	DOREPLIFETIME(ABossRaidGameState, ArenaCenter);
+	DOREPLIFETIME(ABossRaidGameState, ArenaFloorZ);
 }
 
 bool ABossRaidGameState::IsSliceDestroyed(int32 SliceIndex) const

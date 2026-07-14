@@ -12,6 +12,11 @@
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
 #include "LostArk/Core/LostArkCombatInterface.h"
+// [임시 디버그] 카운터 강제용 include (나중에 삭제)
+#include "EngineUtils.h"
+#include "Engine/Engine.h"
+#include "LostArk/Boss/BossBase.h"
+#include "LostArk/Boss/Combat/BossCounterComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -53,7 +58,45 @@ void ALostArkPlayerController::SetupInputComponent()
 	{
 		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input Component!"), *GetNameSafe(this));
 	}
+
+	// [임시 디버그] Q 직접 바인딩 (Enhanced Input IA/매핑 없이). 나중에 이 줄 삭제
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &ALostArkPlayerController::DebugForceCounterHit);
+	}
 }
+
+// ===== [임시 디버그] 아래 3개 함수는 카운터/그로기 확인용. 나중에 전부 삭제 =====
+void ALostArkPlayerController::DebugForceCounterHit()
+{
+	// 입력은 클라이언트에서 들어오므로 서버 권한으로 넘겨서 실제 판정을 돌린다
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow, TEXT("[DEBUG] Q -> 카운터 강제 시도"));
+	}
+	ServerDebugForceCounterHit();
+}
+
+void ALostArkPlayerController::ServerDebugForceCounterHit_Implementation()
+{
+	APawn* MyPawn = GetPawn();
+	UWorld* World = GetWorld();
+	if (!MyPawn || !World)
+	{
+		return;
+	}
+
+	// 월드의 첫 번째 보스를 찾아 헤드존 무시로 카운터 적중 강제 (창이 열려 있어야 실제로 먹힘)
+	for (TActorIterator<ABossBase> It(World); It; ++It)
+	{
+		if (UBossCounterComponent* Counter = It->FindComponentByClass<UBossCounterComponent>())
+		{
+			Counter->NotifyCounterAttackHit(MyPawn, /*bBypassHeadZone=*/true);
+		}
+		break;	// 보스 1개 가정 (임시)
+	}
+}
+// ==============================================================================
 
 void ALostArkPlayerController::OnInputStarted()
 {

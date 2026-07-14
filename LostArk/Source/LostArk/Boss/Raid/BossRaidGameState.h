@@ -35,6 +35,15 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Arena")
 	FVector ArenaCenter = FVector::ZeroVector;
 
+	/**
+	 * 아레나 바닥의 월드 Z (cm). 장판이 바닥에 붙을 때의 기준 높이.
+	 * ArenaCenter.Z 는 슬라이스 액터의 피벗 높이라 실제 바닥과 다를 수 있어(피벗이 떠 있는 경우)
+	 * 바닥 높이는 이 값으로 따로 지정한다. GameState BP 에서 실제 바닥 Z 를 넣을 것 (예: 521).
+	 * 0 이면 '미설정'으로 보고 장판이 시전자 발밑으로 폴백.
+	 */
+	UPROPERTY(EditDefaultsOnly, Replicated, BlueprintReadWrite, Category = "Arena")
+	float ArenaFloorZ = 0.f;
+
 	/** 조각 파괴 여부 */
 	UFUNCTION(BlueprintPure, Category = "Arena")
 	bool IsSliceDestroyed(int32 SliceIndex) const;

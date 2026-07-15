@@ -22,6 +22,10 @@ namespace LostArkTags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_Grabbed, "State.Player.Grabbed", "보스에게 잡힌 상태 (입력/이동 잠금은 플레이어 쪽에서 바인딩)");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_JustGuardable, "State.Boss.JustGuardable", "저스트가드 창 열림 (보스 노란 글로우 연출을 이 태그에 바인딩)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_GuardReady, "State.Player.GuardReady", "저스트가드 1회 가능 상태 (G 입력 소모 시 제거)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_Guarding, "State.Player.Guarding", "저스트가드 모션 재생 중 (이동/스킬 잠금은 플레이어 쪽에서 바인딩)");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Charge_Red, "State.Charge.Red", "빨간 전하 (조우 시 랜덤 부여)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Charge_Blue, "State.Charge.Blue", "파란 전하 (조우 시 랜덤 부여)");
 
@@ -30,11 +34,13 @@ namespace LostArkTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult, "State.Boss.PatternResult", "패턴 결과 태그 부모 (패턴 종료 시 하위 전부 자동 제거)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_Grabbed, "State.Boss.PatternResult.Grabbed", "이번 패턴에서 잡기 성공 (Branch 조건용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_AoeHit, "State.Boss.PatternResult.AoeHit", "이번 패턴에서 장판 적중 (Branch 조건용)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_JustGuarded, "State.Boss.PatternResult.JustGuarded", "이번 패턴에서 저스트가드 성공 (Branch 조건용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_Countered, "State.Boss.PatternResult.Countered", "진짜 카운터 성공 (패턴 종료까지 유지, 그로기 분기용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_FakeCountered, "State.Boss.PatternResult.FakeCountered", "이 창에서 가짜 카운터를 침 (창 닫힘 시 제거, 즉시 분기용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_CounterFailed, "State.Boss.PatternResult.CounterFailed", "카운터 기믹 실패 확정 (패턴 종료까지 유지, 남은 카운터 창 무시 게이트)");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Boss_CounterHit, "Event.Boss.CounterHit", "플레이어 카운터 스킬이 보스에 적중 (Instigator=플레이어, 판정은 보스 쪽)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Boss_JustGuardInput, "Event.Boss.JustGuardInput", "플레이어 저스트가드(G) 입력 (Instigator=플레이어, 판정은 보스 쪽)");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Damage, "Data.Damage", "SetByCaller: 데미지 GE에 실을 공격력계수");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Duration, "Data.Duration", "SetByCaller: 지속시간형 GE(그로기 등)의 지속시간(초)");

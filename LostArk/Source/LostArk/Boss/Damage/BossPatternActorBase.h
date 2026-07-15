@@ -92,6 +92,10 @@ struct FBossAoeCommonOverride
 	UPROPERTY(EditAnywhere)
 	bool bKeepTelegraphWhileActive = false;
 
+	/** 예고가 시전 중앙에서 판정 범위까지 CastTime 동안 점차 차오름 (저스트가드 등 타이밍 읽기 패턴용) */
+	UPROPERTY(EditAnywhere)
+	bool bTelegraphFill = false;
+
 	/** 장판 이동 방식 */
 	UPROPERTY(EditAnywhere)
 	EAoeTargetingMode TargetingMode = EAoeTargetingMode::Fixed;
@@ -319,6 +323,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
 	bool bKeepTelegraphWhileActive = false;
 
+	/**
+	 * 켜면 예고 비주얼이 시전 중앙에서 판정 범위까지 CastTime 동안 점차 차오른다.
+	 * 일반 장판은 전체 범위가 한 번에 표시되지만, 저스트가드처럼 '차오른 정도 = 남은 시간'을
+	 * 읽고 타이밍을 잡아야 하는 패턴은 이걸 켠다 (docs/09_JUSTGUARD_PATTERN.md).
+	 *  - 프로시저럴 메시 예고: XY 스케일 0->1 (중앙에서 바깥으로 확장. 판정 크기는 불변 — T에 전체 도형으로 판정)
+	 *  - VFX 예고(TelegraphEffect): "FillRatio"(0~1) User 파라미터로 매 틱 전달 (시스템 쪽에서 소비)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
+	bool bTelegraphFill = false;
+
 	/** 수직 판정 허용 오차(cm). |대상.Z - 중심.Z| 가 이 값 이하일 때만 적중 (공중 대상 제외) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit", meta = (ClampMin = "0.0"))
 	float HeightTolerance = 200.f;
@@ -434,6 +448,9 @@ protected:
 	/** 예고 비주얼 제거 */
 	void HideTelegraph();
 
+	/** 차오르는 예고(bTelegraphFill) 갱신: CastTime 진행률만큼 메시 스케일/VFX FillRatio 반영 (매 틱) */
+	void UpdateTelegraphFill();
+
 	/** TelegraphEffect 가 지정된 경우 나이아가라 컴포넌트를 루트에 부착 스폰 + ConfigureTelegraphEffect 호출 */
 	void BuildTelegraphEffect();
 
@@ -514,6 +531,9 @@ private:
 
 	/** CastTime 경과(OnCastFinished) 여부. Straight 투사체는 이때부터 전진(예고 중엔 제자리) */
 	bool bCastFinished = false;
+
+	/** 시전 시작 시각(월드 초). 차오르는 예고(bTelegraphFill) 진행률 계산용 */
+	float CastStartTimeSeconds = 0.f;
 
 	/** CasterTagsOnHit 를 이미 부여했는지 (첫 적중 1회만) */
 	bool bCasterHitTagsApplied = false;

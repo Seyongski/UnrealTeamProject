@@ -5,6 +5,7 @@
 #include "Boss/BackHeadDecalComponent.h"
 #include "Boss/BossAttributeSet.h"
 #include "Boss/Combat/BossCounterComponent.h"
+#include "Boss/Combat/BossJustGuardComponent.h"
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
 #include "AbilitySystemComponent.h"
@@ -47,6 +48,9 @@ ABossBase::ABossBase()
 
 	// 카운터 창/판정
 	CounterComponent = CreateDefaultSubobject<UBossCounterComponent>(TEXT("CounterComponent"));
+
+	// 저스트가드 창/판정
+	JustGuardComponent = CreateDefaultSubobject<UBossJustGuardComponent>(TEXT("JustGuardComponent"));
 }
 
 UAbilitySystemComponent* ABossBase::GetAbilitySystemComponent() const

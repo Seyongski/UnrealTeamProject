@@ -53,6 +53,12 @@ protected:
 	void ServerDebugForceCounterHit();
 	// ============================================================================================
 
+	// ===== [임시 디버그] G -> 저스트가드 모션. 창이 없으면 '비활성화', 있으면 '발동'(+성공/실패는 장판이 표시). 나중에 삭제 =====
+	void DebugTryJustGuard();
+	UFUNCTION(Server, Reliable)
+	void ServerDebugTryJustGuard();
+	// ============================================================================================
+
 private:
 	FVector CachedDestination;
 	bool bIsTouch;

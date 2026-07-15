@@ -53,6 +53,7 @@ void ABossPatternActorBase::ApplyCommonOverride(const FBossAoeCommonOverride& Ov
 	bSingleHitPerTarget = Override.bSingleHitPerTarget;
 	bInstant = Override.bInstant;
 	bKeepTelegraphWhileActive = Override.bKeepTelegraphWhileActive;
+	bTelegraphFill = Override.bTelegraphFill;
 	TargetingMode = Override.TargetingMode;
 }
 
@@ -107,6 +108,10 @@ void ABossPatternActorBase::BeginPlay()
 			BuildTelegraph();
 		}
 	}
+
+	// 차오르는 예고: 시작 시각 기록 + 첫 프레임부터 0 근처에서 시작 (이후 Tick이 진행률 갱신)
+	CastStartTimeSeconds = GetWorld()->GetTimeSeconds();
+	UpdateTelegraphFill();
 
 	OnAoeBegin.Broadcast();
 
@@ -404,6 +409,37 @@ void ABossPatternActorBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UpdateCenter(DeltaTime);
+	UpdateTelegraphFill();
+}
+
+void ABossPatternActorBase::UpdateTelegraphFill()
+{
+	if (!bTelegraphFill || !WarningComp)
+	{
+		return;
+	}
+
+	// CastTime 진행률. 시전이 끝났는데 예고가 남아있으면(유지 표시) 가득 찬 상태로 고정
+	float Ratio = 1.f;
+	if (!bCastFinished && CastTime > KINDA_SMALL_NUMBER)
+	{
+		const float Elapsed = GetWorld()->GetTimeSeconds() - CastStartTimeSeconds;
+		Ratio = FMath::Clamp(Elapsed / CastTime, 0.f, 1.f);
+	}
+
+	if (UNiagaraComponent* NC = Cast<UNiagaraComponent>(WarningComp))
+	{
+		// VFX 예고는 지오메트리 스케일 대신 파라미터로 전달 (시스템이 반경/알파 등에 소비)
+		NC->SetFloatParameter(TEXT("FillRatio"), Ratio);
+	}
+	else
+	{
+		// 프로시저럴 메시: 중앙(액터 원점 = 시전 중앙)에서 바깥으로 XY 확장.
+		// 판정 크기는 불변 — 도형 판정은 T에 원래 크기로 수행되고, 이건 순수 비주얼.
+		// 스케일 0은 트랜스폼이 퇴화하므로 바닥값을 둔다.
+		const float S = FMath::Max(Ratio, 0.02f);
+		WarningComp->SetWorldScale3D(FVector(S, S, 1.f));
+	}
 }
 
 void ABossPatternActorBase::UpdateCenter(float DeltaTime)

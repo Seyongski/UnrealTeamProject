@@ -11,6 +11,7 @@ class UBackHeadDecalComponent;
 class UAbilitySystemComponent;
 class UBossAttributeSet;
 class UBossCounterComponent;
+class UBossJustGuardComponent;
 class UBossPatternComponent;
 class UBossTargetingComponent;
 struct FOnAttributeChangeData;
@@ -79,6 +80,10 @@ protected:
 	/** 카운터 창/판정 (창 열림은 AnimNotifyState_BossCounter 가 토글) */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Combat")
 	TObjectPtr<UBossCounterComponent> CounterComponent;
+
+	/** 저스트가드 창/판정 (창 열림은 AnimNotifyState_BossJustGuard 가 토글) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Combat")
+	TObjectPtr<UBossJustGuardComponent> JustGuardComponent;
 
 	/** 헤드어택 존: 보스 정면 기준 반각(도). 백헤드 데칼 표시 각도와 맞춰둘 것 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Combat", meta = (ClampMin = "0", ClampMax = "180"))

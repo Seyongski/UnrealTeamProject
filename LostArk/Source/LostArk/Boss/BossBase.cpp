@@ -8,6 +8,7 @@
 #include "Boss/Combat/BossJustGuardComponent.h"
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
+#include "Boss/Weapon/BossWeaponComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
@@ -51,6 +52,9 @@ ABossBase::ABossBase()
 
 	// 저스트가드 창/판정
 	JustGuardComponent = CreateDefaultSubobject<UBossJustGuardComponent>(TEXT("JustGuardComponent"));
+
+	// 무기 착용 상태 표시 (맨손/양손/합체 토글)
+	WeaponComponent = CreateDefaultSubobject<UBossWeaponComponent>(TEXT("WeaponComponent"));
 }
 
 UAbilitySystemComponent* ABossBase::GetAbilitySystemComponent() const

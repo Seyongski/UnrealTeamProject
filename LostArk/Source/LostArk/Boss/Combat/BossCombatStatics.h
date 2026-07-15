@@ -4,7 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "GameplayTagContainer.h"
 #include "BossCombatStatics.generated.h"
+
+class UAbilitySystemComponent;
 
 /** 공격자가 서 있는 보스 기준 존 (순수 지오메트리, 약점포착과 무관) */
 UENUM(BlueprintType)
@@ -71,4 +74,24 @@ public:
 	/** 카운터 성립 위치인지 (= 헤드 존). 약점포착이어도 헤드 존만 인정 */
 	UFUNCTION(BlueprintPure, Category = "Boss|Combat")
 	static bool IsHeadZoneHit(const AActor* BossActor, const FVector& AttackerLocation);
+
+	// ─── 공용 헬퍼 (보스 시스템 전반에서 재사용, C++ 전용) ───
+
+	/** 접속 중인 플레이어 컨트롤러들의 폰 수집 (null 폰 제외). 장판 판정/타겟팅/전하 부여 등이 공용 */
+	static void GetPlayerPawns(const UWorld* World, TArray<APawn*>& OutPawns);
+
+	/**
+	 * 대상이 생존 상태인지 (DeadTag 기준).
+	 * 규약: 액터 없음 = false / 태그 미지정·ASC 없음 = 판정 불가 -> 생존 간주(대상 포함)
+	 */
+	static bool IsAliveActor(const AActor* Actor, const FGameplayTag& DeadTag);
+
+	/**
+	 * 루스 태그를 서버 로컬 + 복제 양쪽에 부여 (클라 UI/입력 게이트까지 전파).
+	 * 서버 권위에서만 호출할 것. 짝은 반드시 RemoveReplicatedLooseTag 로 회수.
+	 */
+	static void AddReplicatedLooseTag(UAbilitySystemComponent* ASC, const FGameplayTag& Tag);
+
+	/** AddReplicatedLooseTag 의 회수 짝 */
+	static void RemoveReplicatedLooseTag(UAbilitySystemComponent* ASC, const FGameplayTag& Tag);
 };

@@ -4,6 +4,7 @@
 #include "Boss/Damage/BossPatternActorBase.h"
 #include "Boss/Damage/BossAoeEffect.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/Raid/BossRaidGameState.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -152,25 +153,12 @@ void ABossPatternActorBase::ResolveOrigin()
 		break;
 
 	case EAoeSpawnOrigin::GroundUnderTarget:
-	{
-		const FVector Base = HomingTarget ? HomingTarget->GetActorLocation() : Loc;
-		FHitResult Hit;
-		FCollisionQueryParams Params(SCENE_QUERY_STAT(AoeGroundTrace), false);
-		if (Caster) { Params.AddIgnoredActor(Caster); }
-		if (HomingTarget) { Params.AddIgnoredActor(HomingTarget); }
-		Params.AddIgnoredActor(this);
-		const FVector Start = Base + FVector(0, 0, 200.f);
-		const FVector End = Base - FVector(0, 0, 2000.f);
-		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		// 타겟 위치 기준. 바닥 Z 는 아래 공통 스냅(ResolveGroundZ)이 처리하므로 별도 트레이스 불필요
+		if (HomingTarget)
 		{
-			Loc = Hit.ImpactPoint;
-		}
-		else
-		{
-			Loc = Base;
+			Loc = HomingTarget->GetActorLocation();
 		}
 		break;
-	}
 
 	case EAoeSpawnOrigin::SpawnTransform:
 	default:
@@ -187,13 +175,7 @@ void ABossPatternActorBase::ResolveOrigin()
 	AttackCenter.Z = ResolveGroundZ(AttackCenter);
 	SetActorLocation(AttackCenter);	// 액터/부착 메시(예고·본체)도 바닥으로 내려 함께 스냅
 
-	ShapeForward = GetActorForwardVector();
-	ShapeForward.Z = 0.f;
-	ShapeForward.Normalize();
-
-	ShapeRight = GetActorRightVector();
-	ShapeRight.Z = 0.f;
-	ShapeRight.Normalize();
+	CacheShapeAxes();
 
 	// Straight 모드: 스폰 시 전방을 발사 방향으로 캐싱 (수평 등속 직진, 추적 없음)
 	LaunchDirection = ShapeForward;
@@ -299,6 +281,17 @@ float ABossPatternActorBase::ResolveGroundZ(const FVector& At) const
 	return At.Z;
 }
 
+void ABossPatternActorBase::CacheShapeAxes()
+{
+	ShapeForward = GetActorForwardVector();
+	ShapeForward.Z = 0.f;
+	ShapeForward.Normalize();
+
+	ShapeRight = GetActorRightVector();
+	ShapeRight.Z = 0.f;
+	ShapeRight.Normalize();
+}
+
 FVector ABossPatternActorBase::GetCasterOriginLocation() const
 {
 	if (const ACharacter* C = Cast<ACharacter>(Caster))
@@ -347,6 +340,52 @@ UProceduralMeshComponent* ABossPatternActorBase::CreateTelegraphMesh(
 
 	WarningComp = ProcMesh;
 	return ProcMesh;
+}
+
+UProceduralMeshComponent* ABossPatternActorBase::CreateArcTelegraphMesh(float StartAngleDeg, float EndAngleDeg,
+	float InInnerRadius, float InOuterRadius, int32 Segments)
+{
+	// 로컬 좌표(X=Forward, Y=Right). 각도 A 방향 = (cos A, sin A). 메시 자체가 도형이라
+	// 머티리얼 마스킹이 필요 없다. 원은 0~360°, 부채꼴은 Start~End 구간.
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+
+	if (InInnerRadius > KINDA_SMALL_NUMBER)
+	{
+		// 도넛/환형 부채꼴: 안쪽 호 + 바깥 호를 스트립으로 연결
+		for (int32 i = 0; i <= Segments; ++i)
+		{
+			const float Rad = FMath::DegreesToRadians(
+				FMath::Lerp(StartAngleDeg, EndAngleDeg, (float)i / Segments));
+			const float Cos = FMath::Cos(Rad);
+			const float Sin = FMath::Sin(Rad);
+			Vertices.Add(FVector(Cos * InInnerRadius, Sin * InInnerRadius, 0.f));
+			Vertices.Add(FVector(Cos * InOuterRadius, Sin * InOuterRadius, 0.f));
+		}
+		for (int32 i = 0; i < Segments; ++i)
+		{
+			const int32 i0 = i * 2, i1 = i * 2 + 1, i2 = i * 2 + 2, i3 = i * 2 + 3;
+			Triangles.Add(i0); Triangles.Add(i1); Triangles.Add(i3);
+			Triangles.Add(i0); Triangles.Add(i3); Triangles.Add(i2);
+		}
+	}
+	else
+	{
+		// 꽉 찬 원/부채꼴: 중심 팬
+		Vertices.Add(FVector::ZeroVector);
+		for (int32 i = 0; i <= Segments; ++i)
+		{
+			const float Rad = FMath::DegreesToRadians(
+				FMath::Lerp(StartAngleDeg, EndAngleDeg, (float)i / Segments));
+			Vertices.Add(FVector(FMath::Cos(Rad) * InOuterRadius, FMath::Sin(Rad) * InOuterRadius, 0.f));
+		}
+		for (int32 i = 0; i < Segments; ++i)
+		{
+			Triangles.Add(0); Triangles.Add(i + 1); Triangles.Add(i + 2);
+		}
+	}
+
+	return CreateTelegraphMesh(Vertices, Triangles);
 }
 
 void ABossPatternActorBase::BuildTelegraphEffect()
@@ -453,8 +492,7 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 			// 시전자(보스) XY·회전은 따라가되 Z 는 바닥으로 스냅 -> 회전 장판이 허공에 안 뜬다
 			AttackCenter.Z = ResolveGroundZ(AttackCenter);
 			SetActorLocationAndRotation(AttackCenter, Caster->GetActorRotation());
-			ShapeForward = GetActorForwardVector(); ShapeForward.Z = 0.f; ShapeForward.Normalize();
-			ShapeRight = GetActorRightVector();     ShapeRight.Z = 0.f;   ShapeRight.Normalize();
+			CacheShapeAxes();
 		}
 		break;
 
@@ -600,15 +638,10 @@ void ABossPatternActorBase::PerformHitCheck()
 		DebugDrawShape();
 	}
 
-	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	TArray<APawn*> PlayerPawns;
+	UBossCombatStatics::GetPlayerPawns(World, PlayerPawns);
+	for (APawn* Pawn : PlayerPawns)
 	{
-		APlayerController* PC = It->Get();
-		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-		if (!Pawn)
-		{
-			continue;
-		}
-
 		// 시전자(보스) 본인은 판정 제외 (자기 장판에 맞거나 잡히면 안 됨)
 		if (Pawn == Caster)
 		{
@@ -741,15 +774,8 @@ void ABossPatternActorBase::HideTelegraph()
 
 bool ABossPatternActorBase::IsAlive(const AActor* Target) const
 {
-	const UAbilitySystemComponent* ASC =
-		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(const_cast<AActor*>(Target));
-	if (!ASC)
-	{
-		return true; // 판정 불가 시 대상 포함
-	}
-
 	const FGameplayTag Tag = DeadTag.IsValid() ? DeadTag : LostArkTags::State_Dead;
-	return !ASC->HasMatchingGameplayTag(Tag);
+	return UBossCombatStatics::IsAliveActor(Target, Tag);
 }
 
 void ABossPatternActorBase::FinishAoe()

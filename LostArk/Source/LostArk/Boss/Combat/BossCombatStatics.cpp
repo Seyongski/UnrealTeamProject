@@ -5,6 +5,9 @@
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
+#include "Engine/World.h"
 
 EBossHitZone UBossCombatStatics::GetHitZone(const AActor* BossActor, const FVector& AttackerLocation)
 {
@@ -85,4 +88,62 @@ EBossPositionalBonus UBossCombatStatics::EvaluatePositionalBonus(const AActor* B
 bool UBossCombatStatics::IsHeadZoneHit(const AActor* BossActor, const FVector& AttackerLocation)
 {
 	return GetHitZone(BossActor, AttackerLocation) == EBossHitZone::Head;
+}
+
+void UBossCombatStatics::GetPlayerPawns(const UWorld* World, TArray<APawn*>& OutPawns)
+{
+	OutPawns.Reset();
+	if (!World)
+	{
+		return;
+	}
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (APawn* Pawn = PC ? PC->GetPawn() : nullptr)
+		{
+			OutPawns.Add(Pawn);
+		}
+	}
+}
+
+bool UBossCombatStatics::IsAliveActor(const AActor* Actor, const FGameplayTag& DeadTag)
+{
+	if (!Actor)
+	{
+		return false;
+	}
+	// 태그 미지정이면 판정 불가 -> 생존 간주 (대상 포함)
+	if (!DeadTag.IsValid())
+	{
+		return true;
+	}
+	if (const UAbilitySystemComponent* ASC =
+		UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(const_cast<AActor*>(Actor)))
+	{
+		return !ASC->HasMatchingGameplayTag(DeadTag);
+	}
+	// ASC 없으면 판정 불가 -> 생존 간주
+	return true;
+}
+
+void UBossCombatStatics::AddReplicatedLooseTag(UAbilitySystemComponent* ASC, const FGameplayTag& Tag)
+{
+	if (!ASC || !Tag.IsValid())
+	{
+		return;
+	}
+	ASC->AddLooseGameplayTag(Tag);
+	ASC->AddReplicatedLooseGameplayTag(Tag);
+}
+
+void UBossCombatStatics::RemoveReplicatedLooseTag(UAbilitySystemComponent* ASC, const FGameplayTag& Tag)
+{
+	if (!ASC || !Tag.IsValid())
+	{
+		return;
+	}
+	ASC->RemoveLooseGameplayTag(Tag);
+	ASC->RemoveReplicatedLooseGameplayTag(Tag);
 }

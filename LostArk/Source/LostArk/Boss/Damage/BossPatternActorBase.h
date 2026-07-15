@@ -244,6 +244,15 @@ protected:
 	 */
 	UProceduralMeshComponent* CreateTelegraphMesh(const TArray<FVector>& Vertices, const TArray<int32>& Triangles);
 
+	/**
+	 * 원/도넛/부채꼴 계열 텔레그래프 메시 생성 헬퍼.
+	 * [StartAngleDeg, EndAngleDeg] 구간(전방=0°, 우측 +)을 InInnerRadius>0 이면 링 스트립,
+	 * 아니면 중심 팬으로 삼각화해 CreateTelegraphMesh 로 등록한다.
+	 * (원 = 0~360° 부채꼴이므로 Circle/Sector 도형이 이 하나를 공유)
+	 */
+	UProceduralMeshComponent* CreateArcTelegraphMesh(float StartAngleDeg, float EndAngleDeg,
+		float InInnerRadius, float InOuterRadius, int32 Segments = 48);
+
 	// ═══════════════ 설정 프로퍼티 ═══════════════
 
 	/**
@@ -515,6 +524,9 @@ protected:
 	bool IsAlive(const AActor* Target) const;
 
 private:
+	/** 현재 액터 회전에서 평면(Z=0) Forward/Right 를 다시 캐싱 (스폰/Follow 회전 시) */
+	void CacheShapeAxes();
+
 	FVector ShapeForward = FVector::ForwardVector;	// 스폰 시 캐싱된 평면 전방
 	FVector ShapeRight = FVector::RightVector;		// 스폰 시 캐싱된 평면 우측
 	FVector LaunchDirection = FVector::ForwardVector;	// Straight 모드 발사 방향(스폰 Forward, 수평)

@@ -2,9 +2,9 @@
 
 #include "Boss/Targeting/BossTargetingComponent.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
-#include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
@@ -60,21 +60,8 @@ UAbilitySystemComponent* UBossTargetingComponent::GetOwnerASC() const
 
 bool UBossTargetingComponent::IsAlive(const AActor* PlayerActor) const
 {
-	if (!PlayerActor)
-	{
-		return false;
-	}
-	// 사망 태그가 설정 안 됐으면 판정 불가 -> 살아있다고 간주(후보 포함)
-	if (!DeadTag.IsValid())
-	{
-		return true;
-	}
-	if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerActor))
-	{
-		return !ASC->HasMatchingGameplayTag(DeadTag);
-	}
-	// ASC 없으면 판정 불가 -> 후보 포함
-	return true;
+	// 태그 미지정/ASC 없음 = 판정 불가 -> 후보 포함 (규약은 공용 헬퍼 참고)
+	return UBossCombatStatics::IsAliveActor(PlayerActor, DeadTag);
 }
 
 AActor* UBossTargetingComponent::SelectTarget(ETargetSelectPolicy Policy)
@@ -90,15 +77,8 @@ AActor* UBossTargetingComponent::SelectTarget(ETargetSelectPolicy Policy)
 
 	// 생존 플레이어 폰 수집
 	TArray<APawn*> Candidates;
-	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
-	{
-		APlayerController* PC = It->Get();
-		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-		if (Pawn && IsAlive(Pawn))
-		{
-			Candidates.Add(Pawn);
-		}
-	}
+	UBossCombatStatics::GetPlayerPawns(World, Candidates);
+	Candidates.RemoveAll([this](const APawn* Pawn) { return !IsAlive(Pawn); });
 
 	if (Candidates.Num() == 0)
 	{

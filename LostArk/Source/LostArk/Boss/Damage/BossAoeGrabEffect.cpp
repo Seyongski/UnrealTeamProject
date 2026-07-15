@@ -3,6 +3,7 @@
 
 #include "Boss/Damage/BossAoeGrabEffect.h"
 #include "Boss/Damage/BossPatternActorBase.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -77,8 +78,7 @@ void UBossAoeGrabEffect::GrabOne(ABossPatternActorBase* Aoe, ACharacter* Char)
 		}
 		else
 		{
-			ASC->AddLooseGameplayTag(GrabbedTag);
-			ASC->AddReplicatedLooseGameplayTag(GrabbedTag);	// 클라 UI/입력 차단용 복제
+			UBossCombatStatics::AddReplicatedLooseTag(ASC, GrabbedTag);	// 클라 UI/입력 차단용 복제 포함
 			Info.bTagFallback = true;
 		}
 	}
@@ -263,8 +263,7 @@ void UBossAoeGrabEffect::RestoreOne(ABossPatternActorBase* Aoe, FGrabbedTargetIn
 		}
 		else if (Info.bTagFallback)
 		{
-			ASC->RemoveLooseGameplayTag(GrabbedTag);
-			ASC->RemoveReplicatedLooseGameplayTag(GrabbedTag);
+			UBossCombatStatics::RemoveReplicatedLooseTag(ASC, GrabbedTag);
 		}
 	}
 

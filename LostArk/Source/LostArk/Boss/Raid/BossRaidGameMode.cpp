@@ -7,6 +7,7 @@
 #include "Monster/ArenaSliceActor.h"
 #include "Boss/BossBase.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameFramework/PlayerController.h"
@@ -117,13 +118,11 @@ void ABossRaidGameMode::EndEncounter()
 
 void ABossRaidGameMode::AssignRandomCharges()
 {
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	TArray<APawn*> PlayerPawns;
+	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
+	for (APawn* Pawn : PlayerPawns)
 	{
-		APlayerController* PC = It->Get();
-		if (APawn* Pawn = PC ? PC->GetPawn() : nullptr)
-		{
-			ApplyChargeTo(Pawn);
-		}
+		ApplyChargeTo(Pawn);
 	}
 }
 
@@ -177,8 +176,7 @@ void ABossRaidGameMode::DestroySlice(int32 SliceIndex)
 			const FGameplayTag WeakTag = LostArkTags::State_Boss_WeakPointExposed;
 			if (!BossASC->HasMatchingGameplayTag(WeakTag))
 			{
-				BossASC->AddLooseGameplayTag(WeakTag);
-				BossASC->AddReplicatedLooseGameplayTag(WeakTag);	// 클라 UI 표시용
+				UBossCombatStatics::AddReplicatedLooseTag(BossASC, WeakTag);	// 클라 UI 표시용 복제 포함
 			}
 		}
 	}

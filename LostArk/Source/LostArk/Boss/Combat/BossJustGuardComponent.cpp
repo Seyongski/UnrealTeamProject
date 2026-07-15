@@ -1,11 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Boss/Combat/BossJustGuardComponent.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/Pawn.h"
-#include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 
 UBossJustGuardComponent::UBossJustGuardComponent()
@@ -59,22 +59,18 @@ void UBossJustGuardComponent::OpenWindow()
 	ReadyPlayers.Reset();
 
 	// 전 플레이어에 '1회 가드 가능' 부여. 복제 루스로 클라(소유자)까지 전파 -> G 어빌리티 게이트/UI
-	UWorld* World = GetWorld();
-	if (World)
+	TArray<APawn*> PlayerPawns;
+	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
+	for (APawn* Pawn : PlayerPawns)
 	{
-		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		if (Pawn == Owner)
 		{
-			APawn* Pawn = It->IsValid() ? It->Get()->GetPawn() : nullptr;
-			if (!Pawn || Pawn == Owner)
-			{
-				continue;
-			}
-			if (UAbilitySystemComponent* PlayerASC = GetPlayerASC(Pawn))
-			{
-				PlayerASC->AddLooseGameplayTag(LostArkTags::State_Player_GuardReady.GetTag());
-				PlayerASC->AddReplicatedLooseGameplayTag(LostArkTags::State_Player_GuardReady.GetTag());
-				ReadyPlayers.Add(Pawn);
-			}
+			continue;
+		}
+		if (UAbilitySystemComponent* PlayerASC = GetPlayerASC(Pawn))
+		{
+			UBossCombatStatics::AddReplicatedLooseTag(PlayerASC, LostArkTags::State_Player_GuardReady.GetTag());
+			ReadyPlayers.Add(Pawn);
 		}
 	}
 
@@ -100,11 +96,8 @@ void UBossJustGuardComponent::CloseWindow()
 	{
 		if (AActor* Player = Weak.Get())
 		{
-			if (UAbilitySystemComponent* PlayerASC = GetPlayerASC(Player))
-			{
-				PlayerASC->RemoveLooseGameplayTag(LostArkTags::State_Player_GuardReady.GetTag());
-				PlayerASC->RemoveReplicatedLooseGameplayTag(LostArkTags::State_Player_GuardReady.GetTag());
-			}
+			UBossCombatStatics::RemoveReplicatedLooseTag(
+				GetPlayerASC(Player), LostArkTags::State_Player_GuardReady.GetTag());
 		}
 	}
 	ReadyPlayers.Reset();
@@ -142,11 +135,8 @@ void UBossJustGuardComponent::NotifyGuardInput(AActor* Player)
 	GuardInputs.Add(Player, Input);
 
 	// 가드 소모: GuardReady 제거 -> 이 패턴에서 다시 못 누른다
-	if (UAbilitySystemComponent* PlayerASC = GetPlayerASC(Player))
-	{
-		PlayerASC->RemoveLooseGameplayTag(LostArkTags::State_Player_GuardReady.GetTag());
-		PlayerASC->RemoveReplicatedLooseGameplayTag(LostArkTags::State_Player_GuardReady.GetTag());
-	}
+	UBossCombatStatics::RemoveReplicatedLooseTag(
+		GetPlayerASC(Player), LostArkTags::State_Player_GuardReady.GetTag());
 	ReadyPlayers.Remove(Player);
 }
 

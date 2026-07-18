@@ -8,6 +8,8 @@
 
 class ABossBase;
 class ABossArenaCamera;
+class UBossChargeGaugeComponent;
+class UBossReviveComponent;
 class UGameplayEffect;
 
 /**
@@ -44,6 +46,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Raid")
 	void AssignRandomCharges();
 
+	/**
+	 * 전하 공명 1회 판정: 생존자의 빨강/파랑 인원수를 세서 |차이| 만큼 전원에게 데미지.
+	 * 4:4 균등이면 상쇄(무피해), 3:5 -> 차이 2, 0:8 -> 차이 8 로 어긋날수록 아프다.
+	 * 기본은 조우 중 주기 자동 실행(ChargeResonanceInterval). 패턴에서 수동 호출도 가능.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Raid|Charge")
+	void ApplyChargeResonancePulse();
+
 protected:
 	/** 빨간 전하 GE (State.Charge.Red 부여, Infinite). 변환장판과 동일 애셋 사용 */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge")
@@ -52,6 +62,29 @@ protected:
 	/** 파란 전하 GE (State.Charge.Blue 부여, Infinite). 변환장판과 동일 애셋 사용 */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge")
 	TSubclassOf<UGameplayEffect> BlueChargeEffect;
+
+	/**
+	 * 전하 공명 데미지 GE (SetByCaller Data.Damage 로 크기 전달). 미지정 시 공명 비활성.
+	 * 크기 = |빨강 인원 - 파랑 인원| x ResonanceDamagePerImbalance
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge")
+	TSubclassOf<UGameplayEffect> ResonanceDamageEffect;
+
+	/** 전하 공명 주기(초). 0 이면 자동 펄스 없음 (패턴에서 수동 호출만) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge", meta = (ClampMin = "0.0"))
+	float ChargeResonanceInterval = 5.f;
+
+	/** 인원 차이 1당 데미지 계수 (GE SetByCaller Data.Damage 에 곱해 전달) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge", meta = (ClampMin = "0.0"))
+	float ResonanceDamagePerImbalance = 1.f;
+
+	/** 조우 시 플레이어에게 부착할 전하 게이지 컴포넌트 (BP 서브클래스로 게이지/과충전 장판 설정) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge")
+	TSubclassOf<UBossChargeGaugeComponent> ChargeGaugeComponentClass;
+
+	/** 조우 시 플레이어에게 부착할 부활 컴포넌트 (BP 서브클래스로 30초/수동 대기 등 설정) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Revive")
+	TSubclassOf<UBossReviveComponent> ReviveComponentClass;
 
 	/** 보스 레벨 전용 카메라 클래스. 미지정 시 카메라 전환 없음 */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Camera")
@@ -73,8 +106,13 @@ private:
 	ABossBase* FindBoss() const;
 	void ApplyChargeTo(APawn* Pawn);
 
+	/** 전하 게이지/부활 컴포넌트를 플레이어 폰에 부착 (조우 시작 시. 이미 있으면 스킵) */
+	void SetupRaidComponentsForPlayers();
+
 	UPROPERTY(Transient)
 	TObjectPtr<ABossArenaCamera> ArenaCamera;
 
 	bool bEncounterStarted = false;
+
+	FTimerHandle ResonanceTimer;
 };

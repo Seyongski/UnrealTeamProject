@@ -5,7 +5,9 @@
 #include "Boss/Damage/BossAoeEffect.h"
 #include "Boss/BossGameplayTags.h"
 #include "Boss/Combat/BossCombatStatics.h"
+#include "Boss/Gimmick/BossGimmickTower.h"
 #include "Boss/Raid/BossRaidGameState.h"
+#include "EngineUtils.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Components/PrimitiveComponent.h"
@@ -685,6 +687,38 @@ void ABossPatternActorBase::PerformHitCheck()
 		ApplyEffectsTo(Pawn);
 		AlreadyHitActors.Add(Pawn);
 		OnAoeHitActor.Broadcast(Pawn);
+	}
+
+	// 기믹 타워 판정 (지형파괴 기믹의 레이저 장판만 — BP 에서 bCanHitGimmickTargets 켠 경우).
+	// 타워는 GE 데미지 경로 대신 OnBossLaserHit 로 즉시 파괴 처리 -> '이 장판으로만 파괴 가능' 규칙
+	if (bCanHitGimmickTargets)
+	{
+		for (TActorIterator<ABossGimmickTower> It(World); It; ++It)
+		{
+			ABossGimmickTower* Tower = *It;
+			if (!IsValid(Tower) || Tower->IsDying())
+			{
+				continue;
+			}
+			if (bSingleHitPerTarget && AlreadyHitActors.Contains(Tower))
+			{
+				continue;
+			}
+
+			const FVector P = Tower->GetActorLocation();
+			if (!bIgnoreHeightCheck && FMath::Abs(P.Z - AttackCenter.Z) > HeightTolerance)
+			{
+				continue;
+			}
+			if (!IsInsideShape(P))
+			{
+				continue;
+			}
+
+			AlreadyHitActors.Add(Tower);
+			OnAoeHitActor.Broadcast(Tower);
+			Tower->OnBossLaserHit();
+		}
 	}
 }
 

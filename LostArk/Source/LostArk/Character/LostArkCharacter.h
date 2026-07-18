@@ -41,6 +41,8 @@ public:
 
 	virtual void Die() override;
 
+	virtual void Revive() override;
+
 	virtual bool IsDead() const override { return bIsDead; }
 
 	virtual FGameplayTag GetCurrentStateTag() const override { return CurrentStateTag; }

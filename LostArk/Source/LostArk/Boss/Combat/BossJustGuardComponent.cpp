@@ -59,11 +59,16 @@ void UBossJustGuardComponent::OpenWindow()
 	ReadyPlayers.Reset();
 
 	// 전 플레이어에 '1회 가드 가능' 부여. 복제 루스로 클라(소유자)까지 전파 -> G 어빌리티 게이트/UI
+	// (전용 대상이 지정돼 있으면 그 1명에게만 — 기믹 대상 전용 저스트가드)
 	TArray<APawn*> PlayerPawns;
 	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
 	for (APawn* Pawn : PlayerPawns)
 	{
 		if (Pawn == Owner)
+		{
+			continue;
+		}
+		if (ExclusiveGuardPlayer.IsValid() && Pawn != ExclusiveGuardPlayer.Get())
 		{
 			continue;
 		}

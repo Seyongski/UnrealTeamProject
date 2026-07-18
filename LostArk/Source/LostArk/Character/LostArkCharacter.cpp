@@ -170,6 +170,25 @@ void ALostArkCharacter::Die()
 	GetCharacterMovement()->StopMovementImmediately();
 }
 
+void ALostArkCharacter::Revive()
+{
+	// Die() 의 역연산. 체력 회복/태그 정리는 부활 시스템(UBossReviveComponent)이 담당
+	if (!bIsDead)
+	{
+		return;
+	}
+
+	bIsDead = false;
+
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dead")));
+	}
+
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+}
+
 void ALostArkCharacter::SetCombatState(FGameplayTag NewStateTag)
 {
 	if (!AbilitySystemComponent)

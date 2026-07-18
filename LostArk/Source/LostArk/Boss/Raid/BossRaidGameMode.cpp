@@ -4,6 +4,8 @@
 #include "Boss/Raid/BossRaidGameMode.h"
 #include "Boss/Raid/BossRaidGameState.h"
 #include "Boss/Raid/BossArenaCamera.h"
+#include "Boss/Raid/BossChargeGaugeComponent.h"
+#include "Boss/Raid/BossReviveComponent.h"
 #include "Monster/ArenaSliceActor.h"
 #include "Boss/BossBase.h"
 #include "Boss/BossGameplayTags.h"
@@ -17,6 +19,8 @@
 ABossRaidGameMode::ABossRaidGameMode()
 {
 	GameStateClass = ABossRaidGameState::StaticClass();
+	ChargeGaugeComponentClass = UBossChargeGaugeComponent::StaticClass();
+	ReviveComponentClass = UBossReviveComponent::StaticClass();
 }
 
 void ABossRaidGameMode::BeginPlay()
@@ -70,8 +74,17 @@ void ABossRaidGameMode::StartEncounter()
 		GS->ArenaCenter = Center;
 	}
 
-	// 조우 시 전하 랜덤 부여
+	// 조우 시 전하 랜덤 부여 + 전하 게이지/부활 컴포넌트 부착
 	AssignRandomCharges();
+	SetupRaidComponentsForPlayers();
+
+	// 전하 공명 주기 시작 (균등이면 상쇄라 자동 무피해 -> 켜둬도 안전)
+	if (ResonanceDamageEffect && ChargeResonanceInterval > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(
+			ResonanceTimer, this, &ABossRaidGameMode::ApplyChargeResonancePulse,
+			ChargeResonanceInterval, true);
+	}
 
 	// 보스 레벨 전용 카메라로 전환 (카메라-플레이어-보스 일직선)
 	if (ArenaCameraClass)
@@ -112,6 +125,8 @@ void ABossRaidGameMode::EndEncounter()
 		ArenaCamera->Destroy();
 		ArenaCamera = nullptr;
 	}
+
+	GetWorldTimerManager().ClearTimer(ResonanceTimer);
 
 	bEncounterStarted = false;
 }
@@ -154,6 +169,90 @@ void ABossRaidGameMode::ApplyChargeTo(APawn* Pawn)
 	if (Spec.IsValid())
 	{
 		ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+	}
+}
+
+void ABossRaidGameMode::SetupRaidComponentsForPlayers()
+{
+	ABossBase* Boss = FindBoss();
+
+	TArray<APawn*> PlayerPawns;
+	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
+	for (APawn* Pawn : PlayerPawns)
+	{
+		// 전하 게이지 (충전 패턴 피격 -> 절반 시 전하 반전 / 가득 시 과충전 폭발)
+		if (ChargeGaugeComponentClass && !Pawn->FindComponentByClass<UBossChargeGaugeComponent>())
+		{
+			UBossChargeGaugeComponent* Gauge =
+				NewObject<UBossChargeGaugeComponent>(Pawn, ChargeGaugeComponentClass, TEXT("BossChargeGauge"));
+			Gauge->InitChargeGauge(Boss, RedChargeEffect, BlueChargeEffect);
+			Gauge->RegisterComponent();
+		}
+
+		// 부활 (30초 자동 / 지정 시간 후 클릭 부활)
+		if (ReviveComponentClass && !Pawn->FindComponentByClass<UBossReviveComponent>())
+		{
+			UBossReviveComponent* Revive =
+				NewObject<UBossReviveComponent>(Pawn, ReviveComponentClass, TEXT("BossRevive"));
+			Revive->RegisterComponent();
+		}
+	}
+}
+
+void ABossRaidGameMode::ApplyChargeResonancePulse()
+{
+	if (!ResonanceDamageEffect)
+	{
+		return;
+	}
+
+	// 생존자의 전하 인원수 집계
+	TArray<APawn*> PlayerPawns;
+	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
+
+	TArray<UAbilitySystemComponent*> AliveASCs;
+	int32 RedCount = 0;
+	int32 BlueCount = 0;
+	for (APawn* Pawn : PlayerPawns)
+	{
+		if (!UBossCombatStatics::IsAliveActor(Pawn, LostArkTags::State_Dead.GetTag()))
+		{
+			continue;
+		}
+		UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn);
+		if (!ASC)
+		{
+			continue;
+		}
+		AliveASCs.Add(ASC);
+		if (ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red))
+		{
+			++RedCount;
+		}
+		else if (ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Blue))
+		{
+			++BlueCount;
+		}
+	}
+
+	// 균등(4:4)이면 상쇄 -> 무피해. 어긋난 만큼(3:5 -> 2, 0:8 -> 8) 전원이 아프다
+	const int32 Imbalance = FMath::Abs(RedCount - BlueCount);
+	if (Imbalance == 0)
+	{
+		return;
+	}
+	const float Magnitude = Imbalance * ResonanceDamagePerImbalance;
+
+	for (UAbilitySystemComponent* ASC : AliveASCs)
+	{
+		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+		Context.AddSourceObject(this);
+		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(ResonanceDamageEffect, 1.f, Context);
+		if (Spec.IsValid())
+		{
+			Spec.Data->SetSetByCallerMagnitude(LostArkTags::Data_Damage.GetTag(), Magnitude);
+			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+		}
 	}
 }
 

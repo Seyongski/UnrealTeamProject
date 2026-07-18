@@ -14,8 +14,12 @@ class UBossCounterComponent;
 class UBossJustGuardComponent;
 class UBossPatternComponent;
 class UBossTargetingComponent;
+class UBossTerrainGimmickComponent;
 class UBossWeaponComponent;
 struct FOnAttributeChangeData;
+
+/** 보스 체력 변동 방송 (서버/클라 모두). 체력바 위젯이 구독해서 갱신 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBossHealthChanged, float, NewHealth, float, MaxHealth);
 
 UCLASS()
 class LOSTARK_API ABossBase : public ACharacter, public IAbilitySystemInterface
@@ -46,6 +50,22 @@ public:
 	/** 회전 검증용: 캡슐(액터) forward 방향을 화살표로 표시 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boss|Debug")
 	bool bDrawFacingDebug = false;
+
+	/** 체력 변동 방송 (서버/클라 모두). 보스 체력바 위젯이 여기 바인딩해서 갱신 */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|UI")
+	FOnBossHealthChanged OnBossHealthChanged;
+
+	/** 체력바를 몇 '줄'로 나눌지. 예) 500 -> 100%에서 x500줄, 50%에서 x250줄 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|UI", meta = (ClampMin = "1"))
+	int32 TotalHealthBars = 500;
+
+	/** 위젯 최초 구성용: 현재 체력 (없으면 0) */
+	UFUNCTION(BlueprintPure, Category = "Boss|UI")
+	float GetCurrentHealth() const;
+
+	/** 위젯 최초 구성용: 최대 체력 (없으면 0) */
+	UFUNCTION(BlueprintPure, Category = "Boss|UI")
+	float GetMaxHealthValue() const;
 
 	/** 위치 판정 존 각도 (UBossCombatStatics 가 읽어감) */
 	float GetHeadZoneHalfAngle() const { return HeadZoneHalfAngle; }
@@ -89,6 +109,10 @@ protected:
 	/** 무기 착용 상태 표시 (맨손/양손/합체 — 전환은 AnimNotify_BossSetWeapon 이 호출) */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Weapon")
 	TObjectPtr<UBossWeaponComponent> WeaponComponent;
+
+	/** 지형파괴 기믹 (타워 스폰/무력화 페이즈/슬라이스 파괴 — 각 단계는 AnimNotify_BossGimmick* 가 호출) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
+	TObjectPtr<UBossTerrainGimmickComponent> TerrainGimmickComponent;
 
 	/** 헤드어택 존: 보스 정면 기준 반각(도). 백헤드 데칼 표시 각도와 맞춰둘 것 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Combat", meta = (ClampMin = "0", ClampMax = "180"))

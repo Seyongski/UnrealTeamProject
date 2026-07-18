@@ -31,6 +31,8 @@ namespace LostArkTags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_WeakPointExposed, "State.Boss.WeakPointExposed", "약점포착: 어디서 때려도 백/헤드어택 보너스 적용");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_StaggerPhase, "State.Boss.StaggerPhase", "지형파괴 기믹 무력화 페이즈 진행 중 (클라 무력화 게이지 UI 표시용, 복제 루스)");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult, "State.Boss.PatternResult", "패턴 결과 태그 부모 (패턴 종료 시 하위 전부 자동 제거)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_Grabbed, "State.Boss.PatternResult.Grabbed", "이번 패턴에서 잡기 성공 (Branch 조건용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_AoeHit, "State.Boss.PatternResult.AoeHit", "이번 패턴에서 장판 적중 (Branch 조건용)");

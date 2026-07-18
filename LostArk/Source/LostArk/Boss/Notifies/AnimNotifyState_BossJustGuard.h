@@ -29,4 +29,12 @@ public:
 		const FAnimNotifyEventReference& EventReference) override;
 
 	virtual FString GetNotifyName_Implementation() const override;
+
+	/**
+	 * 켜면 '보스의 현재 타겟'(=기믹 대상)에게만 GuardReady 를 부여한다.
+	 * 지형파괴 기믹처럼 지정된 1명만 저스트가드할 수 있는 패턴의 몽타주에서 켤 것.
+	 * (일반 저스트가드 패턴은 기본값 false = 전원 가드 가능)
+	 */
+	UPROPERTY(EditAnywhere, Category = "JustGuard")
+	bool bOnlyCurrentTarget = false;
 };

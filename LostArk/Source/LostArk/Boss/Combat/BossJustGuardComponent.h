@@ -114,6 +114,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|JustGuard")
 	bool HasGuardReady(AActor* Player) const;
 
+	/**
+	 * 가드 가능 대상을 이 플레이어 1명으로 제한 (null 이면 전원 허용으로 복귀).
+	 * 지형파괴 기믹의 '기믹 대상만 저스트가드 가능' 규칙용 — OpenWindow 전에 세팅할 것.
+	 * (창이 열릴 때 GuardReady 자체를 이 플레이어에게만 부여하므로 나머지는 입력이 무시된다)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|JustGuard")
+	void SetExclusiveGuardPlayer(AActor* Player) { ExclusiveGuardPlayer = Player; }
+
+	/** 전용 가드 대상 해제 (창 닫은 뒤 호출 — 다음 일반 저스트가드 패턴에 새지 않게) */
+	UFUNCTION(BlueprintCallable, Category = "Boss|JustGuard")
+	void ClearExclusiveGuardPlayer() { ExclusiveGuardPlayer = nullptr; }
+
 	/** 창 열림/닫힘 방송 (보스 '노란 글로우' 연출을 BP에서 여기에 바인딩) */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|JustGuard")
 	FOnJustGuardWindowChanged OnJustGuardWindowChanged;
@@ -137,4 +149,7 @@ private:
 
 	/** GuardReady 를 부여한 플레이어들 (창 닫을 때 남은 태그 회수) */
 	TSet<TWeakObjectPtr<AActor>> ReadyPlayers;
+
+	/** 지정 시 이 플레이어에게만 GuardReady 부여 (기믹 대상 전용 저스트가드) */
+	TWeakObjectPtr<AActor> ExclusiveGuardPlayer;
 };

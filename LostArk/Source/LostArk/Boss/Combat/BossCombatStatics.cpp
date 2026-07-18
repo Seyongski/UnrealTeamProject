@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Boss/Combat/BossCombatStatics.h"
+#include "Boss/BossAttributeSet.h"
 #include "Boss/BossBase.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
@@ -88,6 +89,22 @@ EBossPositionalBonus UBossCombatStatics::EvaluatePositionalBonus(const AActor* B
 bool UBossCombatStatics::IsHeadZoneHit(const AActor* BossActor, const FVector& AttackerLocation)
 {
 	return GetHitZone(BossActor, AttackerLocation) == EBossHitZone::Head;
+}
+
+void UBossCombatStatics::ApplyStaggerDamage(AActor* BossActor, float Amount)
+{
+	// 게이지 조작은 서버 권위에서만 (값은 어트리뷰트 복제로 클라 전파)
+	if (!BossActor || !BossActor->HasAuthority() || Amount <= 0.f)
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC =
+		UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(BossActor))
+	{
+		ASC->ApplyModToAttribute(
+			UBossAttributeSet::GetStaggerGaugeAttribute(), EGameplayModOp::Additive, -Amount);
+	}
 }
 
 void UBossCombatStatics::GetPlayerPawns(const UWorld* World, TArray<APawn*>& OutPawns)

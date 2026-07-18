@@ -50,6 +50,9 @@ namespace LostArkTags
 	// 약점포착: 지형 파괴 후 보스에 부여 -> 어디서 때려도 백/헤드어택 보너스
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_WeakPointExposed);
 
+	// 지형파괴 기믹: 무력화 페이즈 진행 중 (복제 루스 태그 — 클라 무력화 게이지 UI 표시/숨김 바인딩용)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_StaggerPhase);
+
 	// 패턴 결과: 패턴 진행 중 보스에 부여되는 일시 태그. 스텝 Branch(TagQuery)가 평가하고,
 	// 패턴 어빌리티가 종료될 때 하위 태그 전부 자동 제거 (다음 패턴으로 안 샘)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult);

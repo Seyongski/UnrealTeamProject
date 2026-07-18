@@ -8,6 +8,7 @@
 #include "Boss/Combat/BossJustGuardComponent.h"
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
+#include "Boss/Gimmick/BossTerrainGimmickComponent.h"
 #include "Boss/Weapon/BossWeaponComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -55,6 +56,9 @@ ABossBase::ABossBase()
 
 	// 무기 착용 상태 표시 (맨손/양손/합체 토글)
 	WeaponComponent = CreateDefaultSubobject<UBossWeaponComponent>(TEXT("WeaponComponent"));
+
+	// 지형파괴 기믹 (미설정 시 아무것도 안 함 — 기믹 없는 보스도 안전)
+	TerrainGimmickComponent = CreateDefaultSubobject<UBossTerrainGimmickComponent>(TEXT("TerrainGimmickComponent"));
 }
 
 UAbilitySystemComponent* ABossBase::GetAbilitySystemComponent() const
@@ -106,6 +110,11 @@ void ABossBase::BeginPlay()
 	if (AbilitySystemComponent && !HasAuthority())
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+		// 서버 소유가 아니므로 PossessedBy가 안 불린다 -> 체력바 위젯 갱신을 위해
+		// 여기서 체력 변화(리플리케이션 OnRep)를 구독한다. (서버는 PossessedBy에서 1회 바인딩)
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UBossAttributeSet::GetHealthAttribute())
+			.AddUObject(this, &ABossBase::OnHealthChanged);
 	}
 }
 
@@ -140,16 +149,32 @@ void ABossBase::InitializeAttributes()
 
 void ABossBase::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
-	if (!AttributeSet || !PatternComponent)
+	if (!AttributeSet)
 	{
 		return;
 	}
 
 	const float Max = AttributeSet->GetMaxHealth();
-	const float Percent = (Max > 0.f) ? (Data.NewValue / Max) * 100.f : 0.f;
 
-	// 전환은 예약만 됨(현재 패턴 완주 후 반영)
-	PatternComponent->NotifyHealthPercent(Percent);
+	// 체력바 위젯 갱신 방송 (서버/클라 공통). 줄 수 계산은 위젯이 UBossHealthBarLibrary로 수행.
+	OnBossHealthChanged.Broadcast(Data.NewValue, Max);
+
+	// 페이즈 전환 예약 (현재 패턴 완주 후 반영). 클라에선 CurrentPhaseIndex==INDEX_NONE 라 no-op.
+	if (PatternComponent)
+	{
+		const float Percent = (Max > 0.f) ? (Data.NewValue / Max) * 100.f : 0.f;
+		PatternComponent->NotifyHealthPercent(Percent);
+	}
+}
+
+float ABossBase::GetCurrentHealth() const
+{
+	return AttributeSet ? AttributeSet->GetHealth() : 0.f;
+}
+
+float ABossBase::GetMaxHealthValue() const
+{
+	return AttributeSet ? AttributeSet->GetMaxHealth() : 0.f;
 }
 
 void ABossBase::UpdateBackHeadDecal()

@@ -3,6 +3,7 @@
 #include "Boss/Notifies/AnimNotifyState_BossJustGuard.h"
 #include "Boss/Notifies/BossNotifyHelpers.h"
 #include "Boss/Combat/BossJustGuardComponent.h"
+#include "Boss/Targeting/BossTargetingComponent.h"
 
 void UAnimNotifyState_BossJustGuard::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation,
 	float TotalDuration, const FAnimNotifyEventReference& EventReference)
@@ -11,6 +12,15 @@ void UAnimNotifyState_BossJustGuard::NotifyBegin(USkeletalMeshComponent* MeshCom
 
 	if (UBossJustGuardComponent* JustGuard = BossNotify::GetServerComponent<UBossJustGuardComponent>(MeshComp))
 	{
+		// 기믹 대상 전용: 현재 타겟(레이저 대상 = 기믹 플레이어)에게만 가드 허용.
+		// OpenWindow 가 GuardReady 를 부여하므로 반드시 그 전에 지정한다
+		if (bOnlyCurrentTarget)
+		{
+			if (UBossTargetingComponent* Targeting = BossNotify::GetServerComponent<UBossTargetingComponent>(MeshComp))
+			{
+				JustGuard->SetExclusiveGuardPlayer(Targeting->GetCurrentTarget());
+			}
+		}
 		JustGuard->OpenWindow();
 	}
 }
@@ -23,6 +33,10 @@ void UAnimNotifyState_BossJustGuard::NotifyEnd(USkeletalMeshComponent* MeshComp,
 	if (UBossJustGuardComponent* JustGuard = BossNotify::GetServerComponent<UBossJustGuardComponent>(MeshComp))
 	{
 		JustGuard->CloseWindow();
+		if (bOnlyCurrentTarget)
+		{
+			JustGuard->ClearExclusiveGuardPlayer();	// 다음 일반 저스트가드 패턴에 새지 않게
+		}
 	}
 }
 

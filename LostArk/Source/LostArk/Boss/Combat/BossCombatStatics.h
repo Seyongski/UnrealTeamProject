@@ -75,6 +75,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|Combat")
 	static bool IsHeadZoneHit(const AActor* BossActor, const FVector& AttackerLocation);
 
+	/**
+	 * 보스 무력화 게이지 딜 (서버 전용). 플레이어 스킬 적중 시 스킬의 무력화 수치만큼 호출하면 됨.
+	 * 게이지가 0이 되면 (무력화 페이즈 중일 때) 보스가 즉시 그로기 — 처리는 보스 쪽이 알아서 한다.
+	 * @param BossActor 보스
+	 * @param Amount    깎을 양 (양수)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Combat")
+	static void ApplyStaggerDamage(AActor* BossActor, float Amount);
+
 	// ─── 공용 헬퍼 (보스 시스템 전반에서 재사용, C++ 전용) ───
 
 	/** 접속 중인 플레이어 컨트롤러들의 폰 수집 (null 폰 제외). 장판 판정/타겟팅/전하 부여 등이 공용 */

@@ -163,6 +163,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Aoe")
 	void SetBodyEffectOverride(UNiagaraSystem* InNiagara, UParticleSystem* InCascade);
 
+	/**
+	 * 스폰 원점 정책을 코드에서 강제 (BeginPlay 전 호출).
+	 * 기믹 타워 등 외부 스포너가 BP 설정과 무관하게 '스폰 트랜스폼 그대로'를 보장할 때 사용.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetSpawnOriginPolicy(EAoeSpawnOrigin InOrigin) { SpawnOrigin = InOrigin; }
+
 	// ─── 행동 오브젝트(UBossAoeEffect)가 쓰는 공개 API ───
 
 	/** 시전자(보스) */
@@ -323,6 +330,14 @@ protected:
 	/** 즉발: 예고 장판 비주얼을 표시하지 않음 (판정 타이밍은 CastTime 그대로) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
 	bool bInstant = false;
+
+	/**
+	 * 켜면 플레이어 외에 기믹 타워(ABossGimmickTower)도 판정 대상에 포함한다.
+	 * 지형파괴 기믹의 '레이저' 장판 BP 에서만 켤 것 — 타워는 이 장판으로만 파괴 가능 규칙.
+	 * (타워는 데미지 GE 대신 OnBossLaserHit 호출로 즉시 파괴 처리된다)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
+	bool bCanHitGimmickTargets = false;
 
 	/**
 	 * 켜면 CastTime 경과 후에도 예고 비주얼을 파괴하지 않고 유지시간(Duration) 내내 표시한다.

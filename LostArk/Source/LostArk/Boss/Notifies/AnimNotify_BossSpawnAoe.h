@@ -82,6 +82,18 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Aoe|Grab", meta = (EditCondition = "bOverrideGrab"))
 	FBossGrabOverride GrabOverride;
 
+	/**
+	 * 켜면 아래 값으로 피격 리액션(넉백)을 이 스폰 1회에만 덮어씀 (BP 클래스 디폴트는 불변).
+	 * 같은 장판 BP 를 '뒤로 밀리는 패턴 / 제자리에서 솟는 패턴 / 낙사 되는·안 되는 패턴'으로
+	 * 몽타주마다 다르게 쓸 때 사용.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Knockback")
+	bool bOverrideKnockback = false;
+
+	/** 넉백 오버라이드 (bOverrideKnockback 켤 때만 적용) */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Knockback", meta = (EditCondition = "bOverrideKnockback"))
+	FBossAoeKnockbackConfig KnockbackOverride;
+
 	/** 초기 스폰 트랜스폼 기준 소켓 (지정 시 이 소켓 위치, 아니면 보스 액터 위치) */
 	UPROPERTY(EditAnywhere, Category = "Aoe")
 	FName SpawnSocketName = NAME_None;

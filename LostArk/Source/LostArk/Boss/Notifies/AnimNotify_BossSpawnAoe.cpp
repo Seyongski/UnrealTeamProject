@@ -98,6 +98,10 @@ ABossPatternActorBase* UAnimNotify_BossSpawnAoe::SpawnAoeActor(UWorld* World, AA
 			Grab->ApplyOverride(GrabOverride);
 		}
 	}
+	if (bOverrideKnockback)
+	{
+		Aoe->SetKnockbackOverride(KnockbackOverride);	// 패턴별 피격 리액션(넉백/낙사) 주입
+	}
 	// 본체 VFX 노티파이 오버라이드 (BeginPlay 의 SpawnBodyEffect 전에 주입, null 은 BP 기본 유지)
 	if (BodyEffectOverride || BodyEffectCascadeOverride)
 	{

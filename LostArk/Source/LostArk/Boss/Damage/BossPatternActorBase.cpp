@@ -14,6 +14,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "ProceduralMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -737,13 +738,159 @@ void ABossPatternActorBase::AddCasterLooseTags(const FGameplayTagContainer& InTa
 
 void ABossPatternActorBase::ApplyEffectsTo(AActor* Target)
 {
-	// 행동 오브젝트가 지정돼 있으면 위임(잡기/전하스왑 등), 없으면 기본 데미지+상태이상
+	// 행동 오브젝트가 지정돼 있으면 위임(잡기/전하스왑 등), 없으면 기본 데미지+상태이상+넉백
 	if (OnHitEffect)
 	{
 		OnHitEffect->OnHit(this, Target);
 		return;
 	}
 	ApplyDamageAndStatus(Target);
+	ApplyKnockback(Target);
+}
+
+void ABossPatternActorBase::ApplyKnockback(AActor* Target)
+{
+	if (Knockback.Reaction == EAoeHitReaction::None || !HasAuthority())
+	{
+		return;
+	}
+
+	ACharacter* Char = Cast<ACharacter>(Target);
+	if (!Char)
+	{
+		return;
+	}
+
+	// 이동이 잠긴 대상(잡힘 = MOVE_None)은 밀지 않는다 (보스 소켓 부착이 찢어지는 사고 방지)
+	const UCharacterMovementComponent* Move = Char->GetCharacterMovement();
+	if (!Move || Move->MovementMode == MOVE_None)
+	{
+		return;
+	}
+
+	const float VSpeed = FMath::Max(Knockback.VerticalSpeed, 0.f);
+
+	// 제자리 띄움: 수평 속도를 0으로 덮어써 서 있던 자리에 그대로 착지 -> 낙사가 원천적으로 불가능
+	if (Knockback.Reaction == EAoeHitReaction::LaunchUp)
+	{
+		Char->LaunchCharacter(FVector(0.f, 0.f, VSpeed), true, true);
+		return;
+	}
+
+	// 뒤로 밀림
+	const FVector Dir = ComputeKnockbackDirection(Char);
+	float HSpeed = FMath::Max(Knockback.HorizontalSpeed, 0.f);
+	if (!Knockback.bCanCauseFallDeath)
+	{
+		HSpeed = ClampPushSpeedToGround(Char, Dir, HSpeed, VSpeed);
+	}
+	Char->LaunchCharacter(Dir * HSpeed + FVector(0.f, 0.f, VSpeed), true, true);
+}
+
+FVector ABossPatternActorBase::ComputeKnockbackDirection(const AActor* Target) const
+{
+	FVector Dir;
+	switch (Knockback.Direction)
+	{
+	case EAoeKnockbackDirection::AlongForward:
+		Dir = ShapeForward;
+		break;
+
+	case EAoeKnockbackDirection::FromCaster:
+		Dir = Target->GetActorLocation() - (Caster ? Caster->GetActorLocation() : AttackCenter);
+		break;
+
+	case EAoeKnockbackDirection::FromCenter:
+	default:
+		Dir = Target->GetActorLocation() - AttackCenter;
+		break;
+	}
+
+	Dir.Z = 0.f;
+	if (!Dir.Normalize())
+	{
+		// 중심과 정확히 겹친 경우 등 퇴화 -> 장판 전방으로 폴백
+		Dir = ShapeForward;
+	}
+	return Dir;
+}
+
+float ABossPatternActorBase::ClampPushSpeedToGround(const ACharacter* Char, const FVector& Dir,
+	float HSpeed, float VSpeed) const
+{
+	if (HSpeed <= 0.f)
+	{
+		return 0.f;
+	}
+
+	// 예상 체공시간(포물선 왕복)으로 수평 이동거리 추정.
+	// 수직 팝이 낮아도 착지 후 미끄러지는 거리가 있으므로 최소 체공은 가정한다.
+	const UCharacterMovementComponent* Move = Char->GetCharacterMovement();
+	const float Gravity = Move ? FMath::Abs(Move->GetGravityZ()) : 980.f;
+	const float AirTime = FMath::Max(2.f * VSpeed / FMath::Max(Gravity, 1.f), 0.35f);
+	const float FullDist = HSpeed * AirTime;
+
+	float CapsuleRadius = 34.f;
+	if (const UCapsuleComponent* Capsule = Char->GetCapsuleComponent())
+	{
+		CapsuleRadius = Capsule->GetScaledCapsuleRadius();
+	}
+
+	// 밀려나는 경로를 일정 간격으로 샘플링해 바닥이 끊기는 첫 지점을 찾는다.
+	// (파괴된 슬라이스는 콜리전이 제거되고, 아레나 밖은 바닥이 없어 트레이스가 실패한다)
+	const FVector Feet = GetFeetLocation(Char);
+	const float Step = FMath::Max(CapsuleRadius, 50.f);
+	float SafeDist = FullDist;
+	bool bHitHole = false;
+	for (float D = Step; D <= FullDist + KINDA_SMALL_NUMBER; D += Step)
+	{
+		const float SampleDist = FMath::Min(D, FullDist);
+		if (!HasLandingGroundAt(Feet + Dir * SampleDist, Char))
+		{
+			// 구멍 직전 샘플까지만. 캡슐 반지름만큼 더 물러나 가장자리에 걸치지 않게 한다
+			SafeDist = FMath::Max(SampleDist - Step - CapsuleRadius, 0.f);
+			bHitHole = true;
+			break;
+		}
+	}
+
+	if (!bHitHole)
+	{
+		return HSpeed;	// 경로 전체에 바닥이 이어짐 -> 그대로 밀기
+	}
+	return HSpeed * (SafeDist / FullDist);
+}
+
+bool ABossPatternActorBase::HasLandingGroundAt(const FVector& At, const AActor* IgnoreTarget) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return true;
+	}
+
+	// 발밑 기준 위 100 ~ 아래 300cm 범위에 바닥이 있어야 '이어진 지형'으로 본다.
+	// (TraceGroundZ 처럼 수천 cm 아래까지 보면 구덩이 밑바닥을 바닥으로 오인해 낙사 방지가 뚫린다)
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(AoeKnockbackGroundCheck), /*bTraceComplex=*/true);
+	if (Caster)
+	{
+		Params.AddIgnoredActor(Caster);
+	}
+	if (IgnoreTarget)
+	{
+		Params.AddIgnoredActor(IgnoreTarget);
+	}
+	Params.AddIgnoredActor(this);
+
+	FCollisionObjectQueryParams ObjParams;
+	ObjParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+	const FVector Start = At + FVector(0.f, 0.f, 100.f);
+	const FVector End = At - FVector(0.f, 0.f, 300.f);
+
+	FHitResult Hit;
+	return World->LineTraceSingleByObjectType(Hit, Start, End, ObjParams, Params);
 }
 
 void ABossPatternActorBase::ApplyDamageAndStatus(AActor* Target)

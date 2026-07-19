@@ -10,6 +10,7 @@
 class UGameplayEffect;
 class UAbilitySystemComponent;
 class UPrimitiveComponent;
+class ACharacter;
 class UProceduralMeshComponent;
 class UBossAoeEffect;
 class UNiagaraSystem;
@@ -53,6 +54,71 @@ enum class EAoeTargetingMode : uint8
 	FollowTarget	UMETA(DisplayName = "타겟 부착(발밑)"),
 	Spiral		UMETA(DisplayName = "나선형 유도"),
 	Straight	UMETA(DisplayName = "직선 발사")
+};
+
+/**
+ * 피격 리액션(넉백) 종류. 패턴마다 '맞으면 어떻게 되는가'를 구분한다.
+ * - None     : 데미지만. 넉백 없음
+ * - PushBack : 뒤로 밀려 날아감 (수평 넉백 + 수직 팝). 낙사 허용 여부는 bCanCauseFallDeath 가 결정
+ * - LaunchUp : 그 자리에서 공중에 잠깐 위로 솟기만 함 (수평 이동 0 -> 제자리 착지, 낙사 없음)
+ */
+UENUM(BlueprintType)
+enum class EAoeHitReaction : uint8
+{
+	None		UMETA(DisplayName = "없음 (데미지만)"),
+	PushBack	UMETA(DisplayName = "뒤로 밀림"),
+	LaunchUp	UMETA(DisplayName = "제자리 띄움")
+};
+
+/** PushBack 시 밀려나는 방향 기준 */
+UENUM(BlueprintType)
+enum class EAoeKnockbackDirection : uint8
+{
+	/** 장판 중심 -> 대상 방향 (원형/부채꼴 기본. 폭발처럼 바깥으로) */
+	FromCenter		UMETA(DisplayName = "장판 중심에서 바깥"),
+	/** 장판 전방 (직선/사각 장판, 투사체 진행 방향으로 떠밀기) */
+	AlongForward	UMETA(DisplayName = "장판 전방"),
+	/** 시전자(보스) 중심 -> 대상 방향 (Follow 회전 장판 등 보스 기준 바깥으로) */
+	FromCaster		UMETA(DisplayName = "시전자에서 바깥")
+};
+
+/**
+ * 패턴별 피격 리액션(넉백) 설정.
+ * 장판 BP 디폴트에 두거나, 스폰 노티파이의 KnockbackOverride 로 패턴(몽타주)마다 덮어쓴다.
+ *
+ * 낙사 규칙:
+ *  - LaunchUp 은 수평 이동이 없으므로 낙사가 원천적으로 불가능
+ *  - PushBack + bCanCauseFallDeath=true  : 밀린 방향에 파괴 지형/아레나 밖이 있으면 그대로 추락 (낙사 연계 패턴)
+ *  - PushBack + bCanCauseFallDeath=false : 착지 경로의 바닥을 검사해 구멍 직전까지만 밀리게 수평 속도를 줄인다
+ */
+USTRUCT(BlueprintType)
+struct FBossAoeKnockbackConfig
+{
+	GENERATED_BODY()
+
+	/** 피격 리액션 종류 */
+	UPROPERTY(EditAnywhere)
+	EAoeHitReaction Reaction = EAoeHitReaction::None;
+
+	/** 밀려나는 방향 기준 (PushBack 전용) */
+	UPROPERTY(EditAnywhere, meta = (EditCondition = "Reaction == EAoeHitReaction::PushBack"))
+	EAoeKnockbackDirection Direction = EAoeKnockbackDirection::FromCenter;
+
+	/** 수평 넉백 속도(cm/s). PushBack 전용 */
+	UPROPERTY(EditAnywhere, meta = (ClampMin = "0.0", EditCondition = "Reaction == EAoeHitReaction::PushBack"))
+	float HorizontalSpeed = 1200.f;
+
+	/** 수직(위) 속도(cm/s). PushBack 의 팝 높이 / LaunchUp 의 솟는 높이 */
+	UPROPERTY(EditAnywhere, meta = (ClampMin = "0.0", EditCondition = "Reaction != EAoeHitReaction::None"))
+	float VerticalSpeed = 420.f;
+
+	/**
+	 * 이 공격이 낙사를 유발할 수 있는가 (PushBack 전용).
+	 * false 면 밀려나는 경로의 바닥을 검사해 파괴된 슬라이스/아레나 밖 구멍 '직전'까지만 밀린다.
+	 * true 면 검사 없이 그대로 날려서 파괴 지형 위로 밀리면 낙사한다 (KillVolume 처리).
+	 */
+	UPROPERTY(EditAnywhere, meta = (EditCondition = "Reaction == EAoeHitReaction::PushBack"))
+	bool bCanCauseFallDeath = false;
 };
 
 /**
@@ -187,6 +253,17 @@ public:
 	/** 기본 데미지+상태이상 GE 적용 (서버). 행동 오브젝트가 데미지가 필요할 때 호출(잡기 해제 시 등) */
 	void ApplyDamageAndStatus(AActor* Target);
 
+	/**
+	 * 피격 리액션(넉백) 적용 (서버). Knockback.Reaction 이 None 이면 아무것도 안 함.
+	 * 기본 데미지 경로는 자동 호출되고, 행동 오브젝트(저스트가드 실패 등)도 데미지 적용 후 직접 호출할 수 있다.
+	 * 이동이 잠긴 대상(잡힘 = MOVE_None)은 건드리지 않는다.
+	 */
+	void ApplyKnockback(AActor* Target);
+
+	/** 패턴별 넉백 설정 주입 (스폰 노티파이가 BeginPlay 전에 호출. BP 클래스 디폴트는 불변) */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetKnockbackOverride(const FBossAoeKnockbackConfig& InKnockback) { Knockback = InKnockback; }
+
 	/** 실제 파괴(이벤트 방송 + Destroy). 행동 오브젝트가 파괴 타이밍을 제어할 때 호출(잡기 해제 후) */
 	void DestroyAoeNow();
 
@@ -302,6 +379,13 @@ protected:
 	/** 적중 시 함께 적용할 상태이상 GE들 (감전/출혈/스턴 등) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Status")
 	TArray<TSubclassOf<UGameplayEffect>> StatusEffects;
+
+	/**
+	 * 피격 리액션(넉백) 설정. 기본 데미지 경로(OnHitEffect 미지정)에서 데미지 직후 자동 적용.
+	 * 패턴(몽타주)마다 다르게 쓰려면 스폰 노티파이의 KnockbackOverride 로 덮어쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Knockback")
+	FBossAoeKnockbackConfig Knockback;
 
 	/** 시전시간 = 예고 표시 후 첫 판정까지의 대기(초). 즉발이면 예고만 스킵되고 이 대기는 유지 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Timing", meta = (ClampMin = "0.0"))
@@ -537,6 +621,19 @@ protected:
 
 	/** 대상이 생존 상태인지 (DeadTag 없으면 생존 간주) */
 	bool IsAlive(const AActor* Target) const;
+
+	/** PushBack 방향 계산 (Knockback.Direction 기준, 수평 정규화. 퇴화 시 ShapeForward 폴백) */
+	FVector ComputeKnockbackDirection(const AActor* Target) const;
+
+	/**
+	 * 낙사 금지(bCanCauseFallDeath=false) 넉백의 수평 속도 클램프.
+	 * 예상 체공시간으로 수평 이동거리를 추정하고, 밀려나는 경로를 샘플링해
+	 * 바닥이 끊기는(파괴 슬라이스/아레나 밖) 지점 '직전'까지만 밀리도록 속도를 줄인다.
+	 */
+	float ClampPushSpeedToGround(const ACharacter* Char, const FVector& Dir, float HSpeed, float VSpeed) const;
+
+	/** At(발밑 높이) 주변 위 100 ~ 아래 300cm 에 이어진 바닥이 있는지 (구덩이 밑바닥은 바닥으로 안 침) */
+	bool HasLandingGroundAt(const FVector& At, const AActor* IgnoreTarget) const;
 
 private:
 	/** 현재 액터 회전에서 평면(Z=0) Forward/Right 를 다시 캐싱 (스폰/Follow 회전 시) */

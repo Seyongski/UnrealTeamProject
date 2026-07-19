@@ -102,8 +102,10 @@ void UBossAoeJustGuardEffect::ResolveGuards()
 		}
 		else
 		{
-			// 실패: 일반 장판과 동일하게 데미지+상태이상 (베이스 GE 재사용)
+			// 실패: 일반 장판과 동일하게 데미지+상태이상+넉백 (베이스 로직 재사용.
+			// 넉백은 장판 BP 의 Knockback 설정이 None 이면 아무 일도 없음)
 			Aoe->ApplyDamageAndStatus(Target);
+			Aoe->ApplyKnockback(Target);
 		}
 
 		if (bShowDebugResult && GEngine)

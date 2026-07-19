@@ -1,12 +1,16 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Boss/Raid/BossChargeGaugeComponent.h"
+#include "Boss/Raid/BossPlayerStatusWidget.h"
 #include "Boss/Damage/BossPatternActorBase.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Components/WidgetComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/Character.h"
 #include "Net/UnrealNetwork.h"
 
 UBossChargeGaugeComponent::UBossChargeGaugeComponent()
@@ -27,6 +31,94 @@ void UBossChargeGaugeComponent::InitChargeGauge(AActor* InBoss,
 	Boss = InBoss;
 	RedChargeEffect = InRedChargeEffect;
 	BlueChargeEffect = InBlueChargeEffect;
+}
+
+void UBossChargeGaugeComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Red/Blue 태그 변화 감시. 복제되는 태그 컨테이너가 서버/클라 양쪽에서 동일하게 이벤트를
+	// 쏘므로, 반전(FlipOwnerCharge)이든 GameMode 의 최초 랜덤 부여든 원인과 무관하게 반응한다.
+	if (UAbilitySystemComponent* ASC = GetOwnerASC())
+	{
+		ASC->RegisterGameplayTagEvent(LostArkTags::State_Charge_Red, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &UBossChargeGaugeComponent::HandleChargeTagChanged);
+		ASC->RegisterGameplayTagEvent(LostArkTags::State_Charge_Blue, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &UBossChargeGaugeComponent::HandleChargeTagChanged);
+
+		// 부착 시점에 이미 전하가 부여돼 있으면(조우 시작 순서상 항상 그렇다) 즉시 1회 방송
+		// -> BeginPlay 이후 생성되는 위젯도 Construct 에서 IsRedCharge() 로 초기값을 놓치지 않음
+		if (ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red) ||
+			ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Blue))
+		{
+			OnChargeSideChanged.Broadcast(IsRedCharge());
+		}
+	}
+
+	// UI 위젯 생성 (렌더링 머신만). 이 컴포넌트가 모든 플레이어 폰에 붙으므로
+	// 캐릭터 BP 종류와 무관하게 전원이 동일한 전하 아이콘/게이지를 받는다.
+	SetupStatusWidgets();
+}
+
+void UBossChargeGaugeComponent::SetupStatusWidgets()
+{
+	// 데디케이티드 서버는 그릴 필요 없음. 리슨서버/클라만 생성
+	if (!GetWorld() || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	if (!OverheadIconComp && OverheadIconWidgetClass)
+	{
+		OverheadIconComp = CreateStatusWidget(
+			OverheadIconWidgetClass, OverheadIconZOffset, OverheadIconDrawSize, TEXT("ChargeOverheadIcon"));
+	}
+	if (!FootGaugeComp && FootGaugeWidgetClass)
+	{
+		FootGaugeComp = CreateStatusWidget(
+			FootGaugeWidgetClass, FootGaugeZOffset, FootGaugeDrawSize, TEXT("ChargeFootGauge"));
+	}
+}
+
+UWidgetComponent* UBossChargeGaugeComponent::CreateStatusWidget(TSubclassOf<UUserWidget> WidgetClass,
+	float ZOffset, const FVector2D& DrawSize, const TCHAR* CompName)
+{
+	AActor* Owner = GetOwner();
+	USceneComponent* Attach = Owner ? Owner->GetRootComponent() : nullptr;
+	if (!Attach)
+	{
+		return nullptr;
+	}
+
+	UWidgetComponent* WC = NewObject<UWidgetComponent>(Owner, UWidgetComponent::StaticClass(), CompName);
+	WC->SetWidgetSpace(EWidgetSpace::Screen);	// 화면공간 = 항상 카메라를 향하고 크기 일정 (빌보드 코드 불필요)
+	WC->SetWidgetClass(WidgetClass);
+	WC->SetDrawSize(DrawSize);
+	WC->SetDrawAtDesiredSize(false);
+	WC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WC->SetGenerateOverlapEvents(false);
+	WC->AttachToComponent(Attach, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	WC->SetRelativeLocation(FVector(0.f, 0.f, ZOffset));
+	WC->RegisterComponent();
+
+	// 위젯 인스턴스를 강제 생성한 뒤 이 컴포넌트 포인터를 주입 (WBP 가 자기 폰을 못 찾는 문제 해결)
+	WC->InitWidget();
+	if (UBossPlayerStatusWidget* StatusWidget = Cast<UBossPlayerStatusWidget>(WC->GetUserWidgetObject()))
+	{
+		StatusWidget->InitStatus(this);
+	}
+	return WC;
+}
+
+void UBossChargeGaugeComponent::HandleChargeTagChanged(const FGameplayTag /*Tag*/, int32 /*NewCount*/)
+{
+	OnChargeSideChanged.Broadcast(IsRedCharge());
+}
+
+bool UBossChargeGaugeComponent::IsRedCharge() const
+{
+	const UAbilitySystemComponent* ASC = GetOwnerASC();
+	return ASC && ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red);
 }
 
 UAbilitySystemComponent* UBossChargeGaugeComponent::GetOwnerASC() const

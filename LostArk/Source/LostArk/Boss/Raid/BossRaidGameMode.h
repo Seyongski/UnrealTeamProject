@@ -154,6 +154,9 @@ private:
 	ABossBase* FindBoss() const;
 	void ApplyChargeTo(APawn* Pawn);
 
+	/** 전 플레이어 컨트롤러의 뷰타겟 일괄 전환. NewViewTarget=null 이면 각자 자기 폰으로 복귀 */
+	void SetViewTargetForAll(AActor* NewViewTarget, float BlendTime);
+
 	/** 전하 게이지/부활 컴포넌트를 플레이어 폰에 부착 (조우 시작 시. 이미 있으면 스킵) */
 	void SetupRaidComponentsForPlayers();
 

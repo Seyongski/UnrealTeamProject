@@ -76,41 +76,35 @@ bool UAnimNotify_BossSpawnAoe::PrepareSpawn(USkeletalMeshComponent* MeshComp, UW
 ABossPatternActorBase* UAnimNotify_BossSpawnAoe::SpawnAoeActor(UWorld* World, AActor* Boss,
 	AActor* Target, const FTransform& SpawnTM) const
 {
-	// InitAoe 를 BeginPlay(ResolveOrigin) 이전에 호출하려면 Deferred 스폰 사용
-	ABossPatternActorBase* Aoe = World->SpawnActorDeferred<ABossPatternActorBase>(
-		AoeClass, SpawnTM, Boss, Cast<APawn>(Boss),
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	if (!Aoe)
-	{
-		return nullptr;
-	}
-
-	Aoe->InitAoe(Boss, Target, DamageCoefficient);
-	if (bOverrideCommon)
-	{
-		Aoe->ApplyCommonOverride(CommonOverride);	// 패턴별 공통값 주입
-	}
-	if (bOverrideGrab)
-	{
-		// OnHitEffect 는 Instanced 라 이 스폰 인스턴스만 덮어씀 (BP 클래스 디폴트는 불변)
-		if (UBossAoeGrabEffect* Grab = Cast<UBossAoeGrabEffect>(Aoe->GetOnHitEffect()))
+	// 공용 팩토리가 [Deferred 스폰 -> InitAoe -> 오버라이드 주입 -> FinishSpawning] 순서를 보증
+	return ABossPatternActorBase::SpawnAoeDeferred(World, AoeClass, SpawnTM,
+		/*SpawnOwner=*/Boss, /*Caster=*/Boss, Target, DamageCoefficient,
+		[this](ABossPatternActorBase& Aoe)
 		{
-			Grab->ApplyOverride(GrabOverride);
-		}
-	}
-	if (bOverrideKnockback)
-	{
-		Aoe->SetKnockbackOverride(KnockbackOverride);	// 패턴별 피격 리액션(넉백/낙사) 주입
-	}
-	// 본체 VFX 노티파이 오버라이드 (BeginPlay 의 SpawnBodyEffect 전에 주입, null 은 BP 기본 유지)
-	if (BodyEffectOverride || BodyEffectCascadeOverride)
-	{
-		Aoe->SetBodyEffectOverride(BodyEffectOverride, BodyEffectCascadeOverride);
-	}
+			if (bOverrideCommon)
+			{
+				Aoe.ApplyCommonOverride(CommonOverride);	// 패턴별 공통값 주입
+			}
+			if (bOverrideGrab)
+			{
+				// OnHitEffect 는 Instanced 라 이 스폰 인스턴스만 덮어씀 (BP 클래스 디폴트는 불변)
+				if (UBossAoeGrabEffect* Grab = Cast<UBossAoeGrabEffect>(Aoe.GetOnHitEffect()))
+				{
+					Grab->ApplyOverride(GrabOverride);
+				}
+			}
+			if (bOverrideKnockback)
+			{
+				Aoe.SetKnockbackOverride(KnockbackOverride);	// 패턴별 피격 리액션(넉백/낙사) 주입
+			}
+			// 본체 VFX 노티파이 오버라이드 (BeginPlay 의 SpawnBodyEffect 전에 주입, null 은 BP 기본 유지)
+			if (BodyEffectOverride || BodyEffectCascadeOverride)
+			{
+				Aoe.SetBodyEffectOverride(BodyEffectOverride, BodyEffectCascadeOverride);
+			}
 
-	ConfigureAoe(Aoe);	// 도형별 파라미터 주입 (BeginPlay 전)
-	Aoe->FinishSpawning(SpawnTM);
-	return Aoe;
+			ConfigureAoe(&Aoe);	// 도형별 파라미터 주입 (BeginPlay 전)
+		});
 }
 
 FString UAnimNotify_BossSpawnAoe::GetNotifyName_Implementation() const

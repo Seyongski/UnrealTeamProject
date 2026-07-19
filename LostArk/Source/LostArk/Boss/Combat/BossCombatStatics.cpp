@@ -164,3 +164,72 @@ void UBossCombatStatics::RemoveReplicatedLooseTag(UAbilitySystemComponent* ASC, 
 	ASC->RemoveLooseGameplayTag(Tag);
 	ASC->RemoveReplicatedLooseGameplayTag(Tag);
 }
+
+FActiveGameplayEffectHandle UBossCombatStatics::ApplyEffect(
+	UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
+	TSubclassOf<UGameplayEffect> EffectClass, UObject* SourceObject,
+	AActor* Instigator, AActor* EffectCauser,
+	const FGameplayTag& SetByCallerTag, float SetByCallerMagnitude)
+{
+	if (!TargetASC || !EffectClass)
+	{
+		return FActiveGameplayEffectHandle();
+	}
+
+	// 소스 미지정이면 대상 자신이 소스 (자가 적용)
+	UAbilitySystemComponent* Applier = SourceASC ? SourceASC : TargetASC;
+
+	FGameplayEffectContextHandle Context = Applier->MakeEffectContext();
+	if (SourceObject)
+	{
+		Context.AddSourceObject(SourceObject);
+	}
+	if (Instigator || EffectCauser)
+	{
+		Context.AddInstigator(Instigator, EffectCauser);
+	}
+
+	FGameplayEffectSpecHandle Spec = Applier->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	if (!Spec.IsValid())
+	{
+		return FActiveGameplayEffectHandle();
+	}
+	if (SetByCallerTag.IsValid())
+	{
+		Spec.Data->SetSetByCallerMagnitude(SetByCallerTag, SetByCallerMagnitude);
+	}
+
+	return (Applier == TargetASC)
+		? Applier->ApplyGameplayEffectSpecToSelf(*Spec.Data)
+		: Applier->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
+}
+
+bool UBossCombatStatics::FlipCharge(UAbilitySystemComponent* ASC,
+	TSubclassOf<UGameplayEffect> RedEffect, TSubclassOf<UGameplayEffect> BlueEffect,
+	UObject* SourceObject, const FGameplayTag& RedTag, const FGameplayTag& BlueTag)
+{
+	if (!ASC)
+	{
+		return false;
+	}
+
+	const bool bHasRed = ASC->HasMatchingGameplayTag(RedTag);
+	const bool bHasBlue = ASC->HasMatchingGameplayTag(BlueTag);
+	if (bHasRed == bHasBlue)
+	{
+		return false;	// 전하 미부여(또는 비정상 중복) 대상은 스킵
+	}
+
+	const TSubclassOf<UGameplayEffect> RemoveGE = bHasRed ? RedEffect : BlueEffect;
+	const TSubclassOf<UGameplayEffect> AddGE = bHasRed ? BlueEffect : RedEffect;
+
+	if (RemoveGE)
+	{
+		ASC->RemoveActiveGameplayEffectBySourceEffect(RemoveGE, nullptr);
+	}
+	if (AddGE)
+	{
+		ApplyEffectToSelf(ASC, AddGE, SourceObject);
+	}
+	return true;
+}

@@ -306,5 +306,3 @@ void ABossBase::UpdateBackHeadDecal()
 	BackHeadDecal->SetRelativeLocation(FVector(0.f, 0.f, -HalfHeight));
 	BackHeadDecal->UpdateRadius(GetCapsuleComponent()->GetScaledCapsuleRadius());
 }
-
-

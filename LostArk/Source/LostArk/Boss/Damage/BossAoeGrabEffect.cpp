@@ -67,14 +67,8 @@ void UBossAoeGrabEffect::GrabOne(ABossPatternActorBase* Aoe, ACharacter* Char)
 	{
 		if (GrabbedEffect)
 		{
-			FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-			Context.AddSourceObject(this);
-			Context.AddInstigator(Caster, Aoe);
-			FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(GrabbedEffect, 1.f, Context);
-			if (Spec.IsValid())
-			{
-				Info.GrabbedGEHandle = ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
-			}
+			Info.GrabbedGEHandle = UBossCombatStatics::ApplyEffect(
+				/*SourceASC=*/nullptr, ASC, GrabbedEffect, this, /*Instigator=*/Caster, /*EffectCauser=*/Aoe);
 		}
 		else
 		{

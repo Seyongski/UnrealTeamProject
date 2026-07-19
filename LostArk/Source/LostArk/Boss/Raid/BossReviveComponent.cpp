@@ -2,6 +2,7 @@
 
 #include "Boss/Raid/BossReviveComponent.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/Raid/BossRaidGameState.h"
 #include "Core/LostArkCombatInterface.h"
 #include "Character/LostArkAttributeSet.h"
@@ -149,8 +150,7 @@ void UBossReviveComponent::DoRevive()
 	// 1) 사망 태그 제거 (캐릭터 Die() 는 로컬만, 낙사 볼륨은 복제까지 세우므로 양쪽 다 회수)
 	if (UAbilitySystemComponent* ASC = GetOwnerASC())
 	{
-		ASC->RemoveLooseGameplayTag(LostArkTags::State_Dead);
-		ASC->RemoveReplicatedLooseGameplayTag(LostArkTags::State_Dead);
+		UBossCombatStatics::RemoveReplicatedLooseTag(ASC, LostArkTags::State_Dead);
 
 		// 2) 체력 회복
 		const float MaxHealth = ASC->GetNumericAttribute(ULostArkAttributeSet::GetMaxHealthAttribute());

@@ -121,21 +121,19 @@ void ABossGimmickTower::SpawnShockAoe()
 	const FRotator Rot = Dir.Normalize() ? Dir.Rotation() : GetActorRotation();
 	const FTransform SpawnTM(Rot, GetActorLocation());
 
-	ABossPatternActorBase* Aoe = World->SpawnActorDeferred<ABossPatternActorBase>(
-		ShockAoeClass, SpawnTM, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	if (!Aoe)
-	{
-		return;
-	}
-
-	// 시전자 = 보스 (데미지 귀속/바닥 폴백). 보스가 사라진 예외 상황에선 타워 자신
-	Aoe->InitAoe(Boss.IsValid() ? Boss.Get() : this, Target, ShockDamageCoefficient);
-	if (bOverrideCommon)
-	{
-		Aoe->ApplyCommonOverride(CommonOverride);
-	}
-	// BP 의 SpawnOrigin 설정과 무관하게 '타워 위치·방향 그대로' 강제
-	// (CasterLocation 등으로 돼 있으면 장판이 보스 위치로 끌려가는 사고 방지)
-	Aoe->SetSpawnOriginPolicy(EAoeSpawnOrigin::SpawnTransform);
-	Aoe->FinishSpawning(SpawnTM);
+	// 시전자 = 보스 (데미지 귀속/바닥 폴백). 보스가 사라진 예외 상황에선 타워 자신.
+	// Owner = 타워 (잡기 해제 노티파이의 'Owner==보스' 필터에 안 걸리게)
+	AActor* CasterActor = Boss.IsValid() ? Boss.Get() : this;
+	ABossPatternActorBase::SpawnAoeDeferred(World, ShockAoeClass, SpawnTM,
+		/*SpawnOwner=*/this, CasterActor, Target, ShockDamageCoefficient,
+		[this](ABossPatternActorBase& Aoe)
+		{
+			if (bOverrideCommon)
+			{
+				Aoe.ApplyCommonOverride(CommonOverride);
+			}
+			// BP 의 SpawnOrigin 설정과 무관하게 '타워 위치·방향 그대로' 강제
+			// (CasterLocation 등으로 돼 있으면 장판이 보스 위치로 끌려가는 사고 방지)
+			Aoe.SetSpawnOriginPolicy(EAoeSpawnOrigin::SpawnTransform);
+		});
 }

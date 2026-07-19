@@ -168,15 +168,8 @@ void UBossCounterComponent::ApplyCounterSuccess()
 	// 그로기 GE 를 먼저 적용한다: Countered 태그가 붙는 순간 분기가 동기적으로 그로기 스텝을
 	// 실행할 수 있는데, 그때 이미 State.Boss.Groggy 가 서 있어야 루프 스텝의
 	// 'NOT Groggy' 종료 분기가 첫 평가에서 오발하지 않는다
-	if (GroggyEffectClass)
-	{
-		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(GroggyEffectClass, 1.f, ASC->MakeEffectContext());
-		if (Spec.IsValid())
-		{
-			Spec.Data->SetSetByCallerMagnitude(LostArkTags::Data_Duration.GetTag(), FMath::Max(0.1f, GroggyDuration));
-			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
-		}
-	}
+	UBossCombatStatics::ApplyEffectToSelf(ASC, GroggyEffectClass, this,
+		LostArkTags::Data_Duration.GetTag(), FMath::Max(0.1f, GroggyDuration));
 
 	// 분기 트리거는 마지막 (이 줄 아래에 창 상태를 만지는 코드를 두지 말 것)
 	ASC->AddLooseGameplayTag(LostArkTags::State_Boss_PatternResult_Countered.GetTag());

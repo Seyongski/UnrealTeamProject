@@ -5,9 +5,11 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "GameplayTagContainer.h"
+#include "GameplayEffectTypes.h"
 #include "BossCombatStatics.generated.h"
 
 class UAbilitySystemComponent;
+class UGameplayEffect;
 
 /** 공격자가 서 있는 보스 기준 존 (순수 지오메트리, 약점포착과 무관) */
 UENUM(BlueprintType)
@@ -103,4 +105,40 @@ public:
 
 	/** AddReplicatedLooseTag 의 회수 짝 */
 	static void RemoveReplicatedLooseTag(UAbilitySystemComponent* ASC, const FGameplayTag& Tag);
+
+	/**
+	 * GE 1개 적용 공용 헬퍼 (서버 전용 규약).
+	 * Context 생성 -> SourceObject/Instigator 주입 -> Spec 생성 -> SetByCaller -> 적용
+	 * 관용구를 한 곳에 모았다 (데미지/상태이상/전하/그로기/낙사 등 전부 이 경로).
+	 *
+	 * @param SourceASC          시전자 ASC. null 이면 TargetASC 자기 자신이 소스(자가 적용)
+	 * @param TargetASC          적용 대상 ASC (필수)
+	 * @param SourceObject       Context.AddSourceObject (장판/볼륨/컴포넌트 등 원인 오브젝트. null 허용)
+	 * @param Instigator         Context.AddInstigator 의 주체 (보스 등. EffectCauser 와 둘 다 null 이면 생략)
+	 * @param SetByCallerTag     유효하면 Magnitude 를 SetByCaller 로 실어 보냄 (Data.Damage / Data.Duration 등)
+	 * @return 적용된 이펙트 핸들 (실패 시 무효 핸들. 잡기처럼 나중에 제거할 때 보관)
+	 */
+	static FActiveGameplayEffectHandle ApplyEffect(
+		UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
+		TSubclassOf<UGameplayEffect> EffectClass, UObject* SourceObject,
+		AActor* Instigator = nullptr, AActor* EffectCauser = nullptr,
+		const FGameplayTag& SetByCallerTag = FGameplayTag(), float SetByCallerMagnitude = 0.f);
+
+	/** ApplyEffect 의 자가 적용(소스=대상) 축약형. 대부분의 셀프 버프/디버프/사망 GE 는 이걸로 충분 */
+	static FActiveGameplayEffectHandle ApplyEffectToSelf(
+		UAbilitySystemComponent* ASC, TSubclassOf<UGameplayEffect> EffectClass, UObject* SourceObject,
+		const FGameplayTag& SetByCallerTag = FGameplayTag(), float SetByCallerMagnitude = 0.f)
+	{
+		return ApplyEffect(nullptr, ASC, EffectClass, SourceObject,
+			nullptr, nullptr, SetByCallerTag, SetByCallerMagnitude);
+	}
+
+	/**
+	 * 전하 반전: 빨강/파랑 중 가진 쪽 전하 GE 를 제거하고 반대쪽을 부여.
+	 * (전하 변환장판과 과충전 게이지 반전이 공유하는 로직)
+	 * @return 반전 수행 여부. 전하 미부여(또는 비정상 중복)면 아무것도 안 하고 false
+	 */
+	static bool FlipCharge(UAbilitySystemComponent* ASC,
+		TSubclassOf<UGameplayEffect> RedEffect, TSubclassOf<UGameplayEffect> BlueEffect,
+		UObject* SourceObject, const FGameplayTag& RedTag, const FGameplayTag& BlueTag);
 };

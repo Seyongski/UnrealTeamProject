@@ -169,18 +169,8 @@ void UBossTerrainGimmickComponent::OnStaggerGaugeChanged(const FOnAttributeChang
 
 void UBossTerrainGimmickComponent::ApplyGroggy(float Duration)
 {
-	UAbilitySystemComponent* ASC = GetASC();
-	if (!ASC || !GroggyEffectClass)
-	{
-		return;
-	}
-
-	FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(GroggyEffectClass, 1.f, ASC->MakeEffectContext());
-	if (Spec.IsValid())
-	{
-		Spec.Data->SetSetByCallerMagnitude(LostArkTags::Data_Duration.GetTag(), FMath::Max(0.1f, Duration));
-		ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
-	}
+	UBossCombatStatics::ApplyEffectToSelf(GetASC(), GroggyEffectClass, this,
+		LostArkTags::Data_Duration.GetTag(), FMath::Max(0.1f, Duration));
 }
 
 void UBossTerrainGimmickComponent::RequestDestroyGimmickSlice(float Delay)

@@ -3,6 +3,7 @@
 
 #include "Monster/ArenaKillVolume.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -45,18 +46,11 @@ void AArenaKillVolume::OnBoxBeginOverlap(UPrimitiveComponent* /*OverlappedComp*/
 
 	if (FallDeathEffect)
 	{
-		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-		Context.AddSourceObject(this);
-		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(FallDeathEffect, 1.f, Context);
-		if (Spec.IsValid())
-		{
-			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
-		}
+		UBossCombatStatics::ApplyEffectToSelf(ASC, FallDeathEffect, this);
 	}
 	else
 	{
 		// 폴백: 사망 태그만 부여 (실제 사망 처리는 플레이어 쪽 시스템)
-		ASC->AddLooseGameplayTag(LostArkTags::State_Dead);
-		ASC->AddReplicatedLooseGameplayTag(LostArkTags::State_Dead);
+		UBossCombatStatics::AddReplicatedLooseTag(ASC, LostArkTags::State_Dead);
 	}
 }

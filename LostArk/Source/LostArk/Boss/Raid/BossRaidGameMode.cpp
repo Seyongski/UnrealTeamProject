@@ -49,6 +49,24 @@ ABossBase* ABossRaidGameMode::FindBoss() const
 	return nullptr;
 }
 
+void ABossRaidGameMode::SetViewTargetForAll(AActor* NewViewTarget, float BlendTime)
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (!PC)
+		{
+			continue;
+		}
+		// 서버에서 지정 -> 원격 PC에는 ClientSetViewTarget 으로 전파됨
+		AActor* Target = NewViewTarget ? NewViewTarget : static_cast<AActor*>(PC->GetPawn());
+		if (Target)
+		{
+			PC->SetViewTargetWithBlend(Target, BlendTime, VTBlend_Cubic);
+		}
+	}
+}
+
 void ABossRaidGameMode::StartEncounter()
 {
 	if (bEncounterStarted)
@@ -99,29 +117,14 @@ void ABossRaidGameMode::StartEncounter()
 		{
 			ArenaCamera->SetBoss(Boss);
 			ArenaCamera->FinishSpawning(FTransform(SpawnLoc));
-
-			for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
-			{
-				if (APlayerController* PC = It->Get())
-				{
-					// 서버에서 지정 -> 원격 PC에는 ClientSetViewTarget 으로 전파됨
-					PC->SetViewTargetWithBlend(ArenaCamera, CameraBlendTime, VTBlend_Cubic);
-				}
-			}
+			SetViewTargetForAll(ArenaCamera, CameraBlendTime);
 		}
 	}
 }
 
 void ABossRaidGameMode::EndEncounter()
 {
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
-	{
-		APlayerController* PC = It->Get();
-		if (PC && PC->GetPawn())
-		{
-			PC->SetViewTargetWithBlend(PC->GetPawn(), CameraBlendTime, VTBlend_Cubic);
-		}
-	}
+	SetViewTargetForAll(/*NewViewTarget=각자 자기 폰*/nullptr, CameraBlendTime);
 
 	if (ArenaCamera)
 	{
@@ -161,18 +164,7 @@ void ABossRaidGameMode::ApplyChargeTo(APawn* Pawn)
 	}
 
 	const TSubclassOf<UGameplayEffect> ChargeGE = FMath::RandBool() ? RedChargeEffect : BlueChargeEffect;
-	if (!ChargeGE)
-	{
-		return;
-	}
-
-	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-	Context.AddSourceObject(this);
-	FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(ChargeGE, 1.f, Context);
-	if (Spec.IsValid())
-	{
-		ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
-	}
+	UBossCombatStatics::ApplyEffectToSelf(ASC, ChargeGE, this);
 }
 
 void ABossRaidGameMode::SetupRaidComponentsForPlayers()
@@ -248,14 +240,8 @@ void ABossRaidGameMode::ApplyChargeResonancePulse()
 
 	for (UAbilitySystemComponent* ASC : AliveASCs)
 	{
-		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-		Context.AddSourceObject(this);
-		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(ResonanceDamageEffect, 1.f, Context);
-		if (Spec.IsValid())
-		{
-			Spec.Data->SetSetByCallerMagnitude(LostArkTags::Data_Damage.GetTag(), Magnitude);
-			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
-		}
+		UBossCombatStatics::ApplyEffectToSelf(ASC, ResonanceDamageEffect, this,
+			LostArkTags::Data_Damage.GetTag(), Magnitude);
 	}
 }
 
@@ -295,14 +281,7 @@ void ABossRaidGameMode::NotifyBossDied(ABossBase* Boss)
 				Cam->bConstrainAspectRatio = false;	// 레터박스(위아래 검은 띠) 방지
 			}
 			ClearCamera->FinishSpawning(CamTM);
-
-			for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
-			{
-				if (APlayerController* PC = It->Get())
-				{
-					PC->SetViewTargetWithBlend(ClearCamera, ClearCameraBlendTime, VTBlend_Cubic);
-				}
-			}
+			SetViewTargetForAll(ClearCamera, ClearCameraBlendTime);
 		}
 	}
 

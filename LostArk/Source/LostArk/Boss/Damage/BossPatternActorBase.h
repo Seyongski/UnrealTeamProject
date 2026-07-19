@@ -195,6 +195,30 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	/**
+	 * AOE 지연 스폰 공용 팩토리 (서버에서만 호출할 것).
+	 * InitAoe/오버라이드 주입은 반드시 BeginPlay(ResolveOrigin) '전'에 이뤄져야 하므로
+	 * [Deferred 스폰 -> InitAoe -> Configure(호출자 주입) -> FinishSpawning] 순서를 여기서 보증한다.
+	 * 스폰 노티파이/기믹 타워/과충전 게이지 등 모든 AOE 스포너가 이 경로를 쓴다.
+	 *
+	 * @param SpawnOwner 스폰 Owner. 잡기 해제 노티파이가 'Owner==보스' 로 걸러내므로
+	 *                   보스 패턴은 보스를, 타워 장판은 타워를 넘긴다
+	 * @param Configure  InitAoe 후 FinishSpawning 전에 호출되는 훅 (공통/도형/넉백 오버라이드 주입)
+	 */
+	static ABossPatternActorBase* SpawnAoeDeferred(UWorld* World,
+		TSubclassOf<ABossPatternActorBase> AoeClass, const FTransform& SpawnTM,
+		AActor* SpawnOwner, AActor* Caster, AActor* Target, float DamageCoefficient,
+		TFunctionRef<void(ABossPatternActorBase&)> Configure);
+
+	/** Configure 훅 없는 축약형 */
+	static ABossPatternActorBase* SpawnAoeDeferred(UWorld* World,
+		TSubclassOf<ABossPatternActorBase> AoeClass, const FTransform& SpawnTM,
+		AActor* SpawnOwner, AActor* Caster, AActor* Target, float DamageCoefficient)
+	{
+		return SpawnAoeDeferred(World, AoeClass, SpawnTM, SpawnOwner, Caster, Target,
+			DamageCoefficient, [](ABossPatternActorBase&) {});
+	}
+
+	/**
 	 * 스폰 직후 브레인/노티파이가 호출해 런타임 값 주입.
 	 * @param InCaster            패턴 시전자(보스). 데미지 Instigator + 스폰원점/Follow 기준
 	 * @param InTarget            타겟. Homing/TargetLocation/GroundUnderTarget 기준

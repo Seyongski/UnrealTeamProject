@@ -40,6 +40,30 @@ ABossPatternActorBase::ABossPatternActorBase()
 	DamageSetByCallerTag = LostArkTags::Data_Damage;
 }
 
+ABossPatternActorBase* ABossPatternActorBase::SpawnAoeDeferred(UWorld* World,
+	TSubclassOf<ABossPatternActorBase> AoeClass, const FTransform& SpawnTM,
+	AActor* SpawnOwner, AActor* Caster, AActor* Target, float DamageCoefficient,
+	TFunctionRef<void(ABossPatternActorBase&)> Configure)
+{
+	if (!World || !AoeClass)
+	{
+		return nullptr;
+	}
+
+	ABossPatternActorBase* Aoe = World->SpawnActorDeferred<ABossPatternActorBase>(
+		AoeClass, SpawnTM, SpawnOwner, Cast<APawn>(Caster),
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Aoe)
+	{
+		return nullptr;
+	}
+
+	Aoe->InitAoe(Caster, Target, DamageCoefficient);
+	Configure(*Aoe);
+	Aoe->FinishSpawning(SpawnTM);
+	return Aoe;
+}
+
 void ABossPatternActorBase::InitAoe(AActor* InCaster, AActor* InTarget, float InDamageCoefficient)
 {
 	Caster = InCaster;
@@ -905,41 +929,18 @@ void ABossPatternActorBase::ApplyDamageAndStatus(AActor* Target)
 	UAbilitySystemComponent* SourceASC =
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Caster);
 
-	// 데미지 GE
-	if (DamageEffect && SourceASC)
+	// 데미지 GE (시전자 ASC 필수 — 데미지 귀속/계산이 소스 기준)
+	if (SourceASC)
 	{
-		FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-		Context.AddSourceObject(this);
-		Context.AddInstigator(Caster, this);
-
-		FGameplayEffectSpecHandle Spec =
-			SourceASC->MakeOutgoingSpec(DamageEffect, 1.f, Context);
-		if (Spec.IsValid())
-		{
-			if (DamageSetByCallerTag.IsValid())
-			{
-				Spec.Data->SetSetByCallerMagnitude(DamageSetByCallerTag, DamageCoefficient);
-			}
-			SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
-		}
+		UBossCombatStatics::ApplyEffect(SourceASC, TargetASC, DamageEffect, this,
+			/*Instigator=*/Caster, /*EffectCauser=*/this,
+			DamageSetByCallerTag, DamageCoefficient);
 	}
 
-	// 상태이상 GE들 (소스 ASC 없으면 타겟 자기 자신을 소스로)
-	UAbilitySystemComponent* StatusSource = SourceASC ? SourceASC : TargetASC;
+	// 상태이상 GE들 (소스 ASC 없으면 헬퍼가 타겟 자신을 소스로 폴백)
 	for (const TSubclassOf<UGameplayEffect>& StatusGE : StatusEffects)
 	{
-		if (!StatusGE)
-		{
-			continue;
-		}
-		FGameplayEffectContextHandle Context = StatusSource->MakeEffectContext();
-		Context.AddSourceObject(this);
-		FGameplayEffectSpecHandle Spec =
-			StatusSource->MakeOutgoingSpec(StatusGE, 1.f, Context);
-		if (Spec.IsValid())
-		{
-			StatusSource->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
-		}
+		UBossCombatStatics::ApplyEffect(SourceASC, TargetASC, StatusGE, this);
 	}
 }
 

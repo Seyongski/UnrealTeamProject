@@ -2,6 +2,7 @@
 
 #include "Boss/Raid/BossChargeGaugeComponent.h"
 #include "Boss/Raid/BossPlayerStatusWidget.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/Damage/BossPatternActorBase.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
@@ -174,37 +175,9 @@ void UBossChargeGaugeComponent::ResetGauge()
 
 void UBossChargeGaugeComponent::FlipOwnerCharge()
 {
-	// 전하 변환장판(UBossAoeChargeSwapEffect)과 동일 로직: 가진 쪽 GE 제거 + 반대 GE 부여
-	UAbilitySystemComponent* ASC = GetOwnerASC();
-	if (!ASC)
-	{
-		return;
-	}
-
-	const bool bHasRed = ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red);
-	const bool bHasBlue = ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Blue);
-	if (bHasRed == bHasBlue)
-	{
-		return;	// 전하 미부여(또는 비정상 중복)면 스킵
-	}
-
-	const TSubclassOf<UGameplayEffect> RemoveGE = bHasRed ? RedChargeEffect : BlueChargeEffect;
-	const TSubclassOf<UGameplayEffect> AddGE = bHasRed ? BlueChargeEffect : RedChargeEffect;
-
-	if (RemoveGE)
-	{
-		ASC->RemoveActiveGameplayEffectBySourceEffect(RemoveGE, nullptr);
-	}
-	if (AddGE)
-	{
-		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-		Context.AddSourceObject(this);
-		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(AddGE, 1.f, Context);
-		if (Spec.IsValid())
-		{
-			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
-		}
-	}
+	// 전하 변환장판(UBossAoeChargeSwapEffect)과 동일한 공용 로직: 가진 쪽 GE 제거 + 반대 GE 부여
+	UBossCombatStatics::FlipCharge(GetOwnerASC(), RedChargeEffect, BlueChargeEffect, this,
+		LostArkTags::State_Charge_Red.GetTag(), LostArkTags::State_Charge_Blue.GetTag());
 }
 
 void UBossChargeGaugeComponent::TriggerOvercharge()
@@ -216,19 +189,11 @@ void UBossChargeGaugeComponent::TriggerOvercharge()
 		return;
 	}
 
-	// 이 캐릭터 위치에서 스폰. 추적(FollowTarget)/예고/반경은 장판 BP 설정이 담당
-	const FTransform SpawnTM(Owner->GetActorRotation(), Owner->GetActorLocation());
-	ABossPatternActorBase* Aoe = World->SpawnActorDeferred<ABossPatternActorBase>(
-		OverchargeAoeClass, SpawnTM, Boss.Get(), Cast<APawn>(Boss.Get()),
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	if (!Aoe)
-	{
-		return;
-	}
-
+	// 이 캐릭터 위치에서 스폰. 추적(FollowTarget)/예고/반경은 장판 BP 설정이 담당.
 	// 시전자=보스(데미지 귀속), 타겟=과충전된 이 플레이어 (FollowTarget 이 이 폰을 따라감)
-	Aoe->InitAoe(Boss.Get(), Owner, OverchargeDamageCoefficient);
-	Aoe->FinishSpawning(SpawnTM);
+	const FTransform SpawnTM(Owner->GetActorRotation(), Owner->GetActorLocation());
+	ABossPatternActorBase::SpawnAoeDeferred(World, OverchargeAoeClass, SpawnTM,
+		/*SpawnOwner=*/Boss.Get(), /*Caster=*/Boss.Get(), Owner, OverchargeDamageCoefficient);
 }
 
 void UBossChargeGaugeComponent::OnRep_Gauge()

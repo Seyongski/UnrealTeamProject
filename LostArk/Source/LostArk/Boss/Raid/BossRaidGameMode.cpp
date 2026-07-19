@@ -12,7 +12,10 @@
 #include "Boss/Combat/BossCombatStatics.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -253,6 +256,102 @@ void ABossRaidGameMode::ApplyChargeResonancePulse()
 			Spec.Data->SetSetByCallerMagnitude(LostArkTags::Data_Damage.GetTag(), Magnitude);
 			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
 		}
+	}
+}
+
+void ABossRaidGameMode::NotifyBossDied(ABossBase* Boss)
+{
+	if (bBossDied)
+	{
+		return;
+	}
+	bBossDied = true;
+
+	// 시체에 전하 공명 딜이 계속 들어가지 않게 즉시 정지
+	GetWorldTimerManager().ClearTimer(ResonanceTimer);
+
+	// 1) 클리어 카메라: 보스 정면에서 내려다보는 고정 샷.
+	//    복제로 스폰해야 원격 클라의 ClientSetViewTarget 이 같은 액터를 찾는다.
+	if (Boss)
+	{
+		const FVector BossLoc = Boss->GetActorLocation();
+		FVector Forward = Boss->GetActorForwardVector();
+		Forward.Z = 0.f;
+		if (!Forward.Normalize())
+		{
+			Forward = FVector::ForwardVector;
+		}
+
+		const FVector CamLoc = BossLoc + Forward * ClearCameraDistance + FVector(0.f, 0.f, ClearCameraHeight);
+		const FVector Focus = BossLoc + FVector(0.f, 0.f, ClearCameraFocusHeight);
+		const FTransform CamTM((Focus - CamLoc).Rotation(), CamLoc);
+
+		ClearCamera = GetWorld()->SpawnActorDeferred<ACameraActor>(ACameraActor::StaticClass(), CamTM);
+		if (ClearCamera)
+		{
+			ClearCamera->SetReplicates(true);
+			if (UCameraComponent* Cam = ClearCamera->GetCameraComponent())
+			{
+				Cam->bConstrainAspectRatio = false;	// 레터박스(위아래 검은 띠) 방지
+			}
+			ClearCamera->FinishSpawning(CamTM);
+
+			for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+			{
+				if (APlayerController* PC = It->Get())
+				{
+					PC->SetViewTargetWithBlend(ClearCamera, ClearCameraBlendTime, VTBlend_Cubic);
+				}
+			}
+		}
+	}
+
+	// 2) 글로벌 슬로모 (WorldSettings.TimeDilation 은 복제 -> 전 머신 동시 슬로모)
+	if (ClearSlomoDilation < 1.f - KINDA_SMALL_NUMBER && ClearSlomoDuration > 0.f)
+	{
+		UGameplayStatics::SetGlobalTimeDilation(this, ClearSlomoDilation);
+
+		// 월드 타이머는 딜레이션 영향을 받으므로 '실제 ClearSlomoDuration초' 후 복구되도록 환산
+		GetWorldTimerManager().SetTimer(
+			ClearSlomoTimer, this, &ABossRaidGameMode::RestoreTimeDilation,
+			FMath::Max(ClearSlomoDuration * ClearSlomoDilation, 0.05f), false);
+	}
+
+	// 3) 배너 -> 종료 예약 (게임시간 기준. 슬로모 구간만큼 실제로는 살짝 늦게 온다 — 의도된 여유)
+	GetWorldTimerManager().SetTimer(
+		ClearBannerTimer, this, &ABossRaidGameMode::ShowClearBanner,
+		FMath::Max(ClearBannerDelay, 0.05f), false);
+	GetWorldTimerManager().SetTimer(
+		ClearEndTimer, this, &ABossRaidGameMode::FinishClearSequence,
+		FMath::Max(ClearBannerDelay + ClearHoldTime, 0.1f), false);
+}
+
+void ABossRaidGameMode::ShowClearBanner()
+{
+	if (ABossRaidGameState* GS = GetGameState<ABossRaidGameState>())
+	{
+		GS->MarkRaidCleared();	// 복제 -> 전 머신에서 OnRaidCleared 방송 + 배너 표시
+	}
+}
+
+void ABossRaidGameMode::RestoreTimeDilation()
+{
+	UGameplayStatics::SetGlobalTimeDilation(this, 1.f);
+}
+
+void ABossRaidGameMode::FinishClearSequence()
+{
+	RestoreTimeDilation();	// 어떤 경로로 오든 슬로모가 남지 않게 보증
+
+	// 카메라 각자 캐릭터 복귀 + 아레나 카메라/공명 타이머 정리 (기존 종료 루틴 재사용)
+	EndEncounter();
+
+	// 뷰타겟이 폰으로 넘어갔으니 클리어 카메라 정리
+	// (블렌드 중 파괴돼도 카메라 매니저가 폰 폴백 처리 — ArenaCamera 와 동일 관용구)
+	if (ClearCamera)
+	{
+		ClearCamera->Destroy();
+		ClearCamera = nullptr;
 	}
 }
 

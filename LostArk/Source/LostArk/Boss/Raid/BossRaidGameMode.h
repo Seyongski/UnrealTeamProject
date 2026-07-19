@@ -8,6 +8,7 @@
 
 class ABossBase;
 class ABossArenaCamera;
+class ACameraActor;
 class UBossChargeGaugeComponent;
 class UBossReviveComponent;
 class UGameplayEffect;
@@ -41,6 +42,16 @@ public:
 	/** 피자 조각 파괴 (기믹/패턴에서 호출). 첫 파괴 시 보스에 약점포착 태그 부여 */
 	UFUNCTION(BlueprintCallable, Category = "Raid")
 	void DestroySlice(int32 SliceIndex);
+
+	/**
+	 * 보스 사망 통지 (ABossBase::HandleDeath 가 호출. 서버, 1회 가드).
+	 * 클리어 연출 시퀀스 시작:
+	 *  t=0                        : 전 플레이어 뷰타겟 -> 클리어 카메라(보스 정면 줌인) + 글로벌 슬로모
+	 *  t=ClearSlomoDuration(실초) : 슬로모 복구
+	 *  t=ClearBannerDelay         : GameState.MarkRaidCleared -> 전 머신 클리어 배너
+	 *  t=+ClearHoldTime           : EndEncounter (카메라 각자 캐릭터 복귀) + 클리어 카메라 정리
+	 */
+	void NotifyBossDied(ABossBase* Boss);
 
 	/** 생존 플레이어 전원에게 빨강/파랑 전하 랜덤 부여 (이미 있으면 스킵) */
 	UFUNCTION(BlueprintCallable, Category = "Raid")
@@ -94,6 +105,43 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Camera", meta = (ClampMin = "0.0"))
 	float CameraBlendTime = 1.f;
 
+	// ─── 클리어 연출 (보스 사망 시. 카메라 줌인 + 슬로모 + 배너 — 레벨 시퀀스 없음) ───
+
+	/** 클리어 카메라: 보스 정면으로부터의 수평 거리(cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "100.0"))
+	float ClearCameraDistance = 1300.f;
+
+	/** 클리어 카메라: 높이(cm, 보스 발밑 기준 위) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
+	float ClearCameraHeight = 700.f;
+
+	/** 클리어 카메라가 바라볼 지점 높이(cm, 보스 액터 위치 기준. 가슴/머리 높이로 조정) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear")
+	float ClearCameraFocusHeight = 350.f;
+
+	/** 클리어 카메라 블렌드 시간(초) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
+	float ClearCameraBlendTime = 0.8f;
+
+	/** 사망 순간 글로벌 슬로모 배율 (1이면 슬로모 없음. WorldSettings 복제로 클라도 함께 느려짐) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+	float ClearSlomoDilation = 0.35f;
+
+	/** 슬로모 유지 시간 (실제 벽시계 초) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
+	float ClearSlomoDuration = 1.2f;
+
+	/**
+	 * 사망 -> 클리어 배너까지 대기(게임시간 초). 사망 몽타주 하이라이트에 맞춰 조정.
+	 * 슬로모 구간 동안은 게임시간이 느리게 흘러 실제로는 그만큼 더 늦게 뜬다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
+	float ClearBannerDelay = 2.5f;
+
+	/** 배너 표시 후 카메라 복귀(EndEncounter)까지 유지 시간(초) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
+	float ClearHoldTime = 4.f;
+
 	/** 테스트용: BeginPlay 후 자동으로 StartEncounter 호출 (실전은 off, 트리거에서 호출) */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Debug")
 	bool bAutoStartOnBeginPlay = false;
@@ -109,10 +157,27 @@ private:
 	/** 전하 게이지/부활 컴포넌트를 플레이어 폰에 부착 (조우 시작 시. 이미 있으면 스킵) */
 	void SetupRaidComponentsForPlayers();
 
+	/** 클리어 배너 시점: GameState 에 클리어 마킹 (복제 -> 전 머신 배너) */
+	void ShowClearBanner();
+
+	/** 슬로모 복구 (타임 딜레이션 1로) */
+	void RestoreTimeDilation();
+
+	/** 연출 종료: 슬로모 복구 보증 + EndEncounter + 클리어 카메라 정리 */
+	void FinishClearSequence();
+
 	UPROPERTY(Transient)
 	TObjectPtr<ABossArenaCamera> ArenaCamera;
 
+	/** 클리어 연출용 고정 카메라 (복제 스폰 — 원격 클라 뷰타겟 지정용) */
+	UPROPERTY(Transient)
+	TObjectPtr<ACameraActor> ClearCamera;
+
 	bool bEncounterStarted = false;
+	bool bBossDied = false;	// NotifyBossDied 1회 가드
 
 	FTimerHandle ResonanceTimer;
+	FTimerHandle ClearSlomoTimer;
+	FTimerHandle ClearBannerTimer;
+	FTimerHandle ClearEndTimer;
 };

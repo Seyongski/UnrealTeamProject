@@ -6,7 +6,10 @@
 #include "GameFramework/GameStateBase.h"
 #include "BossRaidGameState.generated.h"
 
+class UUserWidget;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnArenaSlicesChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRaidCleared);
 
 /**
  * 보스 레이드 GameState.
@@ -26,6 +29,29 @@ public:
 	/** 파괴 시 방송 (서버/클라 모두. 슬라이스 액터·UI가 구독) */
 	UPROPERTY(BlueprintAssignable, Category = "Arena")
 	FOnArenaSlicesChanged OnArenaSlicesChanged;
+
+	/** 레이드 클리어 방송 (서버/클라 모두. 체력바 숨김/연출 등이 구독) */
+	UPROPERTY(BlueprintAssignable, Category = "Raid|Clear")
+	FOnRaidCleared OnRaidCleared;
+
+	/**
+	 * 클리어 배너 위젯 (WBP_RaidClear — GameState BP 에서 지정).
+	 * 클리어 복제 시 각 로컬 플레이어 화면에 자동 생성되고 ClearWidgetLifetime 후 제거된다.
+	 * 미지정이면 화면 디버그 텍스트 폴백 (WBP 없이도 흐름 테스트 가능).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear")
+	TSubclassOf<UUserWidget> ClearWidgetClass;
+
+	/** 클리어 배너 유지 시간(초). 지나면 자동 RemoveFromParent (0이면 위젯이 스스로 관리) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
+	float ClearWidgetLifetime = 5.f;
+
+	/** 클리어 여부 (복제) */
+	UFUNCTION(BlueprintPure, Category = "Raid|Clear")
+	bool IsRaidCleared() const { return bRaidCleared; }
+
+	/** 클리어 마킹 (서버 전용. GameMode 클리어 연출 시퀀스가 호출) -> 전 머신 방송 + 배너 표시 */
+	void MarkRaidCleared();
 
 	/** 피자 조각 수 (레벨별 GameState BP에서 설정) */
 	UPROPERTY(EditDefaultsOnly, Replicated, BlueprintReadOnly, Category = "Arena")
@@ -66,4 +92,26 @@ protected:
 
 	UFUNCTION()
 	void OnRep_DestroyedSliceMask();
+
+	/** 클리어 여부 (bit 아님 — 라운드당 1회) */
+	UPROPERTY(ReplicatedUsing = OnRep_RaidCleared, BlueprintReadOnly, Category = "Raid|Clear")
+	bool bRaidCleared = false;
+
+	UFUNCTION()
+	void OnRep_RaidCleared();
+
+private:
+	/** 공통 클리어 처리: 방송 + 로컬 배너 (서버 마킹/클라 OnRep 양쪽에서 호출) */
+	void HandleRaidCleared();
+
+	/** 이 머신의 로컬 플레이어 화면마다 클리어 배너 생성 (데디 서버는 로컬 플레이어 없음 -> no-op) */
+	void ShowClearBannerLocally();
+
+	/** 배너 수명 종료 -> 제거 */
+	void RemoveClearWidgets();
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UUserWidget>> ActiveClearWidgets;
+
+	FTimerHandle ClearWidgetTimer;
 };

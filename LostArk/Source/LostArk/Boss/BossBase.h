@@ -7,6 +7,7 @@
 #include "AbilitySystemInterface.h"
 #include "BossBase.generated.h"
 
+class UAnimMontage;
 class UBackHeadDecalComponent;
 class UAbilitySystemComponent;
 class UBossAttributeSet;
@@ -20,6 +21,9 @@ struct FOnAttributeChangeData;
 
 /** 보스 체력 변동 방송 (서버/클라 모두). 체력바 위젯이 구독해서 갱신 */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBossHealthChanged, float, NewHealth, float, MaxHealth);
+
+/** 보스 사망 방송 (서버에서 1회). 클라 표현은 State.Dead 복제 태그/사망 몽타주 멀티캐스트가 담당 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossDied);
 
 UCLASS()
 class LOSTARK_API ABossBase : public ACharacter, public IAbilitySystemInterface
@@ -67,6 +71,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|UI")
 	float GetMaxHealthValue() const;
 
+	/** 사망 방송 (서버에서 1회. FX/사운드 등 BP 훅용) */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Death")
+	FOnBossDied OnBossDied;
+
+	/** 사망 여부 (서버 기준. 클라는 State.Dead 복제 태그로 판단할 것) */
+	UFUNCTION(BlueprintPure, Category = "Boss|Death")
+	bool IsDead() const { return bDead; }
+
 	/** 위치 판정 존 각도 (UBossCombatStatics 가 읽어감) */
 	float GetHeadZoneHalfAngle() const { return HeadZoneHalfAngle; }
 	float GetBackZoneHalfAngle() const { return BackZoneHalfAngle; }
@@ -75,8 +87,23 @@ protected:
 	/** 초기 체력/무력화 게이지를 어트리뷰트에 세팅 (서버) */
 	void InitializeAttributes();
 
-	/** 체력 변화 콜백 -> 퍼센트 계산 후 패턴 컴포넌트에 전달 (지연 페이즈 전환) */
+	/** 체력 변화 콜백 -> 퍼센트 계산 후 패턴 컴포넌트에 전달 (지연 페이즈 전환). 0 도달 시 사망 진입 */
 	void OnHealthChanged(const FOnAttributeChangeData& Data);
+
+	/**
+	 * 사망 처리 (서버, 1회 가드).
+	 * State.Dead 복제 태그 -> 패턴 정지 + 어빌리티 취소 -> 장판/타워 정리 -> 이동 정지 +
+	 * 플레이어 통과 허용 -> 사망 몽타주 멀티캐스트 -> OnBossDied 방송 + 레이드 게임모드에 통지.
+	 */
+	virtual void HandleDeath();
+
+	/** 사망 몽타주 재생 (전 머신). 종료 시 마지막 포즈로 고정(bPauseAnims) — 일어나기 방지 */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayDeathMontage();
+
+	/** 사망 몽타주 (BP 에서 지정. 미지정 시 로그만 남기고 포즈 유지) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Death")
+	TObjectPtr<UAnimMontage> DeathMontage;
 
 	/** 백/헤드 어택 방향을 표시하는 지면 데칼 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|BackHead")
@@ -131,6 +158,12 @@ protected:
 	float InitialMaxStaggerGauge = 1000.f;
 
 private:
+	/** 사망 몽타주 종료 콜백: 마지막 포즈 고정 */
+	void OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	/** 재빙의 시 어트리뷰트 리셋/델리게이트 중복 바인딩/전투 재시작 방지 */
 	bool bGASInitialized = false;
+
+	/** 사망 처리 1회 가드 (서버) */
+	bool bDead = false;
 };

@@ -10,8 +10,8 @@
 |---|---|---|
 | 1 | 기믹 — 지형파괴 마무리 | 코어 로직 완료, 연출/UI/검증 남음 |
 | 2 | 보스 체력 UI + 무력화 게이지(보스 발밑) + 백헤드 데칼 머티리얼 | C++ 준비 완료, 위젯/머티리얼 제작 남음 |
-| 3 | 보스 사망 → 클리어 | **미구현** (체력 0 처리 자체가 없음) |
-| 4 | 클리어 연출 — **카메라 연출 + 위젯 방식으로 확정** | 미구현 |
+| 3 | 보스 사망 → 클리어 | **코드 구현 완료** — 보스 BP에 사망 몽타주 지정만 남음 |
+| 4 | 클리어 연출 — **카메라 연출 + 위젯 방식으로 확정** | **코드 구현 완료** — WBP_RaidClear 제작만 남음 |
 | - | 넉백/낙사 시스템 | **구현 완료** (사용법: §5) |
 
 **확정된 결정 사항 (2026-07-20 담당자 확인)**
@@ -121,47 +121,51 @@
 
 ---
 
-## 3. 보스 사망 → 클리어 (코드 작업 — 미구현)
+## 3. 보스 사망 → 클리어 (✅ 코드 구현 완료)
 
-### 현황
+### 구현된 흐름 (전부 서버 권위)
 
-- `UBossAttributeSet` 은 Health 를 0~Max 로 **clamp만** 한다. **0 도달 시 아무 일도 일어나지 않음.**
-- `LostArkTags::State_Dead` 태그는 존재 (플레이어 낙사에 사용 중).
-- `ABossRaidGameMode::EndEncounter()` 는 카메라 복귀만 한다.
-- `ABossBase::OnHealthChanged` 가 이미 체력 변화를 받아 페이즈 전환 판단에 쓰고 있음 → 사망 감지를 여기에 붙이는 게 자연스럽다.
+1. **사망 감지**: `ABossBase::OnHealthChanged` — Health 0 도달 시 `HandleDeath()` (1회 가드 `bDead`).
+2. **`ABossBase::HandleDeath()`**:
+   - `State.Dead` 복제 루스 태그 (클라 UI/플레이어 파트가 이 태그로 감지)
+   - `BossPatternComponent::StopCombat()`(신규 API — 이후 패턴 재개 금지) → `CancelAllAbilities()`
+   - 무력화 페이즈 종료, 살아있는 장판 전부 `DestroyAoeNow()`, 기믹 타워 Destroy (잡힌 플레이어는 장판 EndPlay 안전 복구)
+   - 이동 정지 + 캡슐 Pawn 채널 Ignore (시체가 길막 안 함, 바닥 지지는 유지)
+   - **사망 몽타주 멀티캐스트** 재생 → 종료 시 `bPauseAnims` 로 마지막 포즈 고정 (Idle 복귀 방지)
+   - `OnBossDied` 방송(BP 훅) + `BossRaidGameMode::NotifyBossDied()` 통지
+3. **클리어 상태 복제**: `ABossRaidGameState::bRaidCleared` (`ReplicatedUsing`) + `OnRaidCleared` 방송 (서버/클라 모두) — 체력바 숨김 등은 여기 구독.
 
-### 남은 작업 (권장 구현 순서)
+### 남은 작업
 
-- [ ] **사망 감지 (서버)**: `ABossBase::OnHealthChanged` 에서 `NewValue <= 0` && 아직 미사망 → `HandleDeath()` 진입 (1회 가드).
-- [ ] **사망 처리 `ABossBase::HandleDeath()` (서버)**:
-  - `State.Dead` 복제 루스 태그 부여 (`UBossCombatStatics::AddReplicatedLooseTag`)
-  - 패턴 정지: `BossPatternComponent` 중단 + 재생 중 몽타주 Stop + 카운터/저스트가드 창 닫기
-  - 월드 정리: 살아있는 `ABossPatternActorBase` 전부 `DestroyAoeNow()` (잡힌 플레이어는 `OnEndPlay` 안전 복구가 이미 처리), 기믹 타워 정리, 무력화 페이즈 종료
-  - 캡슐 콜리전 off (시체 관통 허용), 타겟팅/전하 공명 타이머 정지
-- [ ] **죽는 모션**: **사망 몽타주 에셋 있음(확정)** → `HandleDeath` 에서 멀티캐스트로 몽타주 재생, 마지막 프레임에서 정지(몽타주 끝 섹션 루프 또는 `SetPlayRate(0)`). 시체는 유지.
-- [ ] **클리어 상태 복제**: `ABossRaidGameState` 에 `bBossCleared`(또는 조우 상태 enum: 대기/전투/클리어) `ReplicatedUsing` 추가 + 방송 델리게이트 → 클라 UI/연출이 구독. §2 의 체력바 표시/숨김도 이 상태로 처리.
-- [ ] **GameMode 체인**: 보스 사망 통지(태그/델리게이트) → `BossRaidGameMode` 가 클리어 상태 세팅 → 클리어 연출(§4) → 연출 종료 후 `EndEncounter()`.
+- [ ] **보스 BP 에 `DeathMontage` 지정** (Boss|Death 카테고리). 미지정 시 로그 경고 + 포즈만 유지.
+- [ ] 사망 FX/사운드: `OnBossDied`(서버) 또는 `State.Dead` 태그(클라)에 BP 바인딩.
+- [ ] 체력바 위젯 숨김: `BossRaidGameState.OnRaidCleared` 구독 (§2-1 위젯 만들 때 함께).
 
-> 협업 경계 주의: 플레이어 쪽 클래스는 직접 참조 금지. 보스 사망을 플레이어/UI 에 알리는 건
-> **GameState 복제 + 태그**로만 넘긴다 (docs/00 원칙 1).
+> 협업 경계: 플레이어 쪽엔 **GameState 복제 + State.Dead 태그**로만 전달된다 (docs/00 원칙 1 준수).
 
 ---
 
-## 4. 클리어 연출 — **카메라 연출 + 위젯 방식 확정**
+## 4. 클리어 연출 — **카메라 연출 + 위젯 방식, ✅ 코드 구현 완료**
 
-레벨 시퀀스 없음. 기존 `ABossArenaCamera` 를 활용한 코드/BP 연출 + 클리어 배너 위젯.
-클리어 후에는 **그 자리에서 종료** (레벨 이동/결과 화면 없음).
+레벨 시퀀스 없음. 클리어 후에는 **그 자리에서 종료** (레벨 이동/결과 화면 없음).
 
-### 남은 작업 (권장 순서)
+### 구현된 시퀀스 (`ABossRaidGameMode::NotifyBossDied` — 서버 주도)
 
-- [ ] **연출 시퀀스 구현 (서버 주도, 카메라는 각 클라)**:
-  1. 보스 사망(§3 `HandleDeath`) → 사망 몽타주 재생 시작
-  2. 전 플레이어 뷰타겟을 보스 쪽으로 블렌드 (기존 `SetViewTargetWithBlend` 패턴 재사용 — 보스 줌인용 임시 카메라 or ArenaCamera 파라미터 조절)
-  3. (선택) 글로벌 슬로모: `SetGlobalTimeDilation(0.3)` 1~2초 후 복구 — 서버에서 걸면 복제 환경에서도 안전
-  4. 사망 몽타주 종료 시점 → 클라 전원 **클리어 배너 위젯** 표시 (GameState 클리어 복제 플래그에 클라가 반응 — §3)
-  5. 배너 수초 유지 → `EndEncounter()` 호출 (카메라 각자 캐릭터 복귀. 기존 구현 재사용)
-- [ ] **WBP_RaidClear 제작**: "클리어" 배너 + 사운드. (선택) 클리어 타임 = GameState 에 조우 시작 시각 기록해 계산.
-- [ ] **연출 중 입력 잠금**: 클리어 상태 동안 플레이어 입력/스킬 잠금 여부를 플레이어 파트와 협의 — 잠근다면 복제 태그(예: `State.Raid.Cleared`)로 넘긴다 (직접 참조 금지).
+| 시점 | 동작 |
+|---|---|
+| t=0 (사망) | 전 플레이어 뷰타겟 → **클리어 카메라** (보스 정면 `ClearCameraDistance`/`Height`에서 내려다보는 고정 샷, 복제 스폰) + **글로벌 슬로모** (`ClearSlomoDilation`, WorldSettings 복제로 전 머신 동시) |
+| t=`ClearSlomoDuration`(실초) | 슬로모 복구 |
+| t=`ClearBannerDelay` | `GameState.MarkRaidCleared()` → 복제 → **전 머신 클리어 배너** (`OnRaidCleared` 방송 + `ClearWidgetClass` 위젯 자동 생성, `ClearWidgetLifetime` 후 자동 제거. 미지정 시 화면 디버그 텍스트 폴백) |
+| t=+`ClearHoldTime` | `EndEncounter()` — 카메라 각자 캐릭터 복귀 + 클리어 카메라/공명 타이머 정리 |
+
+모든 타이밍/거리 값은 **GameMode BP 의 `Raid|Clear` 카테고리**에서 조정.
+
+### 남은 작업
+
+- [ ] **WBP_RaidClear 제작** 후 **GameState BP 의 `ClearWidgetClass` 에 지정**: "클리어" 배너 + 사운드. (위젯 등장 애니메이션은 WBP Construct 에서)
+- [ ] 클리어 카메라 구도 튜닝: 실제 보스 크기에 맞춰 `ClearCameraDistance/Height/FocusHeight` 조정 (기본 1300/700/350)
+- [ ] (선택) 연출 중 입력 잠금: 필요 시 `GameState.OnRaidCleared` / `IsRaidCleared()` 를 플레이어 파트가 구독해 처리 (직접 참조 금지)
+- [ ] (선택) 클리어 타임 표시: GameState 에 조우 시작 시각 기록 추가
 
 ---
 

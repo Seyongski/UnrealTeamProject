@@ -32,10 +32,10 @@ void ULostArkComboSkillAbility::ActivateAbility(const FGameplayAbilitySpecHandle
 	if (UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get())
 	{
 		FGameplayTagContainer HasTags;
-		HasTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
+		HasTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
 
 		FGameplayTagContainer BlockTags;
-		BlockTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Skill")));
+		BlockTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
 
 		ASC->CancelAbilities(&HasTags, &BlockTags, this);
 	}
@@ -163,6 +163,18 @@ void ULostArkComboSkillAbility::PlayComboSegment(int32 Index)
 	CurrentPlayTask->OnCancelled.AddDynamic(this, &ULostArkComboSkillAbility::OnComboMontageInterrupted);
 	CurrentPlayTask->ReadyForActivation();
 
+	if (ComboEventTag.IsValid())
+	{
+		if (UAbilitySystemComponent* ASC = CurrentActorInfo->AbilitySystemComponent.Get())
+		{
+			FGameplayEventData Payload;
+			Payload.EventTag = ComboEventTag;
+			Payload.EventMagnitude = static_cast<float>(Index + 1); // ?ㅼ쓬 肄ㅻ낫 ?④퀎
+			
+			ASC->HandleGameplayEvent(Payload.EventTag, &Payload);
+		}
+	}
+
 	if (Index > 0 && Index < 4)
 	{
 		const float MontageLength = MontageToPlay->GetPlayLength();
@@ -255,3 +267,4 @@ void ULostArkComboSkillAbility::EndAbility(const FGameplayAbilitySpecHandle Hand
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
+

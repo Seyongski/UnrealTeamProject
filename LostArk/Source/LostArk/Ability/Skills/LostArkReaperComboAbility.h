@@ -44,3 +44,4 @@ protected:
 	virtual void PlayComboSegment(int32 Index) override;
 	virtual void OnHitCheckReceived(FGameplayEventData Payload) override;
 };
+

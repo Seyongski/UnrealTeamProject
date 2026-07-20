@@ -1,11 +1,13 @@
-﻿#include "LostArk/Monster/LostArkMonster.h"
-#include "LostArk/Character/LostArkAttributeSet.h"
+#include "LostArk/Monster/LostArkMonster.h"
 #include "AbilitySystemComponent.h"
-#include "GameplayTagsManager.h"
+#include "LostArk/Character/LostArkAttributeSet.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "LostArk/UI/LostArkDamageTextActor.h"
+#include "LostArk/System/LostArkObjectPoolSubsystem.h"
 #include "LostArk/Monster/LostArkAIController.h"
 #include "TimerManager.h"
+#include "GameplayTagsManager.h"
 
 static const float MonsterDefaultRotationRateYaw = 480.f;
 
@@ -36,11 +38,11 @@ UAbilitySystemComponent* ALostArkMonster::GetAbilitySystemComponent() const
 
 void ALostArkMonster::BeginPlay()
 {
-	StateSpawningTag = FGameplayTag::RequestGameplayTag(FName("State.Spawning"));
-	StateIdleTag = FGameplayTag::RequestGameplayTag(FName("State.Idle"));
-	StateMovingTag = FGameplayTag::RequestGameplayTag(FName("State.Moving"));
-	StateAttackingTag = FGameplayTag::RequestGameplayTag(FName("State.Attacking"));
-	StateDeadTag = FGameplayTag::RequestGameplayTag(FName("State.Dead"));
+	StateSpawningTag = FGameplayTag::RequestGameplayTag(FName("State.Spawning"), false);
+	StateIdleTag = FGameplayTag::RequestGameplayTag(FName("State.Idle"), false);
+	StateMovingTag = FGameplayTag::RequestGameplayTag(FName("State.Moving"), false);
+	StateAttackingTag = FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false);
+	StateDeadTag = FGameplayTag::RequestGameplayTag(FName("State.Dead"), false);
 
 	Super::BeginPlay();
 
@@ -135,21 +137,42 @@ void ALostArkMonster::Die()
 	}
 
 	bIsDead = true;
-	SetMonsterState(StateDeadTag);
-
-	GetWorldTimerManager().ClearTimer(SpawnFinishedTimerHandle);
-
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	
-	GetCharacterMovement()->DisableMovement();
-	GetCharacterMovement()->StopMovementImmediately();
 
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->CancelAllAbilities();
 	}
 
-	GetWorldTimerManager().SetTimer(DeathTimerHandle, this, &ALostArkMonster::FinishDeath, 2.5f, false);
+	SetMonsterState(StateDeadTag);
+
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	
+	GetCharacterMovement()->DisableMovement();
+	GetCharacterMovement()->StopMovementImmediately();
+
+	GetWorldTimerManager().SetTimer(DeathTimerHandle, this, &ALostArkMonster::FinishDeath, 2.0f, false);
+}
+
+void ALostArkMonster::ShowDamageText(float DamageAmount)
+{
+	if (DamageTextClass)
+	{
+		if (ULostArkObjectPoolSubsystem* Pool = GetWorld()->GetSubsystem<ULostArkObjectPoolSubsystem>())
+		{
+			float RandomX = FMath::RandRange(-50.f, 50.f);
+			float RandomY = FMath::RandRange(-50.f, 50.f);
+			float RandomZ = FMath::RandRange(50.f, 150.f);
+			FVector SpawnLoc = GetActorLocation() + FVector(RandomX, RandomY, RandomZ);
+			
+			if (AActor* SpawnedText = Pool->AcquireActor(DamageTextClass, SpawnLoc, FRotator::ZeroRotator))
+			{
+				if (ALostArkDamageTextActor* TextActor = Cast<ALostArkDamageTextActor>(SpawnedText))
+				{
+					TextActor->SetupDamageText(DamageAmount);
+				}
+			}
+		}
+	}
 }
 
 void ALostArkMonster::FinishDeath()
@@ -210,6 +233,7 @@ void ALostArkMonster::OnReleasedToPool_Implementation()
 	
 	UE_LOG(LogTemp, Log, TEXT("[Monster] %s released to pool, clean up complete."), *GetName());
 }
+
 
 
 

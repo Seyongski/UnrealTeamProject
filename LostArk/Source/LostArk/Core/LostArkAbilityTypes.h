@@ -18,6 +18,7 @@ enum class ELostArkAbilityInputID : uint8
 	SkillS,
 	SkillD,
 	SkillF,
-	Dash
+	Dash,
+	JustGuard
 };
 

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkSkillGameplayAbility.h"
@@ -48,6 +48,7 @@ private:
 	FTimerHandle ShadowSpawnTimerHandle;
 	int32 SpawnedShadowCount;
 };
+
 
 
 

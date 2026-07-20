@@ -1,8 +1,10 @@
-﻿#include "LostArk/Actor/LostArkTargetActor_GroundSelect.h"
+#include "LostArk/Actor/LostArkTargetActor_GroundSelect.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/DecalComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "InputAction.h"          // 엔진이 제공하는 헤더 그대로 가져다 씀
+#include "EnhancedInputComponent.h"
 
 ALostArkTargetActor_GroundSelect::ALostArkTargetActor_GroundSelect()
 {
@@ -36,6 +38,48 @@ void ALostArkTargetActor_GroundSelect::StartTargeting(UGameplayAbility* Ability)
 	ActivatedTime = 0.f;
 	bPrevLMB = true;
 	bPrevRMB = false;
+
+	if (SkillInputAction)
+	{
+		APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+		APawn* ControlledPawn = PC ? PC->GetPawn() : nullptr;
+
+		UEnhancedInputComponent* EIC = nullptr;
+		if (ControlledPawn)
+		{
+			EIC = Cast<UEnhancedInputComponent>(ControlledPawn->InputComponent);
+		}
+		if (!EIC && PC)
+		{
+			EIC = Cast<UEnhancedInputComponent>(PC->InputComponent);
+		}
+
+		if (EIC)
+		{
+			SkillActionBindingHandle = &EIC->BindAction(
+				SkillInputAction,
+				ETriggerEvent::Started,
+				this,
+				&ALostArkTargetActor_GroundSelect::OnSkillInputPressed
+			);
+			UE_LOG(LogTemp, Warning, TEXT("[TargetActor] Skill Bind Success"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[TargetActor] EnhancedInputComponent Cast Failed!"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[TargetActor] SkillInputAction is NULL!"));
+	}
+}
+
+void ALostArkTargetActor_GroundSelect::OnSkillInputPressed()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[TargetActor] Skill Key Pressed - Confirm Attempt"));
+	if (!bCanConfirm) return; // 발동 직후 0.15초 딜레이 그대로 적용됨
+	ConfirmTargetingAndContinue();
 }
 
 void ALostArkTargetActor_GroundSelect::ConfirmTargetingAndContinue()
@@ -117,6 +161,7 @@ bool ALostArkTargetActor_GroundSelect::GetMouseCursorLocation(FVector& OutLocati
 	}
 	return false;
 }
+
 
 
 

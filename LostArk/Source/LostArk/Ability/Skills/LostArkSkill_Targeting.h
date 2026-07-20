@@ -1,8 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkSkillGameplayAbility.h"
 #include "LostArkSkill_Targeting.generated.h"
+
+class UInputAction;
 
 UCLASS()
 class LOSTARK_API ULostArkSkill_Targeting : public ULostArkSkillGameplayAbility
@@ -27,12 +29,20 @@ protected:
 
 	virtual void OnHitCheckReceived(FGameplayEventData Payload) override;
 
+public:
+	UPROPERTY()
+	TObjectPtr<const UInputAction> SkillInputAction;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Skill|Targeting")
+	void K2_OnTargetConfirmed(const FVector& TargetLocation);
+
 private:
 	FVector CachedTargetLocation;
 
 	UPROPERTY()
 	class ALostArkTargetActor_GroundSelect* SpawnedTargetActor;
 };
+
 
 
 

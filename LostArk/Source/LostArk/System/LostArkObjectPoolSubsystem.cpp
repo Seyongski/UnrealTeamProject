@@ -1,4 +1,4 @@
-﻿#include "LostArk/System/LostArkObjectPoolSubsystem.h"
+#include "LostArk/System/LostArkObjectPoolSubsystem.h"
 #include "LostArk/System/LostArkPoolableInterface.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
@@ -94,6 +94,7 @@ void ULostArkObjectPoolSubsystem::ReleaseActor(AActor* ActorToRelease)
 	UE_LOG(LogTemp, Log, TEXT("[ObjectPool] Released actor to pool: %s (Total Inactive: %d)"), 
 		*ActorClass->GetName(), PoolMap[ActorClass].InactiveActors.Num());
 }
+
 
 
 

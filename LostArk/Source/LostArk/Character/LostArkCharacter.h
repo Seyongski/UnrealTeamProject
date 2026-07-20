@@ -49,11 +49,19 @@ public:
 
 	virtual void SetCombatState(FGameplayTag NewStateTag) override;
 
+	virtual void ShowDamageText(float DamageAmount) override;
+
 	UFUNCTION(BlueprintCallable, Category = "Character|Abilities")
 	void RequestComboAttackInput();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|UI")
+	void OnCounterSuccess_UI();
+
 	UFUNCTION(BlueprintCallable, Category = "Character|Weapon")
 	void SetWeaponEquipped(bool bIsEquipped);
+
+	UFUNCTION(BlueprintPure, Category = "Character|Weapon")
+	bool IsWeaponEquipped() const { return bIsWeaponEquipped; }
 
 	FORCEINLINE class UCameraComponent* GetTopDownCameraComponent() const { return TopDownCameraComponent; }
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -85,6 +93,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	class UAnimMontage* SheathWeaponMontage;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|UI")
+	TSubclassOf<class ALostArkDamageTextActor> DamageTextClass;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Abilities")
 	TSubclassOf<class UGameplayAbility> ComboAttackAbilityClass;
 
@@ -97,12 +108,17 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Character")
 	bool bIsDead;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Character|Weapon")
+	bool bIsWeaponEquipped;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character|State")
 	FGameplayTag CurrentStateTag;
 
 private:
 	void OnSkillInputPressed(ELostArkAbilityInputID InputID);
 	void OnSkillInputReleased(ELostArkAbilityInputID InputID);
+
+	void HandleCounterSuccessEvent(const FGameplayEventData* Payload);
 
 	void OnAttackingTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	void PlaySheathWeaponMontage();
@@ -118,6 +134,7 @@ private:
 
 	FGameplayAbilitySpecHandle ComboAttackAbilityHandle;
 };
+
 
 
 

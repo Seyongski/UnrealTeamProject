@@ -1,4 +1,4 @@
-﻿#include "LostArk/Core/LostArkPlayerController.h"
+#include "LostArk/Core/LostArkPlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "NiagaraSystem.h"
@@ -12,6 +12,9 @@
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
 #include "LostArk/Core/LostArkCombatInterface.h"
+#include "Blueprint/UserWidget.h"
+#include "LostArk/UI/LostArkHUDWidget.h"
+#include "Kismet/GameplayStatics.h"
 // [임시 디버그] 카운터 강제용 include (나중에 삭제)
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
@@ -36,6 +39,16 @@ void ALostArkPlayerController::BeginPlay()
 	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
 		Subsystem->AddMappingContext(DefaultMappingContext, 0);
+	}
+
+	if (HUDWidgetClass)
+	{
+		HUDWidget = CreateWidget<ULostArkHUDWidget>(this, HUDWidgetClass);
+		if (HUDWidget)
+		{
+			HUDWidget->AddToViewport();
+			HUDWidget->BindAttributeDelegates();
+		}
 	}
 }
 
@@ -68,7 +81,7 @@ void ALostArkPlayerController::SetupInputComponent()
 	}
 }
 
-// ===== [임시 디버그] 아래 3개 함수는 카운터/그로기 확인용. 나중에 전부 삭제 =====
+// ===== [임시 디버그] 아래 함수들은 카운터/그로기 확인용. 나중에 전부 삭제 =====
 void ALostArkPlayerController::DebugForceCounterHit()
 {
 	// 입력은 클라이언트에서 들어오므로 서버 권한으로 넘겨서 실제 판정을 돌린다
@@ -98,9 +111,7 @@ void ALostArkPlayerController::ServerDebugForceCounterHit_Implementation()
 		break;	// 보스 1개 가정 (임시)
 	}
 }
-// ==============================================================================
 
-// ===== [임시 디버그] G -> 저스트가드 모션 확인용. 나중에 전부 삭제 =====
 void ALostArkPlayerController::DebugTryJustGuard()
 {
 	// 실제 판정/가드가능 여부는 서버가 안다 -> 서버로 넘겨 처리 + 메시지도 서버(리슨)에서 표시
@@ -122,7 +133,7 @@ void ALostArkPlayerController::ServerDebugTryJustGuard_Implementation()
 		UBossJustGuardComponent* JustGuard = It->FindComponentByClass<UBossJustGuardComponent>();
 		if (JustGuard && JustGuard->HasGuardReady(MyPawn))
 		{
-			// 창 열림 + 아직 가드 안 씀 -> 1회 가드 모션 발동 (성공/실패는 장판이 판정 시각 J 에 표시)
+			// 창 열림 + 아직 가드 안 씀 -> 1회 가드 모션 발동 (성공/실패는 장판이 판정 시각에 표시)
 			if (GEngine)
 			{
 				GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Cyan, TEXT("[DEBUG] G -> 저스트가드 모션 발동"));
@@ -145,7 +156,7 @@ void ALostArkPlayerController::OnInputStarted()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ActivePawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"))))
+			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
 			{
 				return;
 			}
@@ -161,7 +172,7 @@ void ALostArkPlayerController::OnSetDestinationTriggered()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ActivePawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"))))
+			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
 			{
 				return;
 			}
@@ -201,7 +212,7 @@ void ALostArkPlayerController::OnSetDestinationReleased()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ControlledPawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"))))
+			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
 			{
 				FollowTime = 0.f;
 				return;
@@ -237,6 +248,7 @@ void ALostArkPlayerController::OnTouchReleased()
 	bIsTouch = false;
 	OnSetDestinationReleased();
 }
+
 
 
 

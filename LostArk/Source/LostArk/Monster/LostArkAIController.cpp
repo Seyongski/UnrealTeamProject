@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "LostArk/Monster/LostArkAIController.h"
 #include "LostArk/Monster/LostArkMonster.h"
@@ -16,11 +16,11 @@ ALostArkAIController::ALostArkAIController()
 	PrimaryActorTick.bCanEverTick = false;
 	TargetCheckInterval = 0.2f;
 
-	StateSpawningTag = FGameplayTag::RequestGameplayTag(FName("State.Spawning"));
-	StateIdleTag = FGameplayTag::RequestGameplayTag(FName("State.Idle"));
-	StateMovingTag = FGameplayTag::RequestGameplayTag(FName("State.Moving"));
-	StateAttackingTag = FGameplayTag::RequestGameplayTag(FName("State.Attacking"));
-	StateDeadTag = FGameplayTag::RequestGameplayTag(FName("State.Dead"));
+	StateSpawningTag = FGameplayTag::RequestGameplayTag(FName("State.Spawning"), false);
+	StateIdleTag = FGameplayTag::RequestGameplayTag(FName("State.Idle"), false);
+	StateMovingTag = FGameplayTag::RequestGameplayTag(FName("State.Moving"), false);
+	StateAttackingTag = FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false);
+	StateDeadTag = FGameplayTag::RequestGameplayTag(FName("State.Dead"), false);
 }
 
 void ALostArkAIController::OnPossess(APawn* InPawn)
@@ -111,6 +111,7 @@ void ALostArkAIController::UpdateAIBehavior()
 		MoveTo(MoveRequest);
 	}
 }
+
 
 
 

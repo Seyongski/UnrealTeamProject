@@ -1,4 +1,4 @@
-﻿#include "LostArk/Actor/LostArkProjectile.h"
+#include "LostArk/Actor/LostArkProjectile.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Particles/ParticleSystemComponent.h"
@@ -78,6 +78,7 @@ void ALostArkProjectile::OnProjectileStop(UPrimitiveComponent* HitComponent, AAc
 
 	Destroy();
 }
+
 
 
 

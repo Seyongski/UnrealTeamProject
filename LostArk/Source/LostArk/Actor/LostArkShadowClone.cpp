@@ -1,4 +1,4 @@
-﻿#include "LostArk/Actor/LostArkShadowClone.h"
+#include "LostArk/Actor/LostArkShadowClone.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayEffect.h"
@@ -51,18 +51,27 @@ void ALostArkShadowClone::Tick(float DeltaTime)
 		FVector CurrentLoc = GetActorLocation();
 		FVector NewLoc = CurrentLoc + DashDirection * (CurrentDashSpeed * DeltaTime);
 
+		FVector TraceStart = CurrentLoc + FVector(0.f, 0.f, 50.f);
+		FVector TraceEnd = NewLoc + FVector(0.f, 0.f, 50.f);
+
 		FHitResult WallHit;
 		FCollisionQueryParams Params;
 		Params.AddIgnoredActor(this);
+		if (GetInstigator())
+		{
+			Params.AddIgnoredActor(GetInstigator());
+		}
 
-		bool bHitWall = GetWorld()->LineTraceSingleByChannel(WallHit, CurrentLoc, NewLoc, ECC_WorldStatic, Params);
+		bool bHitWall = GetWorld()->LineTraceSingleByChannel(WallHit, TraceStart, TraceEnd, ECC_WorldStatic, Params);
 		if (!bHitWall)
 		{
 			SetActorLocation(NewLoc);
 		}
 		else
 		{
-			SetActorLocation(WallHit.ImpactPoint);
+			FVector HitLoc = WallHit.ImpactPoint;
+			HitLoc.Z = CurrentLoc.Z;
+			SetActorLocation(HitLoc);
 			ElapsedDashTime = CurrentDashDuration;
 		}
 	}
@@ -323,6 +332,7 @@ void ALostArkShadowClone::SelfDestruct()
 	GetWorldTimerManager().ClearTimer(SelfDestructTimerHandle);
 	Destroy();
 }
+
 
 
 

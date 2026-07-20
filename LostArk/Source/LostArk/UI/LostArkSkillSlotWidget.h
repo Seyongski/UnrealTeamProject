@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "LostArk/UI/LostArkUserWidget.h"
-#include "LostArk/Core/LostArkAbilityTypes.h"
+#include "UI/LostArkUserWidget.h"
+#include "Core/LostArkAbilityTypes.h"
 #include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "LostArkSkillSlotWidget.generated.h"

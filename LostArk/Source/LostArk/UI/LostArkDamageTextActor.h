@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "LostArk/System/LostArkPoolableInterface.h"
+#include "Combat/LostArkPoolableInterface.h"
 #include "LostArkDamageTextActor.generated.h"
 
 class UWidgetComponent;

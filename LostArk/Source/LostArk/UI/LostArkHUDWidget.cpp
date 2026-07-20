@@ -1,6 +1,6 @@
-#include "LostArk/UI/LostArkHUDWidget.h"
+﻿#include "UI/LostArkHUDWidget.h"
 #include "AbilitySystemComponent.h"
-#include "LostArk/Character/LostArkAttributeSet.h"
+#include "Character/LostArkAttributeSet.h"
 
 void ULostArkHUDWidget::BindAttributeDelegates()
 {

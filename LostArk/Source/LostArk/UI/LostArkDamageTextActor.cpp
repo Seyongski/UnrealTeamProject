@@ -1,6 +1,6 @@
-#include "LostArk/UI/LostArkDamageTextActor.h"
+﻿#include "UI/LostArkDamageTextActor.h"
 #include "Components/WidgetComponent.h"
-#include "LostArk/System/LostArkObjectPoolSubsystem.h"
+#include "Combat/LostArkObjectPoolSubsystem.h"
 
 ALostArkDamageTextActor::ALostArkDamageTextActor()
 {

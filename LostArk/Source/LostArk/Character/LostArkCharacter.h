@@ -4,8 +4,8 @@
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
 #include "GameplayAbilitySpec.h"
-#include "LostArk/Core/LostArkCombatInterface.h"
-#include "LostArk/Core/LostArkAbilityTypes.h"
+#include "Core/LostArkCombatInterface.h"
+#include "Core/LostArkAbilityTypes.h"
 #include "LostArkCharacter.generated.h"
 
 USTRUCT(BlueprintType)
@@ -70,6 +70,9 @@ public:
 public:
 	UPROPERTY(BlueprintReadWrite, Category = "Character|Anim")
 	bool bIsLeftFootForward;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|UI")
+	TSubclassOf<class ULostArkHUDWidget> CharacterHUDClass;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")

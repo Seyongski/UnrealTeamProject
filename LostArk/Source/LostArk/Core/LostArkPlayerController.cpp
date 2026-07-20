@@ -1,9 +1,9 @@
-#include "LostArk/Core/LostArkPlayerController.h"
+#include "Core/LostArkPlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
-#include "LostArk/Character/LostArkCharacter.h"
+#include "Character/LostArkCharacter.h"
 #include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
@@ -11,16 +11,16 @@
 #include "Engine/LocalPlayer.h"
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
-#include "LostArk/Core/LostArkCombatInterface.h"
+#include "Core/LostArkCombatInterface.h"
 #include "Blueprint/UserWidget.h"
-#include "LostArk/UI/LostArkHUDWidget.h"
+#include "UI/LostArkHUDWidget.h"
 #include "Kismet/GameplayStatics.h"
 // [임시 디버그] 카운터 강제용 include (나중에 삭제)
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
-#include "LostArk/Boss/BossBase.h"
-#include "LostArk/Boss/Combat/BossCounterComponent.h"
-#include "LostArk/Boss/Combat/BossJustGuardComponent.h"
+#include "Boss/BossBase.h"
+#include "Boss/Combat/BossCounterComponent.h"
+#include "Boss/Combat/BossJustGuardComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -249,7 +249,27 @@ void ALostArkPlayerController::OnTouchReleased()
 	OnSetDestinationReleased();
 }
 
+void ALostArkPlayerController::InitializeHUDForCharacter(class ALostArkCharacter* InCharacter)
+{
+	if (!InCharacter) return;
 
+	// 기존 HUD가 있으면 제거
+	if (HUDWidget)
+	{
+		HUDWidget->RemoveFromParent();
+		HUDWidget = nullptr;
+	}
 
+	// 캐릭터에 지정된 고유 HUD 클래스가 있다면 우선 사용, 없으면 컨트롤러의 기본 HUD 클래스 사용
+	TSubclassOf<class ULostArkHUDWidget> ClassToUse = InCharacter->CharacterHUDClass ? InCharacter->CharacterHUDClass : HUDWidgetClass;
 
-
+	if (ClassToUse)
+	{
+		HUDWidget = CreateWidget<ULostArkHUDWidget>(this, ClassToUse);
+		if (HUDWidget)
+		{
+			HUDWidget->AddToViewport();
+			HUDWidget->BindAttributeDelegates();
+		}
+	}
+}

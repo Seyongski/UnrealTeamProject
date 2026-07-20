@@ -1,4 +1,4 @@
-#include "LostArk/Character/LostArkCharacter.h"
+#include "Character/LostArkCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Camera/CameraComponent.h"
 #include "Components/DecalComponent.h"
@@ -9,15 +9,14 @@
 #include "Materials/Material.h"
 #include "Engine/World.h"
 #include "AbilitySystemComponent.h"
-#include "LostArk/Character/LostArkAttributeSet.h"
-#include "LostArk/Ability/LostArkCharacterComboAttackAbility.h"
+#include "Character/LostArkAttributeSet.h"
+#include "Abilities/LostArkCharacterComboAttackAbility.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
-#include "LostArk/UI/LostArkDamageTextActor.h"
-#include "LostArk/System/LostArkObjectPoolSubsystem.h"
-#include "LostArk/Ability/Skills/LostArkSkill_Targeting.h"
-#include "LostArk/UI/LostArkDamageTextActor.h"
-#include "LostArk/System/LostArkObjectPoolSubsystem.h"
+#include "UI/LostArkDamageTextActor.h"
+#include "Combat/LostArkObjectPoolSubsystem.h"
+#include "Abilities/LostArkSkill_Targeting.h"
+#include "Core/LostArkPlayerController.h"
 
 static const float DefaultCapsuleRadius = 42.f;
 static const float DefaultCapsuleHalfHeight = 96.f;
@@ -161,6 +160,11 @@ void ALostArkCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 				EnhancedInputComponent->BindAction(Bind.InputAction, ETriggerEvent::Completed, this, &ALostArkCharacter::OnSkillInputReleased, Bind.InputID);
 			}
 		}
+	}
+
+	if (ALostArkPlayerController* PC = Cast<ALostArkPlayerController>(GetController()))
+	{
+		PC->InitializeHUDForCharacter(this);
 	}
 }
 

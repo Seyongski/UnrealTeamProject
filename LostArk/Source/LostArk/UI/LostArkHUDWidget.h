@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "LostArk/UI/LostArkUserWidget.h"
+#include "UI/LostArkUserWidget.h"
 #include "GameplayEffectTypes.h"
 #include "LostArkHUDWidget.generated.h"
 

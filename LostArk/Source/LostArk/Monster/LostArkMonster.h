@@ -1,12 +1,12 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
 #include "GameplayTagContainer.h"
 #include "GameplayAbilitySpec.h"
-#include "LostArk/System/LostArkPoolableInterface.h"
-#include "LostArk/Core/LostArkCombatInterface.h"
+#include "Combat/LostArkPoolableInterface.h"
+#include "Core/LostArkCombatInterface.h"
 #include "LostArkMonster.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMonsterKilledSignature, ALostArkMonster*, KilledMonster);

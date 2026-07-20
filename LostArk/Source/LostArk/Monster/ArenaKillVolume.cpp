@@ -1,8 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "LostArk/Monster/ArenaKillVolume.h"
-#include "LostArk/Boss/BossGameplayTags.h"
+#include "Monster/ArenaKillVolume.h"
+#include "Boss/BossGameplayTags.h"
 #include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"

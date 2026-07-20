@@ -1,8 +1,8 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "LostArk/Core/LostArkGameMode.h"
-#include "LostArk/Core/LostArkPlayerController.h"
-#include "LostArk/Character/LostArkCharacter.h"
+#include "Core/LostArkGameMode.h"
+#include "Core/LostArkPlayerController.h"
+#include "Character/LostArkCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
 ALostArkGameMode::ALostArkGameMode()
@@ -24,5 +24,6 @@ ALostArkGameMode::ALostArkGameMode()
 		PlayerControllerClass = PlayerControllerBPClass.Class;
 	}
 }
+
 
 

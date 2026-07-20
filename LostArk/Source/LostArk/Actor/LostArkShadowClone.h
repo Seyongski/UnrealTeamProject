@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayEffectTypes.h"
-#include "LostArk/Ability/LostArkGameplayAbility.h"
+#include "Abilities/LostArkGameplayAbility.h"
 #include "LostArkShadowClone.generated.h"
 
 UCLASS()

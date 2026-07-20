@@ -22,6 +22,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	float ShortPressThreshold;
 
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void InitializeHUDForCharacter(class ALostArkCharacter* InCharacter);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	TSoftObjectPtr<UNiagaraSystem> FXCursor;
 

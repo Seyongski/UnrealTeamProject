@@ -1,8 +1,8 @@
-﻿#include "LostArk/Animation/LostArkAnimNotify_HitCheck.h"
+﻿#include "Animation/LostArkAnimNotify_HitCheck.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Actor.h"
-#include "LostArk/Actor/LostArkShadowClone.h"
+#include "Actor/LostArkShadowClone.h"
 
 void ULostArkAnimNotify_HitCheck::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation)
 {
@@ -34,6 +34,7 @@ FString ULostArkAnimNotify_HitCheck::GetNotifyName_Implementation() const
 {
 	return TEXT("HitCheck");
 }
+
 
 
 

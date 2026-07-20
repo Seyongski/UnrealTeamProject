@@ -47,6 +47,18 @@ protected:
 	void OnTouchTriggered();
 	void OnTouchReleased();
 
+	// ===== [임시 디버그] Q -> 보스 카운터 강제 (헤드존 무시). 카운터/그로기 흐름 확인용. 나중에 전부 삭제 =====
+	void DebugForceCounterHit();
+	UFUNCTION(Server, Reliable)
+	void ServerDebugForceCounterHit();
+	// ============================================================================================
+
+	// ===== [임시 디버그] G -> 저스트가드 모션. 창이 없으면 '비활성화', 있으면 '발동'(+성공/실패는 장판이 표시). 나중에 삭제 =====
+	void DebugTryJustGuard();
+	UFUNCTION(Server, Reliable)
+	void ServerDebugTryJustGuard();
+	// ============================================================================================
+
 private:
 	FVector CachedDestination;
 	bool bIsTouch;

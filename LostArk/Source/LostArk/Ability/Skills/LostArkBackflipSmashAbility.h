@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkSkillGameplayAbility.h"
@@ -46,6 +46,7 @@ protected:
 	UFUNCTION()
 	void OnSmashDelayFinished();
 };
+
 
 
 

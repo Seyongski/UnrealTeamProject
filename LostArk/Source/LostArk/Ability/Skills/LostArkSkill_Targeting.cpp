@@ -2,14 +2,15 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "LostArk/Actor/LostArkTargetActor_GroundSelect.h"
 #include "AbilitySystemComponent.h"
+#include "InputAction.h"
 
 ULostArkSkill_Targeting::ULostArkSkill_Targeting()
 {
 	TargetActorClass = ALostArkTargetActor_GroundSelect::StaticClass();
 	SpawnedTargetActor = nullptr;
 
-	ActivationOwnedTags.RemoveTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
-	ActivationOwnedTags.RemoveTag(FGameplayTag::RequestGameplayTag(FName("State.Skill")));
+	ActivationOwnedTags.RemoveTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
+	ActivationOwnedTags.RemoveTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
 }
 
 void ULostArkSkill_Targeting::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -23,8 +24,10 @@ void ULostArkSkill_Targeting::ActivateAbility(const FGameplayAbilitySpecHandle H
 		return;
 	}
 
-	// 시전 시작 시점에 즉각 이동 정지 및 초기 마우스 방향 회전을 수행합니다.
+	// ?쒖쟾 ?쒖옉 ?쒖젏??利됯컖 ?대룞 ?뺤? 諛?珥덇린 留덉슦??諛⑺뼢 ?뚯쟾???섑뻾?⑸땲??
 	HandleActivationBasics(ActorInfo);
+
+	K2_ActivateAbility();
 
 	if (!TargetActorClass)
 	{
@@ -62,6 +65,7 @@ void ULostArkSkill_Targeting::ActivateAbility(const FGameplayAbilitySpecHandle H
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] Direct TargetActor Spawn Success!"));
 		SpawnedTargetActor->TargetRadius = DamageShapeParams.Radius;
+		SpawnedTargetActor->SkillInputAction = SkillInputAction;
 		SpawnedTargetActor->StartTargeting(this);
 
 		SpawnedTargetActor->OnTargetSelected.AddDynamic(this, &ULostArkSkill_Targeting::OnTargetSelectedDirect);
@@ -78,8 +82,8 @@ void ULostArkSkill_Targeting::EndAbility(const FGameplayAbilitySpecHandle Handle
 {
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Skill")));
-		ASC->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
+		ASC->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
+		ASC->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
 	}
 
 	if (SpawnedTargetActor)
@@ -96,10 +100,19 @@ void ULostArkSkill_Targeting::OnTargetSelectedDirect(const FVector& Location)
 	CachedTargetLocation = Location;
 	UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] Target Point Confirmed: %s"), *Location.ToString());
 
+	// 여기 추가: 블루프린트에 타겟 위치 전달
+	K2_OnTargetConfirmed(CachedTargetLocation);
+
+	if (SpawnedTargetActor)
+	{
+		SpawnedTargetActor->Destroy();
+		SpawnedTargetActor = nullptr;
+	}
+
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
 	if (AvatarActor)
 	{
-		// 확정 클릭 시점에도 최종 타겟 위치를 향해 캐릭터를 즉각 회전시킵니다.
+		// ?뺤젙 ?대┃ ?쒖젏?먮룄 理쒖쥌 ?寃??꾩튂瑜??ν빐 罹먮┃?곕? 利됯컖 ?뚯쟾?쒗궢?덈떎.
 		FVector DirToTarget = CachedTargetLocation - AvatarActor->GetActorLocation();
 		DirToTarget.Z = 0.f;
 		if (!DirToTarget.IsNearlyZero())
@@ -110,8 +123,8 @@ void ULostArkSkill_Targeting::OnTargetSelectedDirect(const FVector& Location)
 
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Skill")));
-		ASC->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
+		ASC->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
+		ASC->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
 	}
 
 	SetupHitCheckListener();
@@ -171,9 +184,9 @@ void ULostArkSkill_Targeting::OnHitCheckReceived(FGameplayEventData Payload)
 	DirToTarget.Z = 0.f;
 	FRotator LookRot = DirToTarget.Rotation();
 
-	// 바닥의 Z(마우스 클릭 지점)에서 캐릭터들의 평균 중심 높이(약 90.f)만큼 
-	// 스캔 구체의 중심 높이를 강제 상승 보정해 줍니다. 
-	// 이렇게 하면 공통 ApplyDamageShape 내의 단순 Abs(Z차이) 비교 연산 속도를 100% 가볍게 유지할 수 있습니다.
+	// 諛붾떏??Z(留덉슦???대┃ 吏???먯꽌 罹먮┃?곕뱾???됯퇏 以묒떖 ?믪씠(??90.f)留뚰겮 
+	// ?ㅼ틪 援ъ껜??以묒떖 ?믪씠瑜?媛뺤젣 ?곸듅 蹂댁젙??以띾땲?? 
+	// ?대젃寃??섎㈃ 怨듯넻 ApplyDamageShape ?댁쓽 ?⑥닚 Abs(Z李⑥씠) 鍮꾧탳 ?곗궛 ?띾룄瑜?100% 媛蹂띻쾶 ?좎??????덉뒿?덈떎.
 	FVector AdjustedLocation = CachedTargetLocation + FVector(0.f, 0.f, 90.f);
 
 	ApplyDamageShape(
@@ -182,6 +195,8 @@ void ULostArkSkill_Targeting::OnHitCheckReceived(FGameplayEventData Payload)
 		AvatarActor
 	);
 }
+
+
 
 
 

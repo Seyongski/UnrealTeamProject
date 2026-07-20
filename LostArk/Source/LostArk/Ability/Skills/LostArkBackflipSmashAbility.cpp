@@ -31,10 +31,10 @@ void ULostArkBackflipSmashAbility::ActivateAbility(const FGameplayAbilitySpecHan
 	if (UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get())
 	{
 		FGameplayTagContainer HasTags;
-		HasTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
+		HasTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
 
 		FGameplayTagContainer BlockTags;
-		BlockTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Skill")));
+		BlockTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
 
 		ASC->CancelAbilities(&HasTags, &BlockTags, this);
 	}
@@ -205,6 +205,7 @@ void ULostArkBackflipSmashAbility::EndAbility(const FGameplayAbilitySpecHandle H
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
+
 
 
 

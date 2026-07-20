@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -59,6 +59,7 @@ private:
 	TSubclassOf<class UGameplayEffect> DamageEffectClass;
 	FDamageShapeParams DamageShape;
 };
+
 
 
 

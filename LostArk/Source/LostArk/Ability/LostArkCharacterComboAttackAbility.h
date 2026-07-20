@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkGameplayAbility.h"
@@ -61,6 +61,7 @@ private:
 	FTimerHandle ComboWindowOpenTimerHandle;
 	FTimerHandle ComboWindowCloseTimerHandle;
 };
+
 
 
 

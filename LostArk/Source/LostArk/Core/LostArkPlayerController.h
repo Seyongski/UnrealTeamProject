@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Templates/SubclassOf.h"
@@ -40,6 +40,12 @@ protected:
 	virtual void SetupInputComponent() override;
 	
 	virtual void BeginPlay() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class ULostArkHUDWidget> HUDWidgetClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	class ULostArkHUDWidget* HUDWidget;
 
 	void OnInputStarted();
 	void OnSetDestinationTriggered();

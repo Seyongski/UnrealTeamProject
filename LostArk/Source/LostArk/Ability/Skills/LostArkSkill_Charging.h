@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkSkillGameplayAbility.h"
@@ -30,6 +30,7 @@ private:
 	float CurrentChargeMultiplier;
 	bool bIsCharging;
 };
+
 
 
 

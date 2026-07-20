@@ -23,7 +23,7 @@ void ULostArkSkill_Charging::ActivateAbility(const FGameplayAbilitySpecHandle Ha
 	bIsCharging = true;
 	CurrentChargeMultiplier = 1.0f;
 
-	// 부모의 공통 헬퍼를 사용해 네비게이션 강제 Abort 및 마우스 회전을 처리합니다.
+	// 遺紐⑥쓽 怨듯넻 ?ы띁瑜??ъ슜???ㅻ퉬寃뚯씠??媛뺤젣 Abort 諛?留덉슦???뚯쟾??泥섎━?⑸땲??
 	HandleActivationBasics(ActorInfo);
 
 	UAbilityTask_WaitInputRelease* WaitReleaseTask = UAbilityTask_WaitInputRelease::WaitInputRelease(this, false);
@@ -100,6 +100,7 @@ void ULostArkSkill_Charging::OnHitCheckReceived(FGameplayEventData Payload)
 
 	DamageShapeParams.DamageCoefficient = OriginalCoefficient;
 }
+
 
 
 

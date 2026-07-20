@@ -1,4 +1,4 @@
-﻿#include "LostArk/Monster/LostArkMonsterSpawner.h"
+#include "LostArk/Monster/LostArkMonsterSpawner.h"
 #include "LostArk/Monster/LostArkMonster.h"
 #include "LostArk/System/LostArkObjectPoolSubsystem.h"
 #include "NavigationSystem.h"
@@ -125,6 +125,7 @@ void ALostArkMonsterSpawner::OnMonsterKilled(ALostArkMonster* KilledMonster)
 		SpawnMonsterBatch();
 	}
 }
+
 
 
 

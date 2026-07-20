@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkSkillGameplayAbility.h"
@@ -25,7 +25,7 @@ protected:
 	TSoftObjectPtr<UAnimMontage> CloneAttackMontage;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
-	float CloneDashSpeed;
+	float CloneDashDistance;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Clone")
 	float CloneDashDuration;
@@ -43,6 +43,7 @@ private:
 	UFUNCTION()
 	void OnPlayerMontageCompleted();
 };
+
 
 
 

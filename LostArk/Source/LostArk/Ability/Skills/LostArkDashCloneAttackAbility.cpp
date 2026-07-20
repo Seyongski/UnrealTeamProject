@@ -15,7 +15,7 @@ ULostArkDashCloneAttackAbility::ULostArkDashCloneAttackAbility()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	DashDistance = 600.f;
 	DashDuration = 0.3f;
-	CloneDashSpeed = 800.f;
+	CloneDashDistance = 800.f;
 	CloneDashDuration = 0.4f;
 	ShadowCloneClass = nullptr;
 	CloneAttackMontage = nullptr;
@@ -160,7 +160,9 @@ void ULostArkDashCloneAttackAbility::OnDashMovementCompleted()
 				ALostArkCharacter* LAChar = Cast<ALostArkCharacter>(AvatarChar);
 				USkeletalMeshComponent* SourceWeapon = LAChar ? LAChar->GetWeaponMesh() : nullptr;
 				UAbilitySystemComponent* InstigatorASC = GetAbilitySystemComponentFromActorInfo();
-				Clone->InitShadow(SourceMesh, SourceWeapon, LoadedCloneMontage, 1.f, CloneDashSpeed, CloneDashDuration, InstigatorASC, DamageEffectClass, CloneDamageShapeParams);
+				
+				float CalcCloneDashSpeed = CloneDashDuration > 0.f ? (CloneDashDistance / CloneDashDuration) : 0.f;
+				Clone->InitShadow(SourceMesh, SourceWeapon, LoadedCloneMontage, 1.f, CalcCloneDashSpeed, CloneDashDuration, InstigatorASC, DamageEffectClass, CloneDamageShapeParams);
 			}
 		}
 	}
@@ -189,6 +191,7 @@ void ULostArkDashCloneAttackAbility::EndAbility(const FGameplayAbilitySpecHandle
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
+
 
 
 

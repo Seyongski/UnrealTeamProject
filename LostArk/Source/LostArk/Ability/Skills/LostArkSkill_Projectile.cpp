@@ -11,10 +11,10 @@ ULostArkSkill_Projectile::ULostArkSkill_Projectile()
 
 void ULostArkSkill_Projectile::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
-	// 부모 클래스에서 마우스 방향으로 캐릭터 자동 회전 및 네비게이션 정지가 공통 처리됩니다.
+	// 遺紐??대옒?ㅼ뿉??留덉슦??諛⑺뼢?쇰줈 罹먮┃???먮룞 ?뚯쟾 諛??ㅻ퉬寃뚯씠???뺤?媛 怨듯넻 泥섎━?⑸땲??
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	// 시전 방향은 이미 마우스를 향해 회전된 캐릭터의 정면 방향을 사용합니다.
+	// ?쒖쟾 諛⑺뼢? ?대? 留덉슦?ㅻ? ?ν빐 ?뚯쟾??罹먮┃?곗쓽 ?뺣㈃ 諛⑺뼢???ъ슜?⑸땲??
 	if (ActorInfo && ActorInfo->AvatarActor.IsValid())
 	{
 		CachedTargetDirection = ActorInfo->AvatarActor->GetActorForwardVector();
@@ -65,6 +65,7 @@ void ULostArkSkill_Projectile::OnHitCheckReceived(FGameplayEventData Payload)
 		}
 	}
 }
+
 
 
 

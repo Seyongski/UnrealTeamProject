@@ -13,6 +13,11 @@
 #include "LostArk/Ability/LostArkCharacterComboAttackAbility.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
+#include "LostArk/UI/LostArkDamageTextActor.h"
+#include "LostArk/System/LostArkObjectPoolSubsystem.h"
+#include "LostArk/Ability/Skills/LostArkSkill_Targeting.h"
+#include "LostArk/UI/LostArkDamageTextActor.h"
+#include "LostArk/System/LostArkObjectPoolSubsystem.h"
 
 static const float DefaultCapsuleRadius = 42.f;
 static const float DefaultCapsuleHalfHeight = 96.f;
@@ -53,10 +58,11 @@ ALostArkCharacter::ALostArkCharacter()
 	AttributeSet = CreateDefaultSubobject<ULostArkAttributeSet>(TEXT("AttributeSet"));
 
 	WeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
-	WeaponMesh->SetupAttachment(GetMesh());
+	WeaponMesh->SetupAttachment(GetMesh(), TEXT("b_wp_1"));
 
 	bIsLeftFootForward = true;
 	bIsDead = false;
+	bIsWeaponEquipped = false;
 
 	PrimaryActorTick.bCanEverTick = false;
 	PrimaryActorTick.bStartWithTickEnabled = false;
@@ -73,13 +79,14 @@ void ALostArkCharacter::BeginPlay()
 
 	if (WeaponMesh && GetMesh())
 	{
-		// 비전투 상태(등에 맴)로 시작
 		WeaponMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, WeaponUnequippedSocketName);
 	}
 }
 
 void ALostArkCharacter::SetWeaponEquipped(bool bIsEquipped)
 {
+	bIsWeaponEquipped = bIsEquipped;
+	
 	if (WeaponMesh && GetMesh())
 	{
 		FName TargetSocket = bIsEquipped ? WeaponEquippedSocketName : WeaponUnequippedSocketName;
@@ -106,12 +113,37 @@ void ALostArkCharacter::PossessedBy(AController* NewController)
 			{
 				if (Bind.AbilityClass)
 				{
-					AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Bind.AbilityClass, 1, static_cast<int32>(Bind.InputID), this));
+					UE_LOG(LogTemp, Warning, TEXT("[Character] GiveAbility Called for %s"), *Bind.AbilityClass->GetName());
+					//AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Bind.AbilityClass, 1, static_cast<int32>(Bind.InputID), this));
+
+					FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(
+						FGameplayAbilitySpec(Bind.AbilityClass, 1, static_cast<int32>(Bind.InputID), this)
+					);
+
+					if (FGameplayAbilitySpec* GrantedSpec = AbilitySystemComponent->FindAbilitySpecFromHandle(Handle))
+					{
+						if (ULostArkSkill_Targeting* TargetingAbility = Cast<ULostArkSkill_Targeting>(GrantedSpec->GetPrimaryInstance()))
+						{
+							TargetingAbility->SkillInputAction = Bind.InputAction;
+						}
+						else
+						{
+							UObject* PrimaryInstance = GrantedSpec->GetPrimaryInstance();
+						}
+					}
 				}
 			}
 		}
 
-		AbilitySystemComponent->RegisterGameplayTagEvent(FGameplayTag::RequestGameplayTag(FName("State.Attacking")), EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ALostArkCharacter::OnAttackingTagChanged);
+		if (AbilitySystemComponent)
+		{
+			AbilitySystemComponent->RegisterGameplayTagEvent(
+				FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false),
+				EGameplayTagEventType::NewOrRemoved
+			).AddUObject(this, &ALostArkCharacter::OnAttackingTagChanged);
+
+			AbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(FGameplayTag::RequestGameplayTag(FName("Event.Player.CounterSuccess"), false)).AddUObject(this, &ALostArkCharacter::HandleCounterSuccessEvent);
+		}
 	}
 }
 
@@ -127,6 +159,29 @@ void ALostArkCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 			{
 				EnhancedInputComponent->BindAction(Bind.InputAction, ETriggerEvent::Started, this, &ALostArkCharacter::OnSkillInputPressed, Bind.InputID);
 				EnhancedInputComponent->BindAction(Bind.InputAction, ETriggerEvent::Completed, this, &ALostArkCharacter::OnSkillInputReleased, Bind.InputID);
+			}
+		}
+	}
+}
+
+void ALostArkCharacter::ShowDamageText(float DamageAmount)
+{
+	if (DamageTextClass)
+	{
+		if (ULostArkObjectPoolSubsystem* Pool = GetWorld()->GetSubsystem<ULostArkObjectPoolSubsystem>())
+		{
+			// ?묐럭(荑쇳꽣酉? 移대찓??嫄곕━瑜?怨좊젮?섏뿬 ?ㅽ봽???붾뱾由? 踰붿쐞瑜??ㅼ젙?⑸땲??
+			float RandomX = FMath::RandRange(-50.f, 50.f);
+			float RandomY = FMath::RandRange(-50.f, 50.f);
+			float RandomZ = FMath::RandRange(50.f, 150.f);
+			FVector SpawnLoc = GetActorLocation() + FVector(RandomX, RandomY, RandomZ);
+			
+			if (AActor* SpawnedText = Pool->AcquireActor(DamageTextClass, SpawnLoc, FRotator::ZeroRotator))
+			{
+				if (ALostArkDamageTextActor* TextActor = Cast<ALostArkDamageTextActor>(SpawnedText))
+				{
+					TextActor->SetupDamageText(DamageAmount);
+				}
 			}
 		}
 	}
@@ -161,7 +216,7 @@ void ALostArkCharacter::Die()
 
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dead")));
+		AbilitySystemComponent->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dead"), false));
 		AbilitySystemComponent->CancelAllAbilities();
 	}
 
@@ -229,13 +284,13 @@ void ALostArkCharacter::OnAttackingTagChanged(const FGameplayTag CallbackTag, in
 {
 	if (NewCount > 0)
 	{
-		// 전투(공격) 진입 시 즉시 장착
+		// ?袁る떮(?⑤벀爰? 筌욊쑴????筌앸맩???關媛?
 		GetWorldTimerManager().ClearTimer(SheathWeaponTimerHandle);
 		SetWeaponEquipped(true);
 	}
 	else
 	{
-		// 전투 종료 시 타이머 시작
+		// ?袁る떮 ?ル굝利???????????뽰삂
 		if (SheathWeaponTimeout > 0.f)
 		{
 			GetWorldTimerManager().SetTimer(SheathWeaponTimerHandle, this, &ALostArkCharacter::PlaySheathWeaponMontage, SheathWeaponTimeout, false);
@@ -255,11 +310,15 @@ void ALostArkCharacter::PlaySheathWeaponMontage()
 	}
 	else
 	{
-		// 설정된 몽타주가 없으면 즉시 납도
 		SetWeaponEquipped(false);
 	}
 }
 
+void ALostArkCharacter::HandleCounterSuccessEvent(const FGameplayEventData* Payload)
+{
+	// 蹂댁뒪 痢≪뿉??移댁슫???곸쨷???깃났?덈떎???대깽?몃? 蹂대궡二쇰㈃ UI ?곗텧 諛쒕룞
+	OnCounterSuccess_UI();
+}
 
 
 

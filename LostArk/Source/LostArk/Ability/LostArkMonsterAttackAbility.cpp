@@ -1,4 +1,4 @@
-﻿#include "LostArk/Ability/LostArkMonsterAttackAbility.h"
+#include "LostArk/Ability/LostArkMonsterAttackAbility.h"
 #include "LostArk/Core/LostArkCombatInterface.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
@@ -65,11 +65,13 @@ void ULostArkMonsterAttackAbility::EndAbility(const FGameplayAbilitySpecHandle H
 	ILostArkCombatInterface* CombatInterface = Cast<ILostArkCombatInterface>(ActorInfo->AvatarActor.Get());
 	if (CombatInterface && !CombatInterface->IsDead())
 	{
-		CombatInterface->SetCombatState(FGameplayTag::RequestGameplayTag(FName("State.Idle")));
+		CombatInterface->SetCombatState(FGameplayTag::RequestGameplayTag(FName("State.Idle"), false));
 	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
+
+
 
 
 

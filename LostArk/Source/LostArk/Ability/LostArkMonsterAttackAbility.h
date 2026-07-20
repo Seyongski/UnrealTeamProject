@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkGameplayAbility.h"
@@ -19,6 +19,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	TSoftObjectPtr<class UAnimMontage> AttackMontage;
 };
+
 
 
 

@@ -58,10 +58,11 @@ public:
 	UFUNCTION()
 	virtual void OnMontageInterrupted();
 
-	// 자식 어빌리티들에서 시전 시작 시 정지 및 마우스 회전을 일관되게 처리할 수 있는 공통 헬퍼
+	// ?먯떇 ?대퉴由ы떚?ㅼ뿉???쒖쟾 ?쒖옉 ???뺤? 諛?留덉슦???뚯쟾???쇨??섍쾶 泥섎━?????덈뒗 怨듯넻 ?ы띁
 	void HandleActivationBasics(const FGameplayAbilityActorInfo* ActorInfo);
 
 };
+
 
 
 

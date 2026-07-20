@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
@@ -56,6 +56,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability|Damage", meta = (ShowOnlyInnerProperties))
 	FDamageShapeParams DamageShapeParams;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability|Combat")
+	bool bIsCounterSkill = false;
 
 	void ApplyDamageShape(FVector Origin, FRotator Rotation, AActor* InstigatorActor);
 

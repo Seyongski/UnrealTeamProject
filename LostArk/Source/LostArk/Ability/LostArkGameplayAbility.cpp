@@ -8,6 +8,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "LostArk/Character/LostArkAttributeSet.h"
 
 ULostArkGameplayAbility::ULostArkGameplayAbility()
 {
@@ -151,6 +152,22 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 	FGameplayEffectContextHandle ContextHandle = InstigatorASC->MakeEffectContext();
 	ContextHandle.AddInstigator(InstigatorActor, InstigatorActor);
 
+	float CurrentIdentity = InstigatorASC->GetNumericAttribute(ULostArkAttributeSet::GetIdentityGaugeAttribute());
+	float MaxIdentity = InstigatorASC->GetNumericAttribute(ULostArkAttributeSet::GetMaxIdentityGaugeAttribute());
+	float IdentityPercent = (MaxIdentity > 0.f) ? (CurrentIdentity / MaxIdentity) : 0.f;
+
+	float DamageMultiplier = 1.0f;
+	if (InstigatorASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.IdentityBurst"), false)))
+	{
+		DamageMultiplier = 2.0f;
+	}
+	else if (IdentityPercent >= 0.5f)
+	{
+		DamageMultiplier = 1.5f;
+	}
+
+	int32 HitCount = 0;
+
 	for (AActor* HitActor : OverlappedActors)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
@@ -159,13 +176,27 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 		FGameplayEffectSpecHandle SpecHandle = InstigatorASC->MakeOutgoingSpec(DamageEffectClass, 1.f, ContextHandle);
 		if (!SpecHandle.IsValid()) continue;
 
+		if (bIsCounterSkill)
+		{
+			SpecHandle.Data->AddDynamicAssetTag(FGameplayTag::RequestGameplayTag(FName("Ability.Type.Counter"), false));
+		}
+
 		UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(
 			SpecHandle,
 			FGameplayTag::RequestGameplayTag(FName("Data.Damage"), false),
-			DamageShapeParams.DamageCoefficient
+			DamageShapeParams.DamageCoefficient * DamageMultiplier
 		);
 
-		InstigatorASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+		if (InstigatorASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC).WasSuccessfullyApplied())
+		{
+			HitCount++;
+		}
+	}
+
+	if (HitCount > 0 && !InstigatorASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.IdentityBurst"), false)))
+	{
+		float IdentityGainPerHit = 5.0f;
+		InstigatorASC->ApplyModToAttributeUnsafe(ULostArkAttributeSet::GetIdentityGaugeAttribute(), EGameplayModOp::Additive, IdentityGainPerHit * HitCount);
 	}
 }
 
@@ -198,6 +229,7 @@ void ULostArkGameplayAbility::OnHitCheckReceived(FGameplayEventData Payload)
 		AvatarActor
 	);
 }
+
 
 
 

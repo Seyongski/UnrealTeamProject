@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "LostArk/Ability/LostArkSkillGameplayAbility.h"
@@ -74,6 +74,7 @@ private:
 
 	void PlayThrustComboFinish();
 };
+
 
 
 

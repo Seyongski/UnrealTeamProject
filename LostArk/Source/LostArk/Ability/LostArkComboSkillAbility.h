@@ -26,6 +26,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Combo", meta = (ClampMin = "0.1"))
 	float ComboInputTimeout;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Combo")
+	FGameplayTag ComboEventTag;
+
 protected:
 	virtual void PlayComboSegment(int32 Index);
 	int32 CurrentComboIndex;
@@ -50,3 +53,4 @@ private:
 	FTimerHandle ComboWindowOpenTimerHandle;
 	FTimerHandle ComboWindowCloseTimerHandle;
 };
+

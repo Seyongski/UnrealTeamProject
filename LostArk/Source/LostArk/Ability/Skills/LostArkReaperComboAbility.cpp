@@ -112,3 +112,4 @@ void ULostArkReaperComboAbility::OnHitCheckReceived(FGameplayEventData Payload)
 
 	DamageShapeParams = OldParams;
 }
+

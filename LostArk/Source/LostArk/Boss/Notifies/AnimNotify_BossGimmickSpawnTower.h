@@ -29,4 +29,8 @@ public:
 	/** 타워 스폰과 동시에 무력화 페이즈도 시작할지 (게이지 리필 + UI 태그) */
 	UPROPERTY(EditAnywhere, Category = "Gimmick")
 	bool bBeginStaggerPhase = true;
+
+	/** 이번 기믹의 무력화 요구량(=게이지 최대치). 패턴마다 다르게 설정. 게이지 0 -> 그로기 */
+	UPROPERTY(EditAnywhere, Category = "Gimmick", meta = (EditCondition = "bBeginStaggerPhase", ClampMin = "1.0"))
+	float StaggerRequiredAmount = 100.f;
 };

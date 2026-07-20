@@ -81,6 +81,9 @@ void UBossAoeJustGuardEffect::ResolveGuards()
 	Params.GuardCenter = Aoe->GetAttackCenter();
 	Params.bBypassDirection = bDebugBypassDirection;
 
+	// 1) 대상별 판정만 먼저 수행 (데미지 적용은 뒤로 미룬다 — all-or-nothing 모드에서 집계 후 일괄 결정)
+	TArray<TPair<AActor*, EJustGuardResult>> Results;
+	Results.Reserve(PendingTargets.Num());
 	bool bAnySuccess = false;
 
 	for (const TWeakObjectPtr<AActor>& Weak : PendingTargets)
@@ -95,17 +98,10 @@ void UBossAoeJustGuardEffect::ResolveGuards()
 			? JustGuard->ResolveGuard(Target, Params)
 			: EJustGuardResult::FailNoInput;
 
+		Results.Emplace(Target, Result);
 		if (Result == EJustGuardResult::Success)
 		{
 			bAnySuccess = true;
-			// 성공: 데미지 스킵
-		}
-		else
-		{
-			// 실패: 일반 장판과 동일하게 데미지+상태이상+넉백 (베이스 로직 재사용.
-			// 넉백은 장판 BP 의 Knockback 설정이 None 이면 아무 일도 없음)
-			Aoe->ApplyDamageAndStatus(Target);
-			Aoe->ApplyKnockback(Target);
 		}
 
 		if (bShowDebugResult && GEngine)
@@ -124,9 +120,54 @@ void UBossAoeJustGuardEffect::ResolveGuards()
 		}
 	}
 
-	if (bAnySuccess && JustGuard)
+	// 2) 결과 적용
+	if (bAllOrNothingByGuard)
 	{
-		JustGuard->MarkJustGuardedResult();	// Branch 조건용 (첫 성공 1회)
+		// 기믹 전용: 지정 1명(GuardReady 보유자)의 성공/실패로 장판 전체를 결정.
+		// 지정자만 Success 를 낼 수 있으므로 bAnySuccess == '지정자 성공'.
+		if (bAnySuccess)
+		{
+			// 성공: 전원 무피해
+			if (JustGuard)
+			{
+				JustGuard->MarkJustGuardedResult();
+			}
+		}
+		else
+		{
+			// 실패: 장판 안 전원 데미지+넉백 (넘어짐) + 실패 게이트 발행 -> 43 분기/남은 창 무시
+			for (const TPair<AActor*, EJustGuardResult>& Pair : Results)
+			{
+				if (AActor* Target = Pair.Key)
+				{
+					Aoe->ApplyDamageAndStatus(Target);
+					Aoe->ApplyKnockback(Target);
+				}
+			}
+			if (JustGuard)
+			{
+				JustGuard->MarkJustGuardFailedResult();
+			}
+		}
+	}
+	else
+	{
+		// 일반 저스트가드: 대상별 독립 판정 — 성공자만 무피해, 실패자만 데미지+넉백
+		for (const TPair<AActor*, EJustGuardResult>& Pair : Results)
+		{
+			if (Pair.Value != EJustGuardResult::Success)
+			{
+				if (AActor* Target = Pair.Key)
+				{
+					Aoe->ApplyDamageAndStatus(Target);
+					Aoe->ApplyKnockback(Target);
+				}
+			}
+		}
+		if (bAnySuccess && JustGuard)
+		{
+			JustGuard->MarkJustGuardedResult();	// Branch 조건용 (첫 성공 1회)
+		}
 	}
 
 	PendingTargets.Reset();

@@ -107,6 +107,13 @@ public:
 	/** 첫 성공 시 보스에 PatternResult.JustGuarded 부여 (Branch 조건용, 패턴 종료 시 자동 정리) */
 	void MarkJustGuardedResult();
 
+	/**
+	 * 기믹 실패 확정: 보스에 PatternResult.JustGuardFailed 부여 (1회, 패턴 종료 시 자동 정리).
+	 * 전부-아니면-전무 저스트가드에서 지정자가 실패했을 때 장판이 호출 -> 43(부수기) 분기 +
+	 * 이후 저스트가드 창 무시 게이트(OpenWindow) 로 작동. (카운터의 CounterFailed 대응)
+	 */
+	void MarkJustGuardFailedResult();
+
 	UFUNCTION(BlueprintPure, Category = "Boss|JustGuard")
 	bool IsWindowOpen() const { return bWindowOpen; }
 

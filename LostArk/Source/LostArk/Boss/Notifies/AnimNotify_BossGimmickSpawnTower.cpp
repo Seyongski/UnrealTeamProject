@@ -14,7 +14,7 @@ void UAnimNotify_BossGimmickSpawnTower::Notify(USkeletalMeshComponent* MeshComp,
 		Gimmick->SpawnGimmickTower();
 		if (bBeginStaggerPhase)
 		{
-			Gimmick->BeginStaggerPhase();
+			Gimmick->BeginStaggerPhase(StaggerRequiredAmount, EStaggerResolve::Groggy);
 		}
 	}
 }

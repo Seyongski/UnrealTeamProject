@@ -4,6 +4,7 @@
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Pattern/PatternDataAsset.h"
 #include "Boss/Combat/BossCounterComponent.h"
+#include "Boss/Combat/BossJustGuardComponent.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -194,6 +195,14 @@ void UBossPatternAbility::CleanupStep()
 		if (UBossCounterComponent* Counter = Avatar->FindComponentByClass<UBossCounterComponent>())
 		{
 			Counter->CloseWindow();
+		}
+
+		// 저스트가드도 동일: NotifyEnd 누락 방어로 창 강제 닫기 + 전용 가드 대상 리셋.
+		// ExclusiveGuardPlayer 가 남으면 다음 '전원 가드' 패턴이 그 1명으로 제한되는 leak 이 생긴다.
+		if (UBossJustGuardComponent* JustGuard = Avatar->FindComponentByClass<UBossJustGuardComponent>())
+		{
+			JustGuard->CloseWindow();
+			JustGuard->ClearExclusiveGuardPlayer();
 		}
 	}
 

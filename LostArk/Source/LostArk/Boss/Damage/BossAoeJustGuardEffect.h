@@ -54,6 +54,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "JustGuard", meta = (ClampMin = "0.0", ClampMax = "180.0"))
 	float GuardAngleTolerance = 60.f;
 
+	/**
+	 * 지형파괴 기믹 전용 '전부-아니면-전무' 모드.
+	 * 끄면(기본): 대상별 독립 판정 — 성공한 사람만 무피해, 실패한 사람만 데미지 (일반 저스트가드).
+	 * 켜면: 지정 1명(GuardReady 보유자)의 성공/실패로 장판 전체를 결정한다.
+	 *   - 성공 -> 장판 안 전원 무피해 (+ PatternResult.JustGuarded)
+	 *   - 실패 -> 장판 안 전원 데미지+넉백 (넘어짐) + PatternResult.JustGuardFailed 발행
+	 *     -> 패턴 Branch 가 43(부수기)으로 분기, 이후 저스트가드 창은 게이트로 무시됨.
+	 * (지정 1명만 GuardReady 를 받으므로 '성공'은 지정자만 낼 수 있다 = bOnlyCurrentTarget 창과 함께 쓸 것)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "JustGuard")
+	bool bAllOrNothingByGuard = false;
+
 	/** [디버그] 방향 판정을 건너뛰고 타이밍만으로 판정 (키보드 G 디버그 검증용) */
 	UPROPERTY(EditDefaultsOnly, Category = "JustGuard|Debug")
 	bool bDebugBypassDirection = false;

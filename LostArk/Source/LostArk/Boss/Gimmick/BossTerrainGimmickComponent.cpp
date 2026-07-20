@@ -6,11 +6,14 @@
 #include "Boss/BossGameplayTags.h"
 #include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/Combat/BossGroggyEffect.h"
+#include "Boss/Damage/BossPatternActorBase.h"
+#include "Boss/Damage/BossAoeGrabEffect.h"
 #include "Boss/Raid/BossRaidGameMode.h"
 #include "Boss/Raid/BossRaidGameState.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 
 UBossTerrainGimmickComponent::UBossTerrainGimmickComponent()
@@ -24,16 +27,23 @@ void UBossTerrainGimmickComponent::BeginPlay()
 	Super::BeginPlay();
 
 	AActor* Owner = GetOwner();
-	if (!Owner || !Owner->HasAuthority())
+	if (!Owner)
 	{
 		return;
 	}
 
-	// 무력화 게이지 감시 (페이즈 중 0 도달 -> 즉시 그로기)
+	// 무력화 게이지 감시. 어트리뷰트는 복제되므로 서버(0 도달 판정)와 클라(UI 방송) 모두 구독한다.
 	if (UAbilitySystemComponent* ASC = GetASC())
 	{
 		ASC->GetGameplayAttributeValueChangeDelegate(UBossAttributeSet::GetStaggerGaugeAttribute())
-			.AddUObject(this, &UBossTerrainGimmickComponent::OnStaggerGaugeChanged);
+			.AddUObject(this, &UBossTerrainGimmickComponent::HandleStaggerGaugeChanged);
+
+		// 무력화 감소 이벤트(스킬/디버그)는 서버에서만 처리
+		if (Owner->HasAuthority())
+		{
+			ASC->GenericGameplayEventCallbacks.FindOrAdd(LostArkTags::Event_Boss_StaggerHit.GetTag())
+				.AddUObject(this, &UBossTerrainGimmickComponent::HandleStaggerHitEvent);
+		}
 	}
 }
 
@@ -120,7 +130,7 @@ ABossGimmickTower* UBossTerrainGimmickComponent::SpawnGimmickTower()
 	return Tower;
 }
 
-void UBossTerrainGimmickComponent::BeginStaggerPhase()
+void UBossTerrainGimmickComponent::BeginStaggerPhase(float RequiredAmount, EStaggerResolve Resolve)
 {
 	AActor* Owner = GetOwner();
 	UAbilitySystemComponent* ASC = GetASC();
@@ -129,13 +139,62 @@ void UBossTerrainGimmickComponent::BeginStaggerPhase()
 		return;
 	}
 	bStaggerPhaseActive = true;
+	CurrentStaggerResolve = Resolve;
 
-	// 게이지 리필 (매 기믹 라운드 새로 깎는다)
-	const float Max = ASC->GetNumericAttribute(UBossAttributeSet::GetMaxStaggerGaugeAttribute());
-	ASC->SetNumericAttributeBase(UBossAttributeSet::GetStaggerGaugeAttribute(), Max);
+	// 요구량 = 최대치. Max/Current 를 함께 세팅 -> 위젯이 Current/Max 로 항상 100%부터 시작.
+	// (패턴마다 요구량이 다르므로 노티파이/호출부가 지정, 디폴트 100)
+	const float Required = FMath::Max(1.f, RequiredAmount);
+	ASC->SetNumericAttributeBase(UBossAttributeSet::GetMaxStaggerGaugeAttribute(), Required);
+	ASC->SetNumericAttributeBase(UBossAttributeSet::GetStaggerGaugeAttribute(), Required);
 
 	// 클라 무력화 게이지 UI 표시 (게이지 값 자체는 어트리뷰트 복제로 이미 전파됨)
 	UBossCombatStatics::AddReplicatedLooseTag(ASC, LostArkTags::State_Boss_StaggerPhase.GetTag());
+}
+
+void UBossTerrainGimmickComponent::ApplyStaggerHit(float Amount)
+{
+	AActor* Owner = GetOwner();
+	UAbilitySystemComponent* ASC = GetASC();
+	if (!Owner || !Owner->HasAuthority() || !ASC || !bStaggerPhaseActive || Amount <= 0.f)
+	{
+		return;
+	}
+
+	// 감소만 (PreAttributeChange 가 [0, Max] 로 클램프). 0 도달 처리는 HandleStaggerGaugeChanged 에서.
+	const float Current = ASC->GetNumericAttribute(UBossAttributeSet::GetStaggerGaugeAttribute());
+	ASC->SetNumericAttributeBase(UBossAttributeSet::GetStaggerGaugeAttribute(), Current - Amount);
+}
+
+void UBossTerrainGimmickComponent::HandleStaggerHitEvent(const FGameplayEventData* Payload)
+{
+	// 스킬이 EventMagnitude 에 자기 무력화 수치를 실어 보낸다. 미지정(0)이면 디버그 기본 10.
+	const float Amount = (Payload && Payload->EventMagnitude > 0.f) ? Payload->EventMagnitude : 10.f;
+	ApplyStaggerHit(Amount);
+}
+
+void UBossTerrainGimmickComponent::ReleaseBossGrabs()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	// 이 보스가 스폰한 잡기 장판 중 대상을 잡고 있는 것 전부 해제 (AnimNotify_BossGrabRelease 와 동일 경로)
+	for (TActorIterator<ABossPatternActorBase> It(Owner->GetWorld()); It; ++It)
+	{
+		if (It->GetOwner() != Owner)
+		{
+			continue;
+		}
+		if (UBossAoeGrabEffect* Grab = Cast<UBossAoeGrabEffect>(It->GetOnHitEffect()))
+		{
+			if (Grab->HasGrabbedTargets())
+			{
+				Grab->ReleaseAll();
+			}
+		}
+	}
 }
 
 void UBossTerrainGimmickComponent::EndStaggerPhase()
@@ -153,18 +212,34 @@ void UBossTerrainGimmickComponent::EndStaggerPhase()
 	}
 }
 
-void UBossTerrainGimmickComponent::OnStaggerGaugeChanged(const FOnAttributeChangeData& Data)
+void UBossTerrainGimmickComponent::HandleStaggerGaugeChanged(const FOnAttributeChangeData& Data)
 {
-	// 무력화 페이즈 중 게이지 0 -> 즉시 그로기.
-	// Groggy 태그가 서는 순간 패턴 스텝 Branch('State.Boss.Groggy 보유')가 재생 중 몽타주를
-	// 즉시 끊고 다음 단계로 넘어간다 (레이저 루프 즉시 종료 요구사항).
-	if (!bStaggerPhaseActive || Data.NewValue > 0.f)
+	// UI 방송 (서버+클라 공통). 위젯은 Current/Max 로 % 표시. 잡기/기믹 같은 게이지라 공용 델리게이트.
+	float Max = Data.NewValue;
+	if (UAbilitySystemComponent* ASC = GetASC())
+	{
+		Max = ASC->GetNumericAttribute(UBossAttributeSet::GetMaxStaggerGaugeAttribute());
+	}
+	OnStaggerGaugeChanged.Broadcast(Data.NewValue, Max);
+
+	// 0 도달 처리는 서버 권위에서만
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority() || !bStaggerPhaseActive || Data.NewValue > 0.f)
 	{
 		return;
 	}
 
+	// 게이지 소진. Groggy 태그가 서는 순간 패턴 스텝 Branch('State.Boss.Groggy 보유')가 재생 중
+	// 몽타주를 즉시 끊고 다음 단계로 넘어간다 (레이저 루프 즉시 종료 요구사항).
 	EndStaggerPhase();
-	ApplyGroggy(StaggerGroggyDuration);
+	if (CurrentStaggerResolve == EStaggerResolve::GrabRelease)
+	{
+		ReleaseBossGrabs();	// 구출: 잡힌 팀원 해제
+	}
+	else
+	{
+		ApplyGroggy(StaggerGroggyDuration);	// 기믹: 보스 그로기
+	}
 }
 
 void UBossTerrainGimmickComponent::ApplyGroggy(float Duration)

@@ -49,6 +49,17 @@ void UBossJustGuardComponent::OpenWindow()
 		return;
 	}
 
+	// 실패 게이트: 이번 기믹에서 이미 실패 확정(JustGuardFailed)이면 이후 창은 열지 않는다.
+	// -> 한 몽타주에 저스트가드가 여러 개여도, 앞에서 실패하면 뒤 창은 자동으로 죽는다.
+	// (카운터의 CounterFailed 게이트와 동일 구조)
+	if (const UAbilitySystemComponent* ASC = GetASC())
+	{
+		if (ASC->HasMatchingGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuardFailed.GetTag()))
+		{
+			return;
+		}
+	}
+
 	if (bWindowOpen)
 	{
 		CloseWindow();	// 겹침 방어 (몽타주 전환 타이밍에 End 가 늦는 경우)
@@ -189,6 +200,17 @@ void UBossJustGuardComponent::MarkJustGuardedResult()
 		if (!ASC->HasMatchingGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag()))
 		{
 			ASC->AddLooseGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag());
+		}
+	}
+}
+
+void UBossJustGuardComponent::MarkJustGuardFailedResult()
+{
+	if (UAbilitySystemComponent* ASC = GetASC())
+	{
+		if (!ASC->HasMatchingGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuardFailed.GetTag()))
+		{
+			ASC->AddLooseGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuardFailed.GetTag());
 		}
 	}
 }

@@ -66,6 +66,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "JustGuard")
 	bool bAllOrNothingByGuard = false;
 
+	/**
+	 * 성공 시 보스 그로기 진입 여부. 연속 저스트가드에서 '마지막' 창에만 켠다.
+	 *  - 끄면(기본): 성공 시 PatternResult.JustGuarded 만 발행 -> 다음 저스트가드 스텝으로 분기 (예: 2-3 성공 -> 2-4)
+	 *  - 켜면: 성공 시 그로기 GE(State.Boss.Groggy)까지 적용 -> 그로기 몽타주로 분기 (예: 2-4 성공 -> 그로기)
+	 * 그로기 지속시간은 UBossJustGuardComponent::GroggyDuration 에서 조정.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "JustGuard")
+	bool bGroggyOnSuccess = false;
+
 	/** [디버그] 방향 판정을 건너뛰고 타이밍만으로 판정 (키보드 G 디버그 검증용) */
 	UPROPERTY(EditDefaultsOnly, Category = "JustGuard|Debug")
 	bool bDebugBypassDirection = false;

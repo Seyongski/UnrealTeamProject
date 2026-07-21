@@ -7,6 +7,7 @@
 #include "BossJustGuardComponent.generated.h"
 
 class UAbilitySystemComponent;
+class UGameplayEffect;
 struct FGameplayEventData;
 
 /** 저스트가드 판정 결과 (실패는 원인별로 구분 — 디버그/연출용) */
@@ -104,8 +105,14 @@ public:
 	/** 기록된 가드 입력으로 한 명 판정 (장판 이펙트가 히트 타이밍·중심과 함께 호출) */
 	EJustGuardResult ResolveGuard(AActor* Player, const FJustGuardResolveParams& Params) const;
 
-	/** 첫 성공 시 보스에 PatternResult.JustGuarded 부여 (Branch 조건용, 패턴 종료 시 자동 정리) */
-	void MarkJustGuardedResult();
+	/**
+	 * 저스트가드 성공 처리 (장판이 판정 후 호출).
+	 *  - PatternResult.JustGuarded 부여 (Branch 조건용). 이 태그는 OpenWindow 에서 창마다 리셋되므로
+	 *    '이번 창의 성공'만 의미한다 -> 연속 저스트가드(2-3 성공 시 2-4, 2-4 성공 시 그로기)가 각각 분기된다.
+	 *  - bApplyGroggy=true 면 그로기 GE 를 먼저 적용(State.Boss.Groggy)한 뒤 태그를 붙인다.
+	 *    (최종 저스트가드 성공 -> 그로기 몽타주 분기. 카운터 성공 경로와 동일한 순서: GE 먼저, 트리거 태그 마지막)
+	 */
+	void MarkJustGuardedResult(bool bApplyGroggy = false);
 
 	/**
 	 * 기믹 실패 확정: 보스에 PatternResult.JustGuardFailed 부여 (1회, 패턴 종료 시 자동 정리).
@@ -136,6 +143,17 @@ public:
 	/** 창 열림/닫힘 방송 (보스 '노란 글로우' 연출을 BP에서 여기에 바인딩) */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|JustGuard")
 	FOnJustGuardWindowChanged OnJustGuardWindowChanged;
+
+	/** 저스트가드 성공(bGroggyOnSuccess 장판) 시 적용할 그로기 GE. 카운터와 동일 (State.Boss.Groggy 부여) */
+	UPROPERTY(EditAnywhere, Category = "Boss|JustGuard")
+	TSubclassOf<UGameplayEffect> GroggyEffectClass;
+
+	/**
+	 * 그로기 총 지속시간(초) = 그로기 시작+루프 몽타주가 도는 시간.
+	 * 만료로 Groggy 태그가 빠지는 순간 루프 스텝의 'NOT State.Boss.Groggy' 분기가 종료 몽타주로 넘어간다.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Boss|JustGuard", meta = (ClampMin = "0.1"))
+	float GroggyDuration = 6.f;
 
 protected:
 	virtual void BeginPlay() override;

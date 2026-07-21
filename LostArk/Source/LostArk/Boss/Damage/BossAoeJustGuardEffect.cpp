@@ -127,10 +127,10 @@ void UBossAoeJustGuardEffect::ResolveGuards()
 		// 지정자만 Success 를 낼 수 있으므로 bAnySuccess == '지정자 성공'.
 		if (bAnySuccess)
 		{
-			// 성공: 전원 무피해
+			// 성공: 전원 무피해. bGroggyOnSuccess 면 그로기 진입까지 (최종 저스트가드 창)
 			if (JustGuard)
 			{
-				JustGuard->MarkJustGuardedResult();
+				JustGuard->MarkJustGuardedResult(bGroggyOnSuccess);
 			}
 		}
 		else
@@ -166,7 +166,7 @@ void UBossAoeJustGuardEffect::ResolveGuards()
 		}
 		if (bAnySuccess && JustGuard)
 		{
-			JustGuard->MarkJustGuardedResult();	// Branch 조건용 (첫 성공 1회)
+			JustGuard->MarkJustGuardedResult(bGroggyOnSuccess);	// Branch 조건용 (첫 성공 1회)
 		}
 	}
 

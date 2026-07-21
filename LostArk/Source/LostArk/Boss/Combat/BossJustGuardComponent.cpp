@@ -2,15 +2,18 @@
 
 #include "Boss/Combat/BossJustGuardComponent.h"
 #include "Boss/Combat/BossCombatStatics.h"
+#include "Boss/Combat/BossGroggyEffect.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/Pawn.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"	// [임시 디버그] 화면 메시지
 
 UBossJustGuardComponent::UBossJustGuardComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	GroggyEffectClass = UBossGroggyEffect::StaticClass();	// 카운터 성공 경로와 동일한 기본 그로기 GE
 }
 
 void UBossJustGuardComponent::BeginPlay()
@@ -69,6 +72,15 @@ void UBossJustGuardComponent::OpenWindow()
 	GuardInputs.Reset();
 	ReadyPlayers.Reset();
 
+	// 연속 저스트가드(2-3 -> 2-4) 지원: 직전 창의 성공 결과(JustGuarded)를 창마다 리셋한다.
+	// JustGuarded 는 패턴 종료까지 남으므로, 리셋하지 않으면 이번 창이 이 스텝의 성공 분기(예: 2-4 성공 -> 그로기)를
+	// 입력도 받기 전에 오발시킨다. 실패 게이트(JustGuardFailed)는 그대로 둔다(위에서 이미 이 창을 막았음).
+	// (JustGuardable 을 붙이기 전에 지워 태그 변화 감시가 stale 값으로 분기를 평가하지 않게 한다)
+	if (UAbilitySystemComponent* ResetASC = GetASC())
+	{
+		ResetASC->SetLooseGameplayTagCount(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag(), 0);
+	}
+
 	// 전 플레이어에 '1회 가드 가능' 부여. 복제 루스로 클라(소유자)까지 전파 -> G 어빌리티 게이트/UI
 	// (전용 대상이 지정돼 있으면 그 1명에게만 — 기믹 대상 전용 저스트가드)
 	TArray<APawn*> PlayerPawns;
@@ -97,6 +109,14 @@ void UBossJustGuardComponent::OpenWindow()
 	}
 
 	OnJustGuardWindowChanged.Broadcast(true);
+
+	// [임시 디버그] 창이 열린 순간을 화면에 표시 (G 를 이때 눌러야 함) — 확인 후 삭제
+	if (GEngine)
+	{
+		const int32 NumReady = ReadyPlayers.Num();
+		GEngine->AddOnScreenDebugMessage(/*Key*/1001, 3.f, FColor::Yellow,
+			FString::Printf(TEXT("[저스트가드] 창 열림 — G 누르세요 (가드가능 %d명)"), NumReady));
+	}
 }
 
 void UBossJustGuardComponent::CloseWindow()
@@ -154,6 +174,13 @@ void UBossJustGuardComponent::NotifyGuardInput(AActor* Player)
 	UBossCombatStatics::RemoveReplicatedLooseTag(
 		GetPlayerASC(Player), LostArkTags::State_Player_GuardReady.GetTag());
 	ReadyPlayers.Remove(Player);
+
+	// [임시 디버그] 입력이 기록된 순간 (성공/실패 판정은 장판이 판정 시각에 별도 표시) — 확인 후 삭제
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(/*Key*/1002, 3.f, FColor::Cyan,
+			FString::Printf(TEXT("[저스트가드] 입력 기록 t=%.2f (판정 대기)"), Input.PressTime));
+	}
 }
 
 EJustGuardResult UBossJustGuardComponent::ResolveGuard(AActor* Player, const FJustGuardResolveParams& Params) const
@@ -193,15 +220,25 @@ EJustGuardResult UBossJustGuardComponent::ResolveGuard(AActor* Player, const FJu
 	return EJustGuardResult::Success;
 }
 
-void UBossJustGuardComponent::MarkJustGuardedResult()
+void UBossJustGuardComponent::MarkJustGuardedResult(bool bApplyGroggy)
 {
-	if (UAbilitySystemComponent* ASC = GetASC())
+	UAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || ASC->HasMatchingGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag()))
 	{
-		if (!ASC->HasMatchingGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag()))
-		{
-			ASC->AddLooseGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag());
-		}
+		return;
 	}
+
+	// 최종 저스트가드 성공 -> 그로기: 그로기 GE 를 '먼저' 적용한다. JustGuarded 태그가 붙는 순간 분기가
+	// 동기적으로 그로기 스텝을 실행할 수 있는데, 그때 이미 State.Boss.Groggy 가 서 있어야
+	// 루프 스텝의 'NOT Groggy' 종료 분기가 첫 평가에서 오발하지 않는다 (카운터 성공 경로와 동일).
+	if (bApplyGroggy && GroggyEffectClass)
+	{
+		UBossCombatStatics::ApplyEffectToSelf(ASC, GroggyEffectClass, this,
+			LostArkTags::Data_Duration.GetTag(), FMath::Max(0.1f, GroggyDuration));
+	}
+
+	// 분기 트리거는 마지막 (이 줄 아래에 상태를 만지는 코드를 두지 말 것)
+	ASC->AddLooseGameplayTag(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag());
 }
 
 void UBossJustGuardComponent::MarkJustGuardFailedResult()

@@ -24,6 +24,40 @@
 
 ---
 
+## 0. 지금 당장 이어서 할 것 (최우선, 2026-07-21 실플레이 검증 중단 지점)
+
+- [ ] **저스트가드 판정 장판(AOE) 추가 — 현재 "안 먹음"의 원인**
+  지금 몽타주엔 `JustGuard Window`(NotifyState, 노란 구간=가드 가능 시간)만 있고,
+  **실제 성공/실패를 판정하는 장판(AOE)이 없어서** 판정 자체가 안 일어남.
+  창은 "G를 누를 수 있게" 할 뿐, 판정은 별도 AOE 장판의 판정 시각(빨간 선)에 이뤄짐.
+  - 몽타주에 스폰 노티(`Boss Spawn AOE` 또는 `Boss Gimmick: Spawn AOE At Slice`) 추가
+  - `AoeClass` = OnHitEffect가 `UBossAoeJustGuardEffect` 인 장판 BP (예: `BP_Aoe_JustGuard`, 없으면 생성)
+  - 그 장판 BP 설정: `GuardWindowDuration=1.0`(그림의 검정 구간), `bShowDebugResult=true`,
+    테스트 중엔 `bDebugBypassDirection=true`(방향 무시, 타이밍만), 기믹 전용은 `bAllOrNothingByGuard=true`
+  - `JustGuard Window` 노티는 `bOnlyCurrentTarget=true` (기믹 대상만 가드)
+  - 배치: 노란 창이 **[판정시각 J − 1초, J]** 를 덮게. J = 보스가 "딱 공격"하는 프레임
+  - 화면 디버그(이미 코드에 있음): 노랑="창 열림", 시안="입력 기록", 초록/빨강="성공/실패" —
+    이 4개가 순서대로 뜨는지로 배선 확인. `가드가능 0명`이 뜨면 타겟팅(현재 타겟≠가드 대상) 문제.
+  - 설계 상세: [09_JUSTGUARD_PATTERN.md](09_JUSTGUARD_PATTERN.md)
+
+- [ ] **[임시 디버그 제거]** 위 확인 끝나면 `BossJustGuardComponent.cpp` 의
+  `AddOnScreenDebugMessage`(창 열림/입력 기록, 키 1001/1002) 2곳 삭제.
+
+- [ ] **레이저가 타워를 못 지움 (Z 정렬)**: S1_4 레이저(`Boss Spawn AOE`, `bAimBySocketForward=true`,
+  헤드 소켓)는 X/Y 방향은 맞게 나가나, 판정 Z(발밑 폴백 ~498)와 타워 메시 임팩트 Z(~660)가 안 맞아
+  타워가 안 지워짐(캐릭터는 맞아 날아감 → 판정 자체는 살아있음). 레이저 AOE 높이 또는 타워 히트 판정
+  Z 범위 조정 필요.
+
+- [ ] **기믹 데칼 높이가 낮음**: 지형 데칼이 바닥보다 낮게 떠서 잘 안 보임 → Z 오프셋/투영 높이 조정.
+
+- [ ] **카운터 성공 그로기도 같은 버그 잠재**: `UBossCounterComponent::ApplyCounterSuccess` 가 쓰는
+  `UBossGroggyEffect` GE 는 적용은 되지만 `State.Boss.Groggy` 태그를 안 붙이는 문제가 있었음
+  (기믹 무력화 그로기에서 발견, `UBossTerrainGimmickComponent::ApplyGroggy` 는 복제 루스 태그+타이머로
+  이미 우회 수정함). 카운터 쪽은 아직 미수정 — 카운터 그로기 실제 플레이 테스트 후 같은 증상이면
+  동일 방식(루스 태그+`FTimerHandle`)으로 교체.
+
+---
+
 ## 1. 기믹 — 지형파괴 (최우선)
 
 ### 현황 (구현 완료된 것)
@@ -47,6 +81,12 @@
 - [ ] **무력화 게이지 UI**: 보스 발밑(월드 공간) 표시로 확정 — 상세는 §2-2. 표시/숨김은 `State.Boss.StaggerPhase` 복제 태그, 값은 `UBossAttributeSet::StaggerGauge / MaxStaggerGauge` 복제 어트리뷰트 바인딩.
 - [ ] **풀 플로우 멀티 검증** (리슨서버 + 클라 1): 타워 스폰 → 감전 장판 → 무력화 → (성공: 그로기 / 실패: 저스트가드 구간) → 슬라이스 파괴 → 타워 동반 소멸 → 약점포착 태그 → 파괴 지형 낙사(`ArenaKillVolume`).
 - [ ] **낙사 연계 확인**: §5 넉백에서 `bCanCauseFallDeath=true` 패턴으로 파괴 지형 방향으로 밀었을 때 실제 낙사가 되는지 확인.
+
+### 실플레이 검증 중 발견 (2026-07-21, 후순위)
+
+- [ ] **레이저가 타워를 못 지움 (Z 정렬)**: S1_4 레이저를 `Boss Spawn AOE`(`bAimBySocketForward=true`, 헤드 소켓)로 보스 헤드 X/Y 방향 발사로 바꿨으나, 레이저 판정 Z(발밑 폴백 ~498)와 타워 메시 높이(ImpactZ 660 근처)가 안 맞아 타워가 파괴되지 않음. 캐릭터는 맞아 날아감. → 레이저 AOE의 Z/높이(또는 타워 히트 판정 Z 범위)를 맞춰야 함.
+- [ ] **기믹 데칼 높이가 낮음**: 데칼 자체가 지형보다 낮게 떠서 잘 안 보임 → 데칼 Z 오프셋/투영 높이 조정.
+- [x] **무력화 → 그로기**: 게이지 0 도달 시 `State.Boss.Groggy` 가 안 붙던 문제 해결. 원인 = `UBossGroggyEffect` GE 가 적용은 되나(TargetTags 컴포넌트) 태그를 안 붙임. `UBossTerrainGimmickComponent::ApplyGroggy` 를 **복제 루스 태그 + 타이머**(`EndGroggy`)로 직접 부여하도록 교체. **주의: 카운터 성공 그로기(`UBossCounterComponent`)도 같은 GE 라 동일 버그 잠재 — 아직 미수정.**
 
 ---
 

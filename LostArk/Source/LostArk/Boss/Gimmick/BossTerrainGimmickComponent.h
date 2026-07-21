@@ -126,6 +126,9 @@ private:
 	/** 이 보스가 잡고 있는 모든 잡기 장판 해제 (GrabRelease 모드 0 도달 시) */
 	void ReleaseBossGrabs();
 
+	/** 그로기 종료: State.Boss.Groggy 복제 루스 태그 회수 (GroggyTimer 콜백) */
+	void EndGroggy();
+
 	/** 예약된 슬라이스 파괴 실행 */
 	void ExecuteDestroySlice();
 
@@ -151,4 +154,7 @@ private:
 	EStaggerResolve CurrentStaggerResolve = EStaggerResolve::Groggy;
 
 	FTimerHandle DestroySliceTimer;
+
+	/** 그로기 지속시간 타이머 (만료 시 EndGroggy 로 태그 회수) */
+	FTimerHandle GroggyTimer;
 };

@@ -82,52 +82,76 @@ ABossGimmickTower* UBossTerrainGimmickComponent::SpawnGimmickTower()
 
 	CleanupDeadTowers();
 
-	// 후보 분류: 파괴 안 된 위치 전체(파괴 대상 폴백용) / 그중 타워도 없는 위치(스폰 후보)
-	TArray<int32> NotDestroyed;
+	// 1) 이번 라운드 파괴 대상 = '고정 순서(DestructionOrder)'의 다음 미파괴 슬라이스.
+	//    타워 위치와 완전히 독립 — 정해진 순서대로 번호를 부른다.
+	CurrentSliceIndex = NextDestructionSlice(GS);
+	if (CurrentSliceIndex != INDEX_NONE)
+	{
+		// 보스가 바라볼 위치 = 그 슬라이스 방향 (아레나 중심 기준)
+		CurrentGimmickLocation = GS->GetSliceCenterLocation(CurrentSliceIndex, GimmickLookRadius);
+		bHasGimmickLocation = true;
+	}
+
+	// 2) 타워 스폰: 지정 위치 중 [지형 미파괴 && 타워 없음] 곳에 랜덤. (파괴 대상 슬라이스와 무관)
 	TArray<int32> Spawnable;
 	for (int32 i = 0; i < TowerSpawnPoints.Num(); ++i)
 	{
 		const int32 Slice = GS->GetSliceIndexAt(TowerSpawnPoints[i]);
-		if (GS->IsSliceDestroyed(Slice))
-		{
-			continue;	// 이미 파괴된 지형 위에는 스폰하지 않는다
-		}
-		NotDestroyed.Add(i);
-		if (!LiveTowers.Contains(i))
+		if (!GS->IsSliceDestroyed(Slice) && !LiveTowers.Contains(i))
 		{
 			Spawnable.Add(i);
 		}
 	}
 
-	if (NotDestroyed.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] 4개 위치가 전부 파괴됨 — 기믹 라운드 스킵"));
-		return nullptr;
-	}
-
-	// 이번 라운드 위치 확정: 스폰 가능 위치 우선, 전부 점유면 미파괴 위치 중에서(타워 없이 파괴만 진행)
-	const TArray<int32>& Pool = (Spawnable.Num() > 0) ? Spawnable : NotDestroyed;
-	const int32 PointIndex = Pool[FMath::RandRange(0, Pool.Num() - 1)];
-
-	CurrentGimmickLocation = TowerSpawnPoints[PointIndex];
-	bHasGimmickLocation = true;
-	CurrentSliceIndex = GS->GetSliceIndexAt(CurrentGimmickLocation);
-
 	if (Spawnable.Num() == 0 || !TowerClass)
 	{
-		return nullptr;	// 파괴 대상만 확정, 타워는 없음 (점유/클래스 미설정)
+		return nullptr;	// 파괴 대상만 확정, 타워는 생략 (스폰할 곳/클래스 없음)
 	}
 
-	const FTransform SpawnTM(FRotator::ZeroRotator, CurrentGimmickLocation);
+	const int32 PointIndex = Spawnable[FMath::RandRange(0, Spawnable.Num() - 1)];
+	const FVector TowerLoc = TowerSpawnPoints[PointIndex];
+
+	const FTransform SpawnTM(FRotator::ZeroRotator, TowerLoc);
 	ABossGimmickTower* Tower = World->SpawnActorDeferred<ABossGimmickTower>(
 		TowerClass, SpawnTM, Owner, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (Tower)
 	{
-		Tower->InitTower(Owner, CurrentSliceIndex);
+		// 타워의 SliceIndex = '딛고 선' 지형 (그 지형이 나중에 파괴되면 함께 소멸용). 파괴 대상과는 별개.
+		Tower->InitTower(Owner, GS->GetSliceIndexAt(TowerLoc));
 		Tower->FinishSpawning(SpawnTM);
 		LiveTowers.Add(PointIndex, Tower);
 	}
 	return Tower;
+}
+
+int32 UBossTerrainGimmickComponent::NextDestructionSlice(ABossRaidGameState* GS)
+{
+	if (!GS)
+	{
+		return INDEX_NONE;
+	}
+
+	if (DestructionOrder.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[TerrainGimmick] DestructionOrder 미설정 — 보스 기믹 컴포넌트에 파괴 순서를 지정할 것 (파괴 스킵)"));
+		return INDEX_NONE;
+	}
+
+	// 정해진 순서를 따라가며 이미 파괴된 번호는 건너뛴다 (한 바퀴 다 돌아 전부 파괴면 종료)
+	for (int32 n = 0; n < DestructionOrder.Num(); ++n)
+	{
+		const int32 Idx = DestructionOrderIndex % DestructionOrder.Num();
+		++DestructionOrderIndex;
+		const int32 Candidate = DestructionOrder[Idx];
+		if (!GS->IsSliceDestroyed(Candidate))
+		{
+			return Candidate;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] DestructionOrder 슬라이스가 전부 파괴됨 — 더 부술 지형 없음"));
+	return INDEX_NONE;
 }
 
 void UBossTerrainGimmickComponent::BeginStaggerPhase(float RequiredAmount, EStaggerResolve Resolve)

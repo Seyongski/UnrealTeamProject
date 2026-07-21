@@ -27,7 +27,7 @@ void UAnimNotifyState_BossJustGuard::NotifyBegin(USkeletalMeshComponent* MeshCom
 			// -> 인터럽트로 NotifyEnd 가 누락돼도 이 창은 전원에게 GuardReady 를 준다
 			JustGuard->ClearExclusiveGuardPlayer();
 		}
-		JustGuard->OpenWindow();
+		JustGuard->OpenWindow(GuardStateDuration);
 	}
 }
 

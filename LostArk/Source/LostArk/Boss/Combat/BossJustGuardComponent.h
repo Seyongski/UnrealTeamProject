@@ -91,8 +91,11 @@ class LOSTARK_API UBossJustGuardComponent : public UActorComponent
 public:
 	UBossJustGuardComponent();
 
-	/** 저스트가드 창 열기 (NotifyBegin). 전 플레이어에 GuardReady 부여 + 보스 글로우 태그 */
-	void OpenWindow();
+	/**
+	 * 저스트가드 창 열기 (NotifyBegin). 전 플레이어(또는 전용 대상)에 GuardReady 부여 + 보스 글로우 태그.
+	 * @param InGuardStateDuration 이 창에서 G 를 눌렀을 때의 '가드 상태' 유지시간(초). 판정 노티파이가 이 값을 쓴다.
+	 */
+	void OpenWindow(float InGuardStateDuration = 1.f);
 
 	/** 저스트가드 창 닫기 (NotifyEnd, 중복 호출 안전). 남은 GuardReady 회수 + 글로우 태그 제거 */
 	void CloseWindow();
@@ -104,6 +107,20 @@ public:
 
 	/** 기록된 가드 입력으로 한 명 판정 (장판 이펙트가 히트 타이밍·중심과 함께 호출) */
 	EJustGuardResult ResolveGuard(AActor* Player, const FJustGuardResolveParams& Params) const;
+
+	/**
+	 * 보스 '공격 순간'(판정 노티파이)에 호출: 장판(AOE) 없이 노티파이 타이밍만으로 판정한다.
+	 * 판정 대상 = 전용 가드 플레이어(ExclusiveGuardPlayer) 우선, 없으면 현재 타겟.
+	 *  - 타이밍: 대상이 [now - 가드상태시간, now] 안에 G 를 눌렀는가 (그림의 검정 구간).
+	 *            가드상태시간은 창(Just Guard Window)이 정한 값(GuardStateDuration)을 쓴다.
+	 *  - 방향  : 누른 순간 정면이 (대상 -> 보스) 기준 GuardAngleTolerance 이내인가 ("정확한 곳을 바라봄")
+	 *  - 성공: 무피해 + PatternResult.JustGuarded (+ bGroggyOnSuccess 면 그로기)
+	 *  - 실패: 대상에게 DamageEffect 를 '직접' 적용(장판 없음) + PatternResult.JustGuardFailed
+	 * @return 판정 결과 (연출/디버그용)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|JustGuard")
+	EJustGuardResult JudgeGuardAtAttack(float GuardAngleTolerance, bool bBypassDirection,
+		TSubclassOf<UGameplayEffect> DamageEffect, float DamageCoefficient, bool bGroggyOnSuccess);
 
 	/**
 	 * 저스트가드 성공 처리 (장판이 판정 후 호출).
@@ -177,4 +194,7 @@ private:
 
 	/** 지정 시 이 플레이어에게만 GuardReady 부여 (기믹 대상 전용 저스트가드) */
 	TWeakObjectPtr<AActor> ExclusiveGuardPlayer;
+
+	/** 현재 창의 가드 상태 유지시간(초). OpenWindow 가 창 노티파이 값으로 세팅 -> JudgeGuardAtAttack 이 사용 */
+	float GuardStateDuration = 1.f;
 };

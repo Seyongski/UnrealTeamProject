@@ -7,6 +7,7 @@
 #include "BossTerrainGimmickComponent.generated.h"
 
 class ABossGimmickTower;
+class ABossRaidGameState;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 struct FOnAttributeChangeData;
@@ -95,6 +96,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
 	TArray<FVector> TowerSpawnPoints;
 
+	/**
+	 * 지형 파괴 순서(고정). 라운드마다 이 배열 순서대로 슬라이스 번호를 하나씩 파괴한다.
+	 * 타워 스폰 위치와는 무관 — 타워는 랜덤 위치, 파괴는 여기 정해진 순서. 레벨 팀 슬라이스 번호와 맞출 것.
+	 * 이미 파괴된 번호는 건너뛴다. 비우면 파괴 대상 미확정(경고 로그) — 반드시 채울 것.
+	 * 예: [2, 5, 0, 7] 이면 2 -> 5 -> 0 -> 7 순으로 파괴.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
+	TArray<int32> DestructionOrder;
+
+	/** 보스가 파괴 슬라이스를 바라볼 때의 기준 거리(cm). 아레나 중심에서 슬라이스 방향으로 이만큼 앞 */
+	UPROPERTY(EditAnywhere, Category = "Boss|Gimmick", meta = (ClampMin = "1.0"))
+	float GimmickLookRadius = 500.f;
+
 	/** 스폰할 타워 클래스 (BP_BossGimmickTower) */
 	UPROPERTY(EditAnywhere, Category = "Boss|Gimmick")
 	TSubclassOf<ABossGimmickTower> TowerClass;
@@ -116,6 +130,9 @@ protected:
 
 private:
 	UAbilitySystemComponent* GetASC() const;
+
+	/** 고정 순서(DestructionOrder)에서 아직 안 부서진 다음 슬라이스 번호. 없으면 INDEX_NONE (인덱스 진행) */
+	int32 NextDestructionSlice(ABossRaidGameState* GS);
 
 	/** 무력화 게이지 변화 감시(서버+클라): UI 방송 + 서버 0 도달 시 Resolve 처리 */
 	void HandleStaggerGaugeChanged(const FOnAttributeChangeData& Data);
@@ -140,6 +157,9 @@ private:
 
 	/** 이번 라운드의 파괴 대상 (파괴 요청 시 INDEX_NONE 으로 리셋 -> 이중 파괴 방지) */
 	int32 CurrentSliceIndex = INDEX_NONE;
+
+	/** DestructionOrder 진행 위치 (라운드마다 증가. 배열 크기로 나눠 순환) */
+	int32 DestructionOrderIndex = 0;
 
 	/** 이번(직전) 라운드의 기믹 위치. 다음 라운드 시작까지 유지 (바라보기 회전용) */
 	FVector CurrentGimmickLocation = FVector::ZeroVector;

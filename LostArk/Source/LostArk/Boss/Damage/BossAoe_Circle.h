@@ -18,14 +18,15 @@ class LOSTARK_API ABossAoe_Circle : public ABossPatternActorBase
 
 public:
 	/** 바깥 반지름(cm) */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
 	float Radius = 300.f;
 
 	/** 안쪽 반지름(cm). >0 이면 도넛 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
 	float InnerRadius = 0.f;
 
 protected:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual bool IsInsideShape(const FVector& WorldPoint) const override;
 	virtual void BuildTelegraph() override;
 	virtual void DebugDrawShape() const override;

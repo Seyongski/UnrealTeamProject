@@ -46,6 +46,22 @@ int32 ABossRaidGameState::GetSliceIndexAt(const FVector& WorldLocation) const
 	return FMath::Clamp(FMath::FloorToInt32(Angle / Step), 0, SliceCount - 1);
 }
 
+FVector ABossRaidGameState::GetSliceCenterLocation(int32 SliceIndex, float Radius) const
+{
+	if (SliceCount <= 0 || SliceIndex < 0 || SliceIndex >= SliceCount)
+	{
+		return ArenaCenter;
+	}
+
+	// GetSliceIndexAt 과 동일 규약: 슬라이스 N = [N*Step, (N+1)*Step) 도. 중심각 = (N+0.5)*Step.
+	const float Step = 360.f / SliceCount;
+	const float CenterAngleRad = FMath::DegreesToRadians((SliceIndex + 0.5f) * Step);
+	FVector Loc = ArenaCenter +
+		FVector(FMath::Cos(CenterAngleRad), FMath::Sin(CenterAngleRad), 0.f) * Radius;
+	Loc.Z = !FMath::IsNearlyZero(ArenaFloorZ) ? ArenaFloorZ : ArenaCenter.Z;
+	return Loc;
+}
+
 void ABossRaidGameState::MarkSliceDestroyed(int32 SliceIndex)
 {
 	if (!HasAuthority() || SliceIndex < 0 || SliceIndex >= SliceCount)

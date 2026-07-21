@@ -20,22 +20,23 @@ class LOSTARK_API ABossAoe_Sector : public ABossPatternActorBase
 
 public:
 	/** 바깥 반지름(cm) */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
 	float Radius = 500.f;
 
 	/** 안쪽 반지름(cm). >0 이면 도넛 조각(안쪽 안전지대) */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
 	float InnerRadius = 0.f;
 
 	/** 시작 각도(도). 전방=0, 오른쪽 +, 왼쪽 - */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "-360.0", ClampMax = "360.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "-360.0", ClampMax = "360.0"))
 	float StartAngle = -45.f;
 
 	/** 끝 각도(도). StartAngle 보다 커야 하며 (End-Start) <= 360 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "-360.0", ClampMax = "360.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "-360.0", ClampMax = "360.0"))
 	float EndAngle = 45.f;
 
 protected:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual bool IsInsideShape(const FVector& WorldPoint) const override;
 	virtual void BuildTelegraph() override;
 	virtual void DebugDrawShape() const override;

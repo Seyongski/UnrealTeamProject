@@ -185,6 +185,13 @@ void UBossPatternAbility::CleanupStep()
 			ASC->RemoveLooseGameplayTags(AppliedStepTags);
 			AppliedStepTags.Reset();
 		}
+
+		// 저스트가드 성공(JustGuarded)은 '이 스텝의 판정' 의미다. 스텝을 떠날 때 지워서
+		// 연속 저스트가드(2-3 성공 -> S2_4)에서 앞 스텝의 성공이 다음 스텝의 성공 분기(2-4 -> 그로기)를
+		// 두 번째 판정도 하기 전에 오발시키는 누수를 막는다.
+		// (실패 게이트 JustGuardFailed 는 43 분기 + 남은 창 무시용으로 패턴 종료까지 유지 -> 건드리지 않음.
+		//  분기 평가는 ResolveStep 전에 이미 끝나므로 여기서 지워도 방금 선택된 다음 스텝엔 영향 없다)
+		ASC->SetLooseGameplayTagCount(LostArkTags::State_Boss_PatternResult_JustGuarded.GetTag(), 0);
 	}
 	TagChangeHandle.Reset();
 

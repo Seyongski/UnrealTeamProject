@@ -1,4 +1,4 @@
-﻿#include "Abilities/Skills/LostArkBackstepCloneAbility.h"
+#include "Abilities/Skills/LostArkBackstepCloneAbility.h"
 #include "Actor/LostArkShadowClone.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -94,7 +94,7 @@ void ULostArkBackstepCloneAbility::ActivateAbility(const FGameplayAbilitySpecHan
 	UClass* LoadedShadowCloneClass = ShadowCloneClass.LoadSynchronous();
 	UAnimMontage* LoadedCloneMontage = CloneAttackMontage.LoadSynchronous();
 
-	if (LoadedShadowCloneClass && LoadedCloneMontage && SourceMesh)
+	if (LoadedShadowCloneClass && LoadedCloneMontage && SourceMesh && AvatarChar->HasAuthority())
 	{
 		FVector SpawnCenter = PlayerLoc + PlayerForward * CloneSpawnOffset;
 		FActorSpawnParameters SpawnParams;

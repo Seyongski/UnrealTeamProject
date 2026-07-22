@@ -1,11 +1,20 @@
-﻿#include "Abilities/LostArkMonsterAttackAbility.h"
+#include "Abilities/LostArkMonsterAttackAbility.h"
 #include "Core/LostArkCombatInterface.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 
+#include "UObject/ConstructorHelpers.h"
+#include "GameplayEffect.h"
+
 ULostArkMonsterAttackAbility::ULostArkMonsterAttackAbility()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+
+	static ConstructorHelpers::FClassFinder<UGameplayEffect> DamageEffectClassFinder(TEXT("/Game/Reaper/GE_Damage"));
+	if (DamageEffectClassFinder.Succeeded())
+	{
+		DamageEffectClass = DamageEffectClassFinder.Class;
+	}
 }
 
 void ULostArkMonsterAttackAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

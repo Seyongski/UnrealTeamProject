@@ -1,4 +1,4 @@
-﻿#include "Abilities/Skills/LostArkThrustComboAbility.h"
+#include "Abilities/Skills/LostArkThrustComboAbility.h"
 #include "Actor/LostArkShadowClone.h"
 #include "Character/LostArkCharacter.h"
 #include "AbilitySystemComponent.h"
@@ -171,7 +171,7 @@ void ULostArkThrustComboAbility::PlayThrustComboFinish()
 	ALostArkCharacter* LAChar = Cast<ALostArkCharacter>(AvatarChar);
 	USkeletalMeshComponent* SourceWeapon = LAChar ? LAChar->GetWeaponMesh() : nullptr;
 
-	if (LoadedShadowCloneClass && LoadedCloneMontage && SourceMesh)
+	if (LoadedShadowCloneClass && LoadedCloneMontage && SourceMesh && AvatarChar->HasAuthority())
 	{
 		FVector PlayerLoc = AvatarChar->GetActorLocation();
 		FVector PlayerForward = AvatarChar->GetActorForwardVector();

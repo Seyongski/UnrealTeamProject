@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -36,6 +36,23 @@ public:
 	);
 
 	void ApplyCloneDamage(FVector Origin, FRotator Rotation);
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UPROPERTY(ReplicatedUsing = OnRep_CloneData)
+	AActor* ReplicatedSourceActor;
+	
+	UPROPERTY(ReplicatedUsing = OnRep_CloneData)
+	class UAnimMontage* ReplicatedMontage;
+	
+	UPROPERTY(ReplicatedUsing = OnRep_CloneData)
+	float ReplicatedDashSpeed;
+	
+	UPROPERTY(ReplicatedUsing = OnRep_CloneData)
+	float ReplicatedDashDuration;
+
+	UFUNCTION()
+	void OnRep_CloneData();
 
 protected:
 	virtual void BeginPlay() override;

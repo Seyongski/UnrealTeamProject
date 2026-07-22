@@ -1,4 +1,4 @@
-﻿#include "Abilities/LostArkSkill_Projectile.h"
+#include "Abilities/LostArkSkill_Projectile.h"
 #include "Combat/LostArkProjectile.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -59,10 +59,16 @@ void ULostArkSkill_Projectile::OnHitCheckReceived(FGameplayEventData Payload)
 
 		Projectile->DamageEffectSpecHandle = SpecHandle;
 		
-		if (DamageShapeParams.ShapeType == EDamageShape::Sphere)
+		float HitRadius = DamageShapeParams.Radius;
+		if (DamageShapeParams.ShapeType == EDamageShape::Box)
 		{
-			Projectile->ExplodeRadius = DamageShapeParams.Radius;
+			HitRadius = FMath::Max(DamageShapeParams.BoxExtent.X, DamageShapeParams.BoxExtent.Y);
 		}
+		if (HitRadius <= 0.f)
+		{
+			HitRadius = 100.f;
+		}
+		Projectile->ExplodeRadius = HitRadius;
 	}
 }
 

@@ -51,6 +51,10 @@ public:
 
 	virtual void ShowDamageText(float DamageAmount) override;
 
+	// 서버가 클라이언트에게 직접 호출 - 피격된 캐릭터 화면에서만 데미지 텍스트 생성
+	UFUNCTION(Client, Reliable)
+	void Client_ShowDamageText(float DamageAmount, FVector SpawnLocation);
+
 	UFUNCTION(BlueprintCallable, Category = "Character|Abilities")
 	void RequestComboAttackInput();
 
@@ -67,8 +71,10 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 public:
-	UPROPERTY(BlueprintReadWrite, Category = "Character|Anim")
+	UPROPERTY(BlueprintReadWrite, Category = "Character|Anim", Replicated)
 	bool bIsLeftFootForward;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|UI")
@@ -108,16 +114,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Movement")
 	float BaseRunSpeed;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Character")
+	UPROPERTY(BlueprintReadOnly, Category = "Character", Replicated)
 	bool bIsDead;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Character|Weapon")
+	UPROPERTY(BlueprintReadOnly, Category = "Character|Weapon", ReplicatedUsing = OnRep_IsWeaponEquipped)
 	bool bIsWeaponEquipped;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character|State")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character|State", Replicated)
 	FGameplayTag CurrentStateTag;
 
 private:
+	UFUNCTION()
+	void OnRep_IsWeaponEquipped();
+
 	void OnSkillInputPressed(ELostArkAbilityInputID InputID);
 	void OnSkillInputReleased(ELostArkAbilityInputID InputID);
 
@@ -125,6 +134,9 @@ private:
 
 	void OnAttackingTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	void PlaySheathWeaponMontage();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_PlaySheathWeaponMontage();
 
 	FTimerHandle SheathWeaponTimerHandle;
 

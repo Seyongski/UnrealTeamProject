@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Abilities/LostArkGameplayAbility.h"
@@ -16,8 +16,12 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 	virtual UGameplayEffect* GetCooldownGameplayEffect() const override;
+	virtual UGameplayEffect* GetCostGameplayEffect() const override;
 
 protected:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill")
+	float SkillPlayRate = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill")
 	TSoftObjectPtr<UAnimMontage> SkillMontage;
 

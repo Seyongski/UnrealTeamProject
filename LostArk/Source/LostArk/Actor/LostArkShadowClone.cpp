@@ -1,4 +1,4 @@
-﻿#include "Actor/LostArkShadowClone.h"
+#include "Actor/LostArkShadowClone.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayEffect.h"
@@ -8,11 +8,15 @@
 #include "Engine/World.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "DrawDebugHelpers.h"
+#include "Net/UnrealNetwork.h"
+#include "Character/LostArkCharacter.h"
+#include "Monster/LostArkMonster.h"
 
 ALostArkShadowClone::ALostArkShadowClone()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
+	bReplicates = true;
 
 	MeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("MeshComponent"));
 	RootComponent = MeshComponent;
@@ -38,6 +42,16 @@ ALostArkShadowClone::ALostArkShadowClone()
 void ALostArkShadowClone::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void ALostArkShadowClone::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ALostArkShadowClone, ReplicatedSourceActor);
+	DOREPLIFETIME(ALostArkShadowClone, ReplicatedMontage);
+	DOREPLIFETIME(ALostArkShadowClone, ReplicatedDashSpeed);
+	DOREPLIFETIME(ALostArkShadowClone, ReplicatedDashDuration);
 }
 
 void ALostArkShadowClone::Tick(float DeltaTime)
@@ -97,6 +111,14 @@ void ALostArkShadowClone::InitShadow(
 	InstigatorASC = InInstigatorASC;
 	DamageEffectClass = InDamageEffectClass;
 	DamageShape = InDamageShape;
+
+	if (HasAuthority())
+	{
+		ReplicatedSourceActor = InstigatorASC.IsValid() ? InstigatorASC->GetOwner() : nullptr;
+		ReplicatedMontage = MontageToPlay;
+		ReplicatedDashSpeed = DashSpeed;
+		ReplicatedDashDuration = DashDuration;
+	}
 
 	MeshComponent->SetSkeletalMesh(SourceMeshComp->GetSkeletalMeshAsset());
 	MeshComponent->SetAnimClass(SourceMeshComp->GetAnimClass());
@@ -165,6 +187,19 @@ void ALostArkShadowClone::InitShadow(
 	}
 }
 
+void ALostArkShadowClone::OnRep_CloneData()
+{
+	if (!ReplicatedSourceActor || !ReplicatedMontage) return;
+
+	ALostArkCharacter* Char = Cast<ALostArkCharacter>(ReplicatedSourceActor);
+	if (!Char) return;
+
+	USkeletalMeshComponent* SourceMesh = Char->GetMesh();
+	USkeletalMeshComponent* SourceWeapon = Char->GetWeaponMesh();
+
+	InitShadow(SourceMesh, SourceWeapon, ReplicatedMontage, 1.f, ReplicatedDashSpeed, ReplicatedDashDuration, nullptr, nullptr, FDamageShapeParams());
+}
+
 void ALostArkShadowClone::ApplyCloneDamage(FVector Origin, FRotator Rotation)
 {
 	if (!InstigatorASC.IsValid() || !DamageEffectClass) return;
@@ -200,7 +235,8 @@ void ALostArkShadowClone::ApplyCloneDamage(FVector Origin, FRotator Rotation)
 		for (const FOverlapResult& Overlap : Overlaps)
 		{
 			AActor* HitActor = Overlap.GetActor();
-			if (HitActor && HitActor != InstigatorActor && HitActor->GetClass() != InstigatorActor->GetClass())
+			bool bIsPvP = HitActor && InstigatorActor && HitActor->IsA<ALostArkCharacter>() && InstigatorActor->IsA<ALostArkCharacter>();
+			if (HitActor && HitActor != InstigatorActor && !bIsPvP)
 			{
 				FVector HitLocation = HitActor->GetActorLocation();
 				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) > DamageShape.ZTolerance)
@@ -281,7 +317,8 @@ void ALostArkShadowClone::ApplyCloneDamage(FVector Origin, FRotator Rotation)
 		for (const FOverlapResult& Overlap : Overlaps)
 		{
 			AActor* HitActor = Overlap.GetActor();
-			if (HitActor && HitActor != InstigatorActor && HitActor->GetClass() != InstigatorActor->GetClass())
+			bool bIsPvP = HitActor && InstigatorActor && HitActor->IsA<ALostArkCharacter>() && InstigatorActor->IsA<ALostArkCharacter>();
+			if (HitActor && HitActor != InstigatorActor && !bIsPvP)
 			{
 				FVector HitLocation = HitActor->GetActorLocation();
 				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) <= DamageShape.ZTolerance)

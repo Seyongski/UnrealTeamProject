@@ -1,13 +1,16 @@
-﻿#include "Abilities/LostArkSkill_Targeting.h"
+#include "Abilities/LostArkSkill_Targeting.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Actor/LostArkTargetActor_GroundSelect.h"
 #include "AbilitySystemComponent.h"
 #include "InputAction.h"
+#include "Core/LostArkCombatInterface.h"
 
 ULostArkSkill_Targeting::ULostArkSkill_Targeting()
 {
 	TargetActorClass = ALostArkTargetActor_GroundSelect::StaticClass();
 	SpawnedTargetActor = nullptr;
+
+	ReplicationPolicy = EGameplayAbilityReplicationPolicy::ReplicateYes;
 
 	ActivationOwnedTags.RemoveTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
 	ActivationOwnedTags.RemoveTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
@@ -16,13 +19,9 @@ ULostArkSkill_Targeting::ULostArkSkill_Targeting()
 void ULostArkSkill_Targeting::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] ActivateAbility Called (Direct Spawn Style)!"));
+	bIsTargetConfirmed = false;
 
-	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
-	{
-		UE_LOG(LogTemp, Error, TEXT("[TargetingSkill] CommitAbility Failed!"));
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
-	}
+	// 1차 클릭 시에는 CommitAbility를 수행하지 않고, 2차 타겟 지정 확정 시점에 CommitAbility를 수행합니다.
 
 	// ?쒖쟾 ?쒖옉 ?쒖젏??利됯컖 ?대룞 ?뺤? 諛?珥덇린 留덉슦??諛⑺뼢 ?뚯쟾???섑뻾?⑸땲??
 	HandleActivationBasics(ActorInfo);
@@ -54,12 +53,15 @@ void ULostArkSkill_Targeting::ActivateAbility(const FGameplayAbilitySpecHandle H
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	SpawnParams.Owner = AvatarActor;
 
-	SpawnedTargetActor = World->SpawnActor<ALostArkTargetActor_GroundSelect>(
-		TargetActorClass,
-		AvatarActor->GetActorLocation(),
-		FRotator::ZeroRotator,
-		SpawnParams
-	);
+	if (ActorInfo->IsLocallyControlled())
+	{
+		SpawnedTargetActor = World->SpawnActor<ALostArkTargetActor_GroundSelect>(
+			TargetActorClass,
+			AvatarActor->GetActorLocation(),
+			FRotator::ZeroRotator,
+			SpawnParams
+		);
+	}
 
 	if (SpawnedTargetActor)
 	{
@@ -71,7 +73,7 @@ void ULostArkSkill_Targeting::ActivateAbility(const FGameplayAbilitySpecHandle H
 		SpawnedTargetActor->OnTargetSelected.AddDynamic(this, &ULostArkSkill_Targeting::OnTargetSelectedDirect);
 		SpawnedTargetActor->OnTargetCancelled.AddDynamic(this, &ULostArkSkill_Targeting::OnTargetCancelledDirect);
 	}
-	else
+	else if (ActorInfo->IsLocallyControlled())
 	{
 		UE_LOG(LogTemp, Error, TEXT("[TargetingSkill] Direct TargetActor Spawn Failed!"));
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -80,10 +82,20 @@ void ULostArkSkill_Targeting::ActivateAbility(const FGameplayAbilitySpecHandle H
 
 void ULostArkSkill_Targeting::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] EndAbility called on %s. Cancelled: %d"), HasAuthority(&ActivationInfo) ? TEXT("SERVER") : TEXT("CLIENT"), bWasCancelled);
+
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
 		ASC->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
+	}
+
+	if (AActor* AvatarActor = GetAvatarActorFromActorInfo())
+	{
+		if (ILostArkCombatInterface* CombatInterface = Cast<ILostArkCombatInterface>(AvatarActor))
+		{
+			CombatInterface->SetCombatState(FGameplayTag::EmptyTag);
+		}
 	}
 
 	if (SpawnedTargetActor)
@@ -97,11 +109,11 @@ void ULostArkSkill_Targeting::EndAbility(const FGameplayAbilitySpecHandle Handle
 
 void ULostArkSkill_Targeting::OnTargetSelectedDirect(const FVector& Location)
 {
+	if (bIsTargetConfirmed) return;
+	bIsTargetConfirmed = true;
+
 	CachedTargetLocation = Location;
 	UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] Target Point Confirmed: %s"), *Location.ToString());
-
-	// 여기 추가: 블루프린트에 타겟 위치 전달
-	K2_OnTargetConfirmed(CachedTargetLocation);
 
 	if (SpawnedTargetActor)
 	{
@@ -110,14 +122,48 @@ void ULostArkSkill_Targeting::OnTargetSelectedDirect(const FVector& Location)
 	}
 
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	if (AvatarActor && AvatarActor->HasAuthority())
+	{
+		ContinueTargetingExecution();
+	}
+	else
+	{
+		Server_OnTargetSelected(Location);
+	}
+}
+
+void ULostArkSkill_Targeting::Server_OnTargetSelected_Implementation(FVector Location)
+{
+	CachedTargetLocation = Location;
+	ContinueTargetingExecution();
+}
+
+void ULostArkSkill_Targeting::ContinueTargetingExecution()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] ContinueTargetingExecution called on %s"), HasAuthority(&CurrentActivationInfo) ? TEXT("SERVER") : TEXT("CLIENT"));
+
+	if (!CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[TargetingSkill] CommitAbility Failed at Second Click! (Already on cooldown or no cost)"));
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+		return;
+	}
+
+	Multicast_OnTargetConfirmed(CachedTargetLocation);
+
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
 	if (AvatarActor)
 	{
-		// ?뺤젙 ?대┃ ?쒖젏?먮룄 理쒖쥌 ?寃??꾩튂瑜??ν빐 罹먮┃?곕? 利됯컖 ?뚯쟾?쒗궢?덈떎.
 		FVector DirToTarget = CachedTargetLocation - AvatarActor->GetActorLocation();
 		DirToTarget.Z = 0.f;
 		if (!DirToTarget.IsNearlyZero())
 		{
 			AvatarActor->SetActorRotation(DirToTarget.Rotation());
+		}
+
+		if (ILostArkCombatInterface* CombatInterface = Cast<ILostArkCombatInterface>(AvatarActor))
+		{
+			CombatInterface->SetCombatState(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
 		}
 	}
 
@@ -146,6 +192,7 @@ void ULostArkSkill_Targeting::OnTargetSelectedDirect(const FVector& Location)
 
 			if (Task)
 			{
+				UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] PlayMontageAndWait Task Created Successfully"));
 				CurrentPlayTask = Task;
 				CurrentPlayTask->OnCompleted.AddDynamic(this, &ULostArkSkillGameplayAbility::OnMontageCompleted);
 				CurrentPlayTask->OnBlendOut.AddDynamic(this, &ULostArkSkillGameplayAbility::OnMontageCompleted);
@@ -155,16 +202,19 @@ void ULostArkSkill_Targeting::OnTargetSelectedDirect(const FVector& Location)
 			}
 			else
 			{
+				UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] PlayMontageAndWait Task Failed to Create"));
 				EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 			}
 		}
 		else
 		{
+			UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] Failed to load SkillMontage"));
 			EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 		}
 	}
 	else
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] SkillMontage is Null"));
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 	}
 }
@@ -172,6 +222,18 @@ void ULostArkSkill_Targeting::OnTargetSelectedDirect(const FVector& Location)
 void ULostArkSkill_Targeting::OnTargetCancelledDirect()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[TargetingSkill] Targeting Cancelled."));
+	
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	if (AvatarActor && !AvatarActor->HasAuthority())
+	{
+		Server_OnTargetCancelled();
+	}
+	
+	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+}
+
+void ULostArkSkill_Targeting::Server_OnTargetCancelled_Implementation()
+{
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
@@ -194,6 +256,11 @@ void ULostArkSkill_Targeting::OnHitCheckReceived(FGameplayEventData Payload)
 		LookRot,
 		AvatarActor
 	);
+}
+
+void ULostArkSkill_Targeting::Multicast_OnTargetConfirmed_Implementation(FVector TargetLocation)
+{
+	K2_OnTargetConfirmed(TargetLocation);
 }
 
 

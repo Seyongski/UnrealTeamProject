@@ -28,8 +28,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStaggerGaugeChanged, float, Gaug
  * 지형파괴 기믹 오케스트레이터 (서버 전용 로직).
  *
  * 기믹 한 라운드 = 페이즈 전환 기믹 패턴(TransitionGimmick) 하나가 실행하는 흐름:
- *  1) SpawnGimmickTower : 4개 지정 위치 중 (지형 미파괴 + 타워 없는) 곳 랜덤 선정
- *     -> 이번 라운드의 '파괴 대상 슬라이스' 확정 + 타워 스폰
+ *  1) SpawnGimmickTower(TargetSlice) : 몽타주가 지정한 파괴 대상 슬라이스 확정 + 타워 스폰
+ *     (타워는 미파괴 && 파괴대상 아닌 슬라이스에, 마지막 라운드엔 파괴대상 위에 폴백)
  *  2) BeginStaggerPhase : 무력화 게이지 리필 + State.Boss.StaggerPhase 복제 태그 (UI 게이지 표시)
  *     -> 게이지가 0이 되면 즉시 그로기 GE 적용 (Groggy 태그 -> 패턴 Branch 가 루프를 즉시 끊음)
  *  3) EndStaggerPhase   : 저스트가드 준비 구간 진입 시 게이지 UI 내림
@@ -48,22 +48,35 @@ public:
 	UBossTerrainGimmickComponent();
 
 	/**
-	 * 라운드 시작: 스폰 위치 선정 + 타워 스폰 (서버).
-	 * 후보 = TowerSpawnPoints 중 [슬라이스 미파괴 && 살아있는 타워 없음].
-	 * 후보가 없으면 타워는 안 뽑고 '파괴 대상 슬라이스'만 미파괴 위치 중에서 선정.
-	 * @return 스폰된 타워 (스폰 못 하면 nullptr — 파괴 대상 선정은 그래도 수행됨)
+	 * 라운드 시작: 이번 라운드 파괴 대상 슬라이스 확정(TargetSlice) + 타워 스폰 (서버).
+	 * TargetSlice 는 몽타주(AN_SpawnTower)가 명시 지정 — 바라보기(FaceSlice)/파괴(DestroySlice)가 모두 이 값을 따른다.
+	 *
+	 * 타워 스폰 후보 = [미파괴 && 이번 파괴대상(TargetSlice) 아님 && 살아있는 타워 없음 && 스폰 위치 있음].
+	 * 후보가 없으면(=마지막 라운드, 남은 지형이 파괴대상 하나뿐) 파괴대상 슬라이스 위에 스폰(폴백).
+	 * 타워 위치는 TowerSpawnPoints[슬라이스] 로 직접 매핑된다(각도 계산 없음).
+	 * @return 스폰된 타워 (스폰 못 하면 nullptr — 파괴 대상 확정은 그래도 수행됨)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
-	ABossGimmickTower* SpawnGimmickTower();
+	ABossGimmickTower* SpawnGimmickTower(int32 TargetSlice);
 
 	/**
 	 * 무력화 페이즈 시작 (서버): 게이지를 RequiredAmount 로 세팅(Max 도 동일) + UI 태그 부여.
 	 * 게이지 0 도달 시 Resolve 에 따라 그로기(기믹) 또는 잡기 해제(구출)를 실행한다.
+	 *
+	 * GrabRelease 모드에서 HoldSection/ReleaseSection 을 주면, 무력화 성공(게이지 0)이나
+	 * 시간초과(WindowDuration) 시 현재 재생 중인 보스 몽타주의 HoldSection next 를
+	 * ReleaseSection 으로 바꿔(=SetNextSectionName) 붙잡기 루프를 자연스럽게 빠져나가 던지게 한다.
+	 * (실제 던짐/데미지는 ReleaseSection 의 'Boss Grab Release' 노티파이가 실행)
+	 *
 	 * @param RequiredAmount 이 무력화의 요구량(=최대치). 패턴/노티파이가 지정, 디폴트 100
 	 * @param Resolve        0 도달 시 처리 방식 (그로기 / 잡기 해제)
+	 * @param WindowDuration 구출 윈도우(초, GrabRelease 전용). >0 이면 이 시간 후 시간초과로 풀림. 0=타이머 없음
+	 * @param HoldSection    붙잡고 버티는 루프 섹션 이름 (비우면 폴백: 즉시 직접 해제)
+	 * @param ReleaseSection 풀리는 모션 + GrabRelease 노티파이가 있는 섹션 이름
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
-	void BeginStaggerPhase(float RequiredAmount = 100.f, EStaggerResolve Resolve = EStaggerResolve::Groggy);
+	void BeginStaggerPhase(float RequiredAmount = 100.f, EStaggerResolve Resolve = EStaggerResolve::Groggy,
+		float WindowDuration = 0.f, FName HoldSection = NAME_None, FName ReleaseSection = NAME_None);
 
 	/** 무력화 페이즈 종료: UI 태그 회수 (중복 호출 안전) */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
@@ -92,18 +105,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|Gimmick")
 	bool GetGimmickSliceLocation(FVector& OutLocation) const;
 
-	/** 타워 스폰 후보 4개 위치 (월드 좌표. 보스 BP에서 레벨에 맞게 세팅) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
-	TArray<FVector> TowerSpawnPoints;
-
 	/**
-	 * 지형 파괴 순서(고정). 라운드마다 이 배열 순서대로 슬라이스 번호를 하나씩 파괴한다.
-	 * 타워 스폰 위치와는 무관 — 타워는 랜덤 위치, 파괴는 여기 정해진 순서. 레벨 팀 슬라이스 번호와 맞출 것.
-	 * 이미 파괴된 번호는 건너뛴다. 비우면 파괴 대상 미확정(경고 로그) — 반드시 채울 것.
-	 * 예: [2, 5, 0, 7] 이면 2 -> 5 -> 0 -> 7 순으로 파괴.
+	 * 슬라이스별 타워 스폰 위치 (월드 좌표). 인덱스 = 슬라이스 인덱스 —
+	 * TowerSpawnPoints[N] = 슬라이스 N 위에 타워가 설 위치. SliceCount 개만큼 채운다.
+	 * (각 슬라이스 = 바닥 조각 2개이므로, 그 슬라이스를 대표하는 한 지점을 넣으면 된다)
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
-	TArray<int32> DestructionOrder;
+	TArray<FVector> TowerSpawnPoints;
 
 	/** 보스가 파괴 슬라이스를 바라볼 때의 기준 거리(cm). 아레나 중심에서 슬라이스 방향으로 이만큼 앞 */
 	UPROPERTY(EditAnywhere, Category = "Boss|Gimmick", meta = (ClampMin = "1.0"))
@@ -131,17 +139,24 @@ protected:
 private:
 	UAbilitySystemComponent* GetASC() const;
 
-	/** 고정 순서(DestructionOrder)에서 아직 안 부서진 다음 슬라이스 번호. 없으면 INDEX_NONE (인덱스 진행) */
-	int32 NextDestructionSlice(ABossRaidGameState* GS);
-
 	/** 무력화 게이지 변화 감시(서버+클라): UI 방송 + 서버 0 도달 시 Resolve 처리 */
 	void HandleStaggerGaugeChanged(const FOnAttributeChangeData& Data);
 
 	/** Event.Boss.StaggerHit 수신 (서버) -> ApplyStaggerHit(EventMagnitude) */
 	void HandleStaggerHitEvent(const FGameplayEventData* Payload);
 
-	/** 이 보스가 잡고 있는 모든 잡기 장판 해제 (GrabRelease 모드 0 도달 시) */
+	/** 이 보스가 잡고 있는 모든 잡기 장판 즉시 해제(던짐). 섹션 폴백/구버전 경로에서만 사용 */
 	void ReleaseBossGrabs();
+
+	/**
+	 * 붙잡기 루프를 풀림 섹션으로 빠져나가게 한다 (무력화 성공/시간초과 공용).
+	 * 현재 재생 중인 보스 몽타주의 HoldSection next 를 ReleaseSection 으로 교체(SetNextSectionName).
+	 * 섹션 미지정이거나 몽타주가 GAS 재생이 아니면 폴백으로 ReleaseBossGrabs() 직접 해제.
+	 */
+	void BreakGrabHoldToRelease();
+
+	/** 구출 윈도우 만료(시간초과): 게이지 내리고 풀림 섹션으로 (던짐은 Release 노티파이) */
+	void OnStaggerWindowTimeout();
 
 	/** 그로기 종료: State.Boss.Groggy 복제 루스 태그 회수 (GroggyTimer 콜백) */
 	void EndGroggy();
@@ -152,14 +167,11 @@ private:
 	/** 소멸된 타워 정리 (약참조 무효 항목 제거) */
 	void CleanupDeadTowers();
 
-	/** 스폰 위치 인덱스 -> 살아있는 타워 (점유 위치 재스폰 방지) */
+	/** 슬라이스 인덱스 -> 살아있는 타워 (같은 슬라이스 중복 스폰 방지) */
 	TMap<int32, TWeakObjectPtr<ABossGimmickTower>> LiveTowers;
 
 	/** 이번 라운드의 파괴 대상 (파괴 요청 시 INDEX_NONE 으로 리셋 -> 이중 파괴 방지) */
 	int32 CurrentSliceIndex = INDEX_NONE;
-
-	/** DestructionOrder 진행 위치 (라운드마다 증가. 배열 크기로 나눠 순환) */
-	int32 DestructionOrderIndex = 0;
 
 	/** 이번(직전) 라운드의 기믹 위치. 다음 라운드 시작까지 유지 (바라보기 회전용) */
 	FVector CurrentGimmickLocation = FVector::ZeroVector;
@@ -172,6 +184,13 @@ private:
 
 	/** 이번 무력화 페이즈가 0 도달 시 무엇을 할지 (BeginStaggerPhase 에서 설정) */
 	EStaggerResolve CurrentStaggerResolve = EStaggerResolve::Groggy;
+
+	/** GrabRelease 모드: 붙잡기 루프 섹션 / 풀림 섹션 이름 (BeginStaggerPhase 에서 설정) */
+	FName GrabHoldSection = NAME_None;
+	FName GrabReleaseSection = NAME_None;
+
+	/** 구출 윈도우 타이머 (만료 시 시간초과 -> 풀림 섹션) */
+	FTimerHandle StaggerWindowTimer;
 
 	FTimerHandle DestroySliceTimer;
 

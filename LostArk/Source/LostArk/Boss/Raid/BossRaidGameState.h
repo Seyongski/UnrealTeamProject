@@ -53,9 +53,13 @@ public:
 	/** 클리어 마킹 (서버 전용. GameMode 클리어 연출 시퀀스가 호출) -> 전 머신 방송 + 배너 표시 */
 	void MarkRaidCleared();
 
-	/** 피자 조각 수 (레벨별 GameState BP에서 설정) */
+	/**
+	 * 파괴 판정 슬라이스(사분면) 수. 기본 4 — 한 라운드에 십자 사분면 하나(=바닥 조각 2개)가
+	 * 같이 무너지는 설계라, '논리적 슬라이스'는 바닥 조각(BP_MordoomFloorPiece, 8개) 단위가 아니라
+	 * 그 절반인 사분면 단위로 잡는다. 레벨별로 다르면 GameState BP 에서 재설정.
+	 */
 	UPROPERTY(EditDefaultsOnly, Replicated, BlueprintReadOnly, Category = "Arena")
-	int32 SliceCount = 8;
+	int32 SliceCount = 4;
 
 	/** 아레나 중심 (GameMode가 조우 시작 시 세팅) */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Arena")

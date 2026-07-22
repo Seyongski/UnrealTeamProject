@@ -10,7 +10,7 @@ void UAnimNotify_BossBeginStaggerPhase::Notify(USkeletalMeshComponent* MeshComp,
 
 	if (UBossTerrainGimmickComponent* Gimmick = BossNotify::GetServerComponent<UBossTerrainGimmickComponent>(MeshComp))
 	{
-		Gimmick->BeginStaggerPhase(RequiredAmount, Resolve);
+		Gimmick->BeginStaggerPhase(RequiredAmount, Resolve, WindowDuration, HoldSection, ReleaseSection);
 	}
 }
 

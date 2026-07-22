@@ -64,7 +64,7 @@ void UBossTerrainGimmickComponent::CleanupDeadTowers()
 	}
 }
 
-ABossGimmickTower* UBossTerrainGimmickComponent::SpawnGimmickTower()
+ABossGimmickTower* UBossTerrainGimmickComponent::SpawnGimmickTower(int32 TargetSlice)
 {
 	AActor* Owner = GetOwner();
 	UWorld* World = GetWorld();
@@ -74,87 +74,70 @@ ABossGimmickTower* UBossTerrainGimmickComponent::SpawnGimmickTower()
 	}
 
 	ABossRaidGameState* GS = World->GetGameState<ABossRaidGameState>();
-	if (!GS || TowerSpawnPoints.Num() == 0)
+	if (!GS)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] GameState 없음 또는 TowerSpawnPoints 미설정 — 라운드 시작 불가"));
+		UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] GameState 없음 — 라운드 시작 불가"));
+		return nullptr;
+	}
+	if (TargetSlice < 0 || TargetSlice >= GS->SliceCount)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] TargetSlice(%d) 범위 밖 (SliceCount=%d) — 파괴 대상 미확정"),
+			TargetSlice, GS->SliceCount);
 		return nullptr;
 	}
 
 	CleanupDeadTowers();
 
-	// 1) 이번 라운드 파괴 대상 = '고정 순서(DestructionOrder)'의 다음 미파괴 슬라이스.
-	//    타워 위치와 완전히 독립 — 정해진 순서대로 번호를 부른다.
-	CurrentSliceIndex = NextDestructionSlice(GS);
-	if (CurrentSliceIndex != INDEX_NONE)
-	{
-		// 보스가 바라볼 위치 = 그 슬라이스 방향 (아레나 중심 기준)
-		CurrentGimmickLocation = GS->GetSliceCenterLocation(CurrentSliceIndex, GimmickLookRadius);
-		bHasGimmickLocation = true;
-	}
+	// 1) 이번 라운드 파괴 대상 = 몽타주(AN_SpawnTower)가 지정한 슬라이스.
+	//    바라보기(FaceSlice)/파괴(DestroySlice)가 모두 이 값을 따른다.
+	CurrentSliceIndex = TargetSlice;
+	CurrentGimmickLocation = GS->GetSliceCenterLocation(TargetSlice, GimmickLookRadius);
+	bHasGimmickLocation = true;
 
-	// 2) 타워 스폰: 지정 위치 중 [지형 미파괴 && 타워 없음] 곳에 랜덤. (파괴 대상 슬라이스와 무관)
-	TArray<int32> Spawnable;
-	for (int32 i = 0; i < TowerSpawnPoints.Num(); ++i)
+	// 2) 타워 스폰 후보 = [미파괴 && 이번 파괴대상 아님 && 타워 없음 && 스폰 위치 있음].
+	//    타워가 곧 무너질 지형과 함께 사라지는 것을 방지 (이번에 부술 슬라이스를 제외).
+	TArray<int32> Candidates;
+	for (int32 Slice = 0; Slice < GS->SliceCount; ++Slice)
 	{
-		const int32 Slice = GS->GetSliceIndexAt(TowerSpawnPoints[i]);
-		if (!GS->IsSliceDestroyed(Slice) && !LiveTowers.Contains(i))
+		if (GS->IsSliceDestroyed(Slice) || Slice == TargetSlice ||
+			LiveTowers.Contains(Slice) || !TowerSpawnPoints.IsValidIndex(Slice))
 		{
-			Spawnable.Add(i);
+			continue;
 		}
+		Candidates.Add(Slice);
 	}
 
-	if (Spawnable.Num() == 0 || !TowerClass)
+	// 마지막 라운드 폴백: 남은 미파괴 지형이 파괴대상 하나뿐이라 제외 후 후보가 없으면
+	// 파괴대상 슬라이스 위에 스폰한다 (그곳 말고는 설 지형이 없으므로).
+	if (Candidates.Num() == 0 &&
+		!LiveTowers.Contains(TargetSlice) && TowerSpawnPoints.IsValidIndex(TargetSlice))
+	{
+		Candidates.Add(TargetSlice);
+	}
+
+	if (Candidates.Num() == 0 || !TowerClass)
 	{
 		return nullptr;	// 파괴 대상만 확정, 타워는 생략 (스폰할 곳/클래스 없음)
 	}
 
-	const int32 PointIndex = Spawnable[FMath::RandRange(0, Spawnable.Num() - 1)];
-	const FVector TowerLoc = TowerSpawnPoints[PointIndex];
+	const int32 SpawnSlice = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+	const FVector TowerLoc = TowerSpawnPoints[SpawnSlice];
 
 	const FTransform SpawnTM(FRotator::ZeroRotator, TowerLoc);
 	ABossGimmickTower* Tower = World->SpawnActorDeferred<ABossGimmickTower>(
 		TowerClass, SpawnTM, Owner, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (Tower)
 	{
-		// 타워의 SliceIndex = '딛고 선' 지형 (그 지형이 나중에 파괴되면 함께 소멸용). 파괴 대상과는 별개.
-		Tower->InitTower(Owner, GS->GetSliceIndexAt(TowerLoc));
+		// 타워의 SliceIndex = 딛고 선 슬라이스. 그 슬라이스가 파괴되면 타워도 함께 소멸.
+		Tower->InitTower(Owner, SpawnSlice);
 		Tower->FinishSpawning(SpawnTM);
-		LiveTowers.Add(PointIndex, Tower);
+		LiveTowers.Add(SpawnSlice, Tower);
 	}
 	return Tower;
 }
 
-int32 UBossTerrainGimmickComponent::NextDestructionSlice(ABossRaidGameState* GS)
-{
-	if (!GS)
-	{
-		return INDEX_NONE;
-	}
-
-	if (DestructionOrder.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[TerrainGimmick] DestructionOrder 미설정 — 보스 기믹 컴포넌트에 파괴 순서를 지정할 것 (파괴 스킵)"));
-		return INDEX_NONE;
-	}
-
-	// 정해진 순서를 따라가며 이미 파괴된 번호는 건너뛴다 (한 바퀴 다 돌아 전부 파괴면 종료)
-	for (int32 n = 0; n < DestructionOrder.Num(); ++n)
-	{
-		const int32 Idx = DestructionOrderIndex % DestructionOrder.Num();
-		++DestructionOrderIndex;
-		const int32 Candidate = DestructionOrder[Idx];
-		if (!GS->IsSliceDestroyed(Candidate))
-		{
-			return Candidate;
-		}
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] DestructionOrder 슬라이스가 전부 파괴됨 — 더 부술 지형 없음"));
-	return INDEX_NONE;
-}
-
-void UBossTerrainGimmickComponent::BeginStaggerPhase(float RequiredAmount, EStaggerResolve Resolve)
+void UBossTerrainGimmickComponent::BeginStaggerPhase(float RequiredAmount, EStaggerResolve Resolve,
+	float WindowDuration, FName HoldSection, FName ReleaseSection)
 {
 	AActor* Owner = GetOwner();
 	UAbilitySystemComponent* ASC = GetASC();
@@ -164,6 +147,8 @@ void UBossTerrainGimmickComponent::BeginStaggerPhase(float RequiredAmount, EStag
 	}
 	bStaggerPhaseActive = true;
 	CurrentStaggerResolve = Resolve;
+	GrabHoldSection = HoldSection;
+	GrabReleaseSection = ReleaseSection;
 
 	// 요구량 = 최대치. Max/Current 를 함께 세팅 -> 위젯이 Current/Max 로 항상 100%부터 시작.
 	// (패턴마다 요구량이 다르므로 노티파이/호출부가 지정, 디폴트 100)
@@ -173,6 +158,13 @@ void UBossTerrainGimmickComponent::BeginStaggerPhase(float RequiredAmount, EStag
 
 	// 클라 무력화 게이지 UI 표시 (게이지 값 자체는 어트리뷰트 복제로 이미 전파됨)
 	UBossCombatStatics::AddReplicatedLooseTag(ASC, LostArkTags::State_Boss_StaggerPhase.GetTag());
+
+	// 구출(GrabRelease) 모드 + 윈도우 지정 시: 시간초과 타이머. 무력화가 먼저면 EndStaggerPhase 가 취소.
+	if (Resolve == EStaggerResolve::GrabRelease && WindowDuration > 0.f)
+	{
+		Owner->GetWorldTimerManager().SetTimer(StaggerWindowTimer, this,
+			&UBossTerrainGimmickComponent::OnStaggerWindowTimeout, WindowDuration, false);
+	}
 }
 
 void UBossTerrainGimmickComponent::ApplyStaggerHit(float Amount)
@@ -221,6 +213,48 @@ void UBossTerrainGimmickComponent::ReleaseBossGrabs()
 	}
 }
 
+void UBossTerrainGimmickComponent::BreakGrabHoldToRelease()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority())
+	{
+		return;
+	}
+
+	// 섹션 지정 시: 현재 재생 중인 보스 몽타주(GAS 재생)의 Hold next 를 Release 로 교체.
+	// SetNextSectionName 이라 돌던 Hold 루프가 끝나는 순간 자연스럽게 Release 로 흘러간다.
+	// GAS(ASC) 경유라 서버 변경이 시뮬레이트 프록시(모든 클라)에 복제된다.
+	// CurrentMontageSetNextSectionName 은 void 라 성공 여부를 못 받으므로,
+	// GAS 몽타주가 실제 재생 중일 때만(GetCurrentMontage) 섹션 예약하고 아니면 폴백.
+	if (GrabHoldSection != NAME_None && GrabReleaseSection != NAME_None)
+	{
+		if (UAbilitySystemComponent* ASC = GetASC())
+		{
+			if (ASC->GetCurrentMontage() != nullptr)
+			{
+				ASC->CurrentMontageSetNextSectionName(GrabHoldSection, GrabReleaseSection);
+				return;	// 풀림 섹션 예약 -> 던짐은 Release 의 GrabRelease 노티파이가 실행
+			}
+		}
+	}
+
+	// 폴백: 섹션 미지정이거나 GAS 몽타주가 아니면 즉시 직접 해제(던짐) — 구버전/안전망
+	ReleaseBossGrabs();
+}
+
+void UBossTerrainGimmickComponent::OnStaggerWindowTimeout()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !bStaggerPhaseActive)
+	{
+		return;
+	}
+
+	// 시간초과: 게이지 내리고(EndStaggerPhase) 붙잡기 루프를 풀림 섹션으로.
+	// EndStaggerPhase 가 StaggerWindowTimer 를 지우지만 이미 만료된 상태라 무해.
+	EndStaggerPhase();
+	BreakGrabHoldToRelease();
+}
+
 void UBossTerrainGimmickComponent::EndStaggerPhase()
 {
 	AActor* Owner = GetOwner();
@@ -229,6 +263,9 @@ void UBossTerrainGimmickComponent::EndStaggerPhase()
 		return;
 	}
 	bStaggerPhaseActive = false;
+
+	// 구출 윈도우 타이머 취소 (무력화가 먼저 성공했거나 페이즈가 끝난 경우 시간초과가 또 뜨지 않게)
+	Owner->GetWorldTimerManager().ClearTimer(StaggerWindowTimer);
 
 	if (UAbilitySystemComponent* ASC = GetASC())
 	{
@@ -269,7 +306,9 @@ void UBossTerrainGimmickComponent::HandleStaggerGaugeChanged(const FOnAttributeC
 			{
 				if (Resolve == EStaggerResolve::GrabRelease)
 				{
-					ReleaseBossGrabs();	// 구출: 잡힌 팀원 해제
+					// 구출(무력화 성공): 붙잡기 루프를 풀림 섹션으로. 던짐/데미지는 Release 노티파이가 실행.
+					// (시간초과 경로와 완전 대칭 — 차이는 '언제 빠져나가느냐'뿐)
+					BreakGrabHoldToRelease();
 				}
 				else
 				{

@@ -46,6 +46,10 @@ void UBossAoeGrabEffect::OnHit(ABossPatternActorBase* Aoe, AActor* Target)
 
 void UBossAoeGrabEffect::GrabOne(ABossPatternActorBase* Aoe, ACharacter* Char)
 {
+	// 노티파이/타이머 해제가 OnFinish 보다 먼저 와도 던지기(RestoreOne)가 살아있도록
+	// 첫 잡기 시점에 소유 장판을 확보한다. (OnFinish 전엔 OwningAoe 가 null 이라 던짐이 스킵되던 버그)
+	OwningAoe = Aoe;
+
 	AActor* Caster = Aoe ? Aoe->GetCaster() : nullptr;
 
 	FGrabbedTargetInfo Info;

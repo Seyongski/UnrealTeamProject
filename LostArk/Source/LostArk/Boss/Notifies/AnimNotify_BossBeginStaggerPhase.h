@@ -33,4 +33,23 @@ public:
 	/** 게이지 0 도달 시 처리: 그로기(기믹) / 잡기 해제(구출) */
 	UPROPERTY(EditAnywhere, Category = "Stagger")
 	EStaggerResolve Resolve = EStaggerResolve::GrabRelease;
+
+	/**
+	 * 구출 윈도우(초). GrabRelease 모드에서만 사용. 이 시간 안에 무력화 못 하면 시간초과로
+	 * 자동으로 풀림 섹션(ReleaseSection)으로 넘어간다(=던짐). 0 이면 타이머 없음(무력화로만 해제).
+	 */
+	UPROPERTY(EditAnywhere, Category = "Stagger", meta = (ClampMin = "0.0"))
+	float WindowDuration = 0.f;
+
+	/**
+	 * 이 몽타주에서 '붙잡고 버티는' 루프 섹션 이름. 무력화 성공/시간초과 시 이 섹션의
+	 * next 를 ReleaseSection 으로 바꿔 자연스럽게 루프를 빠져나가게 한다.
+	 * (섹션은 에디터에서 자기 자신으로 루프되게 설정할 것)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Stagger")
+	FName HoldSection;
+
+	/** 사람이 풀리는 모션 + Boss Grab Release 노티파이가 있는 섹션 이름. */
+	UPROPERTY(EditAnywhere, Category = "Stagger")
+	FName ReleaseSection;
 };

@@ -1,4 +1,4 @@
-﻿#include "UI/LostArkDamageTextActor.h"
+#include "UI/LostArkDamageTextActor.h"
 #include "Components/WidgetComponent.h"
 #include "Combat/LostArkObjectPoolSubsystem.h"
 
@@ -16,6 +16,12 @@ ALostArkDamageTextActor::ALostArkDamageTextActor()
 void ALostArkDamageTextActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (DamageTextWidgetComponent)
+	{
+		DamageTextWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
+		DamageTextWidgetComponent->InitWidget();
+	}
 }
 
 void ALostArkDamageTextActor::OnAcquiredFromPool_Implementation()
@@ -23,6 +29,12 @@ void ALostArkDamageTextActor::OnAcquiredFromPool_Implementation()
 	SetActorHiddenInGame(false);
 	SetActorEnableCollision(true);
 	SetActorTickEnabled(true);
+
+	if (DamageTextWidgetComponent)
+	{
+		DamageTextWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
+		DamageTextWidgetComponent->InitWidget();
+	}
 }
 
 void ALostArkDamageTextActor::OnReleasedToPool_Implementation()

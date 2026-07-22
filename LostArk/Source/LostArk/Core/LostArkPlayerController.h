@@ -25,6 +25,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void InitializeHUDForCharacter(class ALostArkCharacter* InCharacter);
 
+	UFUNCTION(Client, Reliable)
+	void ClientShowStageClearUI();
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	TSoftObjectPtr<UNiagaraSystem> FXCursor;
 
@@ -50,6 +53,12 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "UI")
 	class ULostArkHUDWidget* HUDWidget;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class UUserWidget> StageClearWidgetClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	class UUserWidget* StageClearWidget;
+
 	void OnInputStarted();
 	void OnSetDestinationTriggered();
 	void OnSetDestinationReleased();
@@ -66,12 +75,6 @@ protected:
 	void DebugTryJustGuard();
 	UFUNCTION(Server, Reliable)
 	void ServerDebugTryJustGuard();
-	// ============================================================================================
-
-	// ===== [임시 디버그] E -> 보스 무력화 게이지 -10. 무력화/구출 게이지 확인용. 나중에 스킬 무력화 수치로 대체 =====
-	void DebugStaggerHit();
-	UFUNCTION(Server, Reliable)
-	void ServerDebugStaggerHit();
 	// ============================================================================================
 
 private:

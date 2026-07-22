@@ -1,4 +1,4 @@
-﻿#include "Monster/LostArkMonsterSpawner.h"
+#include "Monster/LostArkMonsterSpawner.h"
 #include "Monster/LostArkMonster.h"
 #include "Combat/LostArkObjectPoolSubsystem.h"
 #include "NavigationSystem.h"
@@ -23,9 +23,11 @@ void ALostArkMonsterSpawner::BeginPlay()
 {
 	Super::BeginPlay();
 
-	GetWorldTimerManager().SetTimer(SpawnTimerHandle, this, &ALostArkMonsterSpawner::SpawnMonsterBatch, SpawnInterval, true);
-
-	SpawnMonsterBatch();
+	if (HasAuthority())
+	{
+		// NavMesh가 빌드될 시간을 주기 위해 첫 스폰을 SpawnInterval만큼 지연시킵니다.
+		GetWorldTimerManager().SetTimer(SpawnTimerHandle, this, &ALostArkMonsterSpawner::SpawnMonsterBatch, SpawnInterval, true, SpawnInterval);
+	}
 }
 
 void ALostArkMonsterSpawner::SpawnMonsterBatch()
@@ -62,13 +64,18 @@ void ALostArkMonsterSpawner::SpawnMonsterBatch()
 		if (NavSys)
 		{
 			FNavLocation RandomNavLocation;
-			if (NavSys->GetRandomReachablePointInRadius(GetActorLocation(), SpawnRadius, RandomNavLocation))
+			if (NavSys->GetRandomPointInNavigableRadius(GetActorLocation(), SpawnRadius, RandomNavLocation))
+			{
+				SpawnLocation = RandomNavLocation.Location;
+			}
+			else if (NavSys->GetRandomReachablePointInRadius(GetActorLocation(), SpawnRadius, RandomNavLocation))
 			{
 				SpawnLocation = RandomNavLocation.Location;
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[Spawner] Failed to find a valid location on NavMesh in radius. Falling back to actor origin."));
+				UE_LOG(LogTemp, Warning, TEXT("[Spawner] NavMesh not found in radius. Spawning at spawner actor location."));
+				SpawnLocation = GetActorLocation();
 			}
 		}
 
@@ -79,6 +86,11 @@ void ALostArkMonsterSpawner::SpawnMonsterBatch()
 
 		if (IsValid(Monster))
 		{
+			if (!Monster->GetController())
+			{
+				Monster->SpawnDefaultController();
+			}
+
 			Monster->OnMonsterKilled.AddDynamic(this, &ALostArkMonsterSpawner::OnMonsterKilled);
 			
 			ActiveMonsters.Add(Monster);
@@ -115,12 +127,13 @@ void ALostArkMonsterSpawner::OnMonsterKilled(ALostArkMonster* KilledMonster)
 		PoolSubsystem->ReleaseActor(KilledMonster);
 	}
 
-	if (KilledCount >= TotalSpawnLimit)
+	if (KilledCount >= TotalSpawnLimit && ActiveMonsters.Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Spawner] Chaos Dungeon Phase Clear! %d Monsters vanquished. Spawning terminated."), TotalSpawnLimit);
 		GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
+		OnAllMonstersKilled.Broadcast(this);
 	}
-	else
+	else if (KilledCount < TotalSpawnLimit)
 	{
 		SpawnMonsterBatch();
 	}

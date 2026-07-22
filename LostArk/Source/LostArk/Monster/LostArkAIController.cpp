@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Monster/LostArkAIController.h"
 #include "Monster/LostArkMonster.h"
@@ -69,7 +69,26 @@ void ALostArkAIController::UpdateAIBehavior()
 		return;
 	}
 
-	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
+	ACharacter* PlayerCharacter = nullptr;
+	float MinDistance = FLT_MAX;
+
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (IsValid(PC) && PC->GetPawn())
+		{
+			if (ACharacter* PlayerChar = Cast<ACharacter>(PC->GetPawn()))
+			{
+				float Dist = Monster->GetDistanceTo(PlayerChar);
+				if (Dist < MinDistance)
+				{
+					MinDistance = Dist;
+					PlayerCharacter = PlayerChar;
+				}
+			}
+		}
+	}
+
 	if (!IsValid(PlayerCharacter))
 	{
 		ClearFocus(EAIFocusPriority::Gameplay);

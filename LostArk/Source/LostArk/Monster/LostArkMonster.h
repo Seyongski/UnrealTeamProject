@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
@@ -25,6 +25,8 @@ public:
 	virtual void OnReleasedToPool_Implementation() override;
 
 	virtual void PossessedBy(AController* NewController) override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual void Die() override;
 
@@ -71,10 +73,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Settings")
 	float BaseAttackRange = 300.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|State")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|State", ReplicatedUsing = OnRep_CurrentStateTag)
 	FGameplayTag CurrentStateTag;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|State")
+	UFUNCTION()
+	void OnRep_CurrentStateTag(FGameplayTag OldTag);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|State", Replicated)
 	bool bIsDead;
 
 	FGameplayTag StateSpawningTag;

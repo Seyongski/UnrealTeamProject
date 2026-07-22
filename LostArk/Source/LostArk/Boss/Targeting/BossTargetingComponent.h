@@ -43,6 +43,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|Targeting")
 	AActor* GetCurrentTarget() const { return CurrentTarget; }
 
+	/**
+	 * 직전 추적 회전과 같은 방향으로 초당 TurnRate(도)만큼 회전 시작 (서버).
+	 * 방향 부호는 TrackTarget 구간에서 캡처된 LastTrackTurnSign 을 재사용
+	 * -> 추적이 시계방향이었으면 이 회전도 시계방향.
+	 * @param TurnRateDegPerSec 초당 회전량(도). 부호 없이 크기만
+	 * @param FallbackSign      추적 이력이 없어 방향 미정일 때 쓸 부호 (+1/-1)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Targeting")
+	void BeginScriptedTurn(float TurnRateDegPerSec, float FallbackSign = 1.f);
+
+	/** 스크립트 회전 종료 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Targeting")
+	void EndScriptedTurn();
+
+	/** 마지막 추적 회전 방향 부호 (+1/-1, 0=미정). 추적 세션 시작 시 리셋 후 첫 유효 프레임에 확정 */
+	UFUNCTION(BlueprintPure, Category = "Boss|Targeting")
+	float GetLastTrackTurnSign() const { return LastTrackTurnSign; }
+
 	/** 사망 판정 태그. 이 태그를 가진 플레이어는 후보에서 제외 (미설정 시 BeginPlay에서 State.Dead 로 폴백) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
 	FGameplayTag DeadTag;
@@ -65,8 +83,23 @@ private:
 	/** 서버에서 TrackTarget 태그가 있을 때 액터를 타겟 방향으로 보간 회전 */
 	void UpdateFacing(float DeltaTime);
 
+	/** 스크립트 회전: 캡처된 부호 x TurnRate 로 등속 회전 (추적 중이면 추적이 우선) */
+	void UpdateScriptedTurn(float DeltaTime);
+
 	UAbilitySystemComponent* GetOwnerASC() const;
 
 	UPROPERTY(Replicated, Transient)
 	TObjectPtr<AActor> CurrentTarget;
+
+	/** 마지막 추적 회전 방향 (+1/-1, 0=미정). 추적 세션 첫 유효 프레임에 확정 */
+	float LastTrackTurnSign = 0.f;
+
+	/** 직전 틱에 추적 중이었는지 (추적 시작 엣지 감지 -> 방향 부호 리셋용) */
+	bool bWasTracking = false;
+
+	/** 스크립트 회전 활성 여부 (노티파이가 Begin/End 로 토글) */
+	bool bScriptedTurnActive = false;
+
+	/** 스크립트 회전 속도(도/초, 크기만). 부호는 LastTrackTurnSign */
+	float ScriptedTurnRate = 0.f;
 };

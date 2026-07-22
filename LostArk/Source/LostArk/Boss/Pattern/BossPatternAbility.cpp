@@ -3,6 +3,7 @@
 #include "Boss/Pattern/BossPatternAbility.h"
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Pattern/PatternDataAsset.h"
+#include "Boss/Combat/BossCounterComponent.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -185,6 +186,16 @@ void UBossPatternAbility::CleanupStep()
 		}
 	}
 	TagChangeHandle.Reset();
+
+	// 카운터 창 강제 닫기: 분기 인터럽트로 몽타주가 끊길 때 NotifyEnd 누락 케이스 방어
+	// (창은 스텝 몽타주 안에서만 열리므로 스텝 정리 시점에 닫는 게 항상 안전)
+	if (AActor* Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UBossCounterComponent* Counter = Avatar->FindComponentByClass<UBossCounterComponent>())
+		{
+			Counter->CloseWindow();
+		}
+	}
 
 	if (MontageTask)
 	{

@@ -1,10 +1,12 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "LostArkMonsterSpawner.generated.h"
 
 class ALostArkMonster;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAllMonstersKilledSignature, ALostArkMonsterSpawner*, Spawner);
 
 UCLASS()
 class LOSTARK_API ALostArkMonsterSpawner : public AActor
@@ -13,6 +15,9 @@ class LOSTARK_API ALostArkMonsterSpawner : public AActor
 	
 public:	
 	ALostArkMonsterSpawner();
+
+	UPROPERTY(BlueprintAssignable, Category = "Spawner Events")
+	FOnAllMonstersKilledSignature OnAllMonstersKilled;
 
 protected:
 	virtual void BeginPlay() override;

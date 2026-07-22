@@ -17,6 +17,7 @@ class LOSTARK_API ILostArkCombatInterface
 
 public:
 	virtual void Die() = 0;
+	virtual void Revive() {}
 	virtual bool IsDead() const = 0;
 	virtual FGameplayTag GetCurrentStateTag() const = 0;
 	virtual void SetCombatState(FGameplayTag NewStateTag) = 0;

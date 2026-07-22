@@ -15,10 +15,9 @@
 #include "EnhancedInputComponent.h"
 #include "UI/LostArkDamageTextActor.h"
 #include "Combat/LostArkObjectPoolSubsystem.h"
-#include "LostArk/Abilities/LostArkSkill_Targeting.h"
-#include "UI/LostArkDamageTextActor.h"
-#include "Combat/LostArkObjectPoolSubsystem.h"
+#include "Abilities/LostArkSkill_Targeting.h"
 #include "Core/LostArkPlayerController.h"
+#include "Net/UnrealNetwork.h"
 
 static const float DefaultCapsuleRadius = 42.f;
 static const float DefaultCapsuleHalfHeight = 96.f;
@@ -65,6 +64,12 @@ ALostArkCharacter::ALostArkCharacter()
 	bIsDead = false;
 	bIsWeaponEquipped = false;
 
+	static ConstructorHelpers::FClassFinder<ALostArkDamageTextActor> DamageTextClassFinder(TEXT("/Game/Reaper/UI/BP_DamageTextActor"));
+	if (DamageTextClassFinder.Succeeded())
+	{
+		DamageTextClass = DamageTextClassFinder.Class;
+	}
+
 	PrimaryActorTick.bCanEverTick = false;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 }
@@ -72,6 +77,15 @@ ALostArkCharacter::ALostArkCharacter()
 UAbilitySystemComponent* ALostArkCharacter::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
+}
+
+void ALostArkCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ALostArkCharacter, CurrentStateTag);
+	DOREPLIFETIME(ALostArkCharacter, bIsDead);
+	DOREPLIFETIME(ALostArkCharacter, bIsWeaponEquipped);
+	DOREPLIFETIME(ALostArkCharacter, bIsLeftFootForward);
 }
 
 void ALostArkCharacter::BeginPlay()
@@ -88,9 +102,20 @@ void ALostArkCharacter::SetWeaponEquipped(bool bIsEquipped)
 {
 	bIsWeaponEquipped = bIsEquipped;
 	
+	// 서버에서 소켓 변경 + 클라이언트는 OnRep_IsWeaponEquipped에서 처리
 	if (WeaponMesh && GetMesh())
 	{
 		FName TargetSocket = bIsEquipped ? WeaponEquippedSocketName : WeaponUnequippedSocketName;
+		WeaponMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TargetSocket);
+	}
+}
+
+void ALostArkCharacter::OnRep_IsWeaponEquipped()
+{
+	// 클라이언트에서 서버로부터 복제된 값이 도착했을 때 소켓 위치 동기화
+	if (WeaponMesh && GetMesh())
+	{
+		FName TargetSocket = bIsWeaponEquipped ? WeaponEquippedSocketName : WeaponUnequippedSocketName;
 		WeaponMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TargetSocket);
 	}
 }
@@ -172,22 +197,30 @@ void ALostArkCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 void ALostArkCharacter::ShowDamageText(float DamageAmount)
 {
-	if (DamageTextClass)
+	// AttributeSet에서 직접 Client_ShowDamageText RPC를 호출하지만,
+	// 다른 경로를 통해 호출될 경우를 대비한 fallback
+	float RandomX = FMath::RandRange(-50.f, 50.f);
+	float RandomY = FMath::RandRange(-50.f, 50.f);
+	float RandomZ = FMath::RandRange(50.f, 150.f);
+	FVector SpawnLoc = GetActorLocation() + FVector(RandomX, RandomY, RandomZ);
+	Client_ShowDamageText(DamageAmount, SpawnLoc);
+}
+
+void ALostArkCharacter::Client_ShowDamageText_Implementation(float DamageAmount, FVector SpawnLocation)
+{
+	// 클라이언트 로컈에서만 실행 → 본인 화면에만 표시
+	if (!DamageTextClass)
 	{
-		if (ULostArkObjectPoolSubsystem* Pool = GetWorld()->GetSubsystem<ULostArkObjectPoolSubsystem>())
+		return;
+	}
+
+	if (ULostArkObjectPoolSubsystem* Pool = GetWorld()->GetSubsystem<ULostArkObjectPoolSubsystem>())
+	{
+		if (AActor* SpawnedText = Pool->AcquireActor(DamageTextClass, SpawnLocation, FRotator::ZeroRotator))
 		{
-			// ?묐럭(荑쇳꽣酉? 移대찓??嫄곕━瑜?怨좊젮?섏뿬 ?ㅽ봽???붾뱾由? 踰붿쐞瑜??ㅼ젙?⑸땲??
-			float RandomX = FMath::RandRange(-50.f, 50.f);
-			float RandomY = FMath::RandRange(-50.f, 50.f);
-			float RandomZ = FMath::RandRange(50.f, 150.f);
-			FVector SpawnLoc = GetActorLocation() + FVector(RandomX, RandomY, RandomZ);
-			
-			if (AActor* SpawnedText = Pool->AcquireActor(DamageTextClass, SpawnLoc, FRotator::ZeroRotator))
+			if (ALostArkDamageTextActor* TextActor = Cast<ALostArkDamageTextActor>(SpawnedText))
 			{
-				if (ALostArkDamageTextActor* TextActor = Cast<ALostArkDamageTextActor>(SpawnedText))
-				{
-					TextActor->SetupDamageText(DamageAmount);
-				}
+				TextActor->SetupDamageText(DamageAmount);
 			}
 		}
 	}
@@ -229,6 +262,25 @@ void ALostArkCharacter::Die()
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetCharacterMovement()->DisableMovement();
 	GetCharacterMovement()->StopMovementImmediately();
+}
+
+void ALostArkCharacter::Revive()
+{
+	// Die() 의 역연산. 체력 회복/태그 정리는 부활 시스템(UBossReviveComponent)이 담당
+	if (!bIsDead)
+	{
+		return;
+	}
+
+	bIsDead = false;
+
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dead")));
+	}
+
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 }
 
 void ALostArkCharacter::SetCombatState(FGameplayTag NewStateTag)
@@ -291,12 +343,19 @@ void ALostArkCharacter::OnAttackingTagChanged(const FGameplayTag CallbackTag, in
 
 void ALostArkCharacter::PlaySheathWeaponMontage()
 {
+	// 서버에서 호출 → Multicast로 모든 클라이언트에 몽타주 재생 신호 전달
+	Multicast_PlaySheathWeaponMontage();
+}
+
+void ALostArkCharacter::Multicast_PlaySheathWeaponMontage_Implementation()
+{
 	if (SheathWeaponMontage)
 	{
 		PlayAnimMontage(SheathWeaponMontage);
 	}
 	else
 	{
+		// 몽타주 없으면 즉시 무기 수납 상태로 전환
 		SetWeaponEquipped(false);
 	}
 }

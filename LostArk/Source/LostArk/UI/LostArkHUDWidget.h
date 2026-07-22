@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "UI/LostArkUserWidget.h"
@@ -17,6 +17,9 @@ public:
 	// ?꾩젽???앹꽦?섍퀬 ?쒖뒪??而댄룷?뚰듃媛 ?좏슚?????몄텧?섏뿬 ?몃━寃뚯씠?몃? 諛붿씤?⑺빀?덈떎.
 	UFUNCTION(BlueprintCallable, Category = "UI|HUD")
 	virtual void BindAttributeDelegates();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI|StageClear")
+	void OnShowStageClearUI();
 
 protected:
 	// ?띿꽦 蹂寃???釉붾（?꾨┛?몃줈 ?대깽???꾨떖 (UI ?곗텧??

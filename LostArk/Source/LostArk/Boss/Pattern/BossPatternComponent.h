@@ -45,6 +45,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Boss|Pattern")
 	void StartCombat();
 
+	/**
+	 * 전투 정지 (보스 사망 등). 이후 어빌리티 종료 콜백이 와도 다음 패턴을 돌리지 않고,
+	 * 발동 재시도 타이머도 멈춘다. 진행 중 어빌리티 취소는 호출자가 ASC.CancelAllAbilities 로.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Pattern")
+	void StopCombat();
+
 	/** 보스가 GAS 체력 변화 델리게이트에서 호출. Percent = 0~100. 전환은 예약만(지연 실행) */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Pattern")
 	void NotifyHealthPercent(float HealthPercent);
@@ -73,6 +80,7 @@ private:
 	int32 CurrentPhaseIndex = INDEX_NONE;
 	int32 PendingPhaseIndex = INDEX_NONE;	// 예약된 전환 대상 (현재 패턴 종료 후 반영)
 	bool bRunningTransition = false;		// 지금 실행 중인 게 페이즈 전환 기믹인지
+	bool bCombatStopped = false;			// StopCombat 이후 (사망 등) — 패턴 재개 금지
 	FGameplayTag CurrentPhaseTag;			// 현재 ASC에 부여 중인 페이즈 태그
 
 	FGameplayAbilitySpecHandle PatternAbilityHandle;

@@ -1,4 +1,4 @@
-﻿#include "Abilities/Skills/LostArkShadowDashAbility.h"
+#include "Abilities/Skills/LostArkShadowDashAbility.h"
 #include "Actor/LostArkShadowClone.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -191,7 +191,7 @@ void ULostArkShadowDashAbility::OnDashCompleted()
 void ULostArkShadowDashAbility::SpawnNextShadow()
 {
 	APawn* AvatarPawn = Cast<APawn>(CurrentActorInfo->AvatarActor.Get());
-	if (!AvatarPawn || ShadowCloneClass.IsNull())
+	if (!AvatarPawn || ShadowCloneClass.IsNull() || !AvatarPawn->HasAuthority())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(ShadowSpawnTimerHandle);
 		return;

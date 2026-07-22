@@ -2,7 +2,12 @@
 
 
 #include "Boss/Raid/BossRaidGameState.h"
+#include "Blueprint/UserWidget.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 
 void ABossRaidGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -10,6 +15,8 @@ void ABossRaidGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ABossRaidGameState, DestroyedSliceMask);
 	DOREPLIFETIME(ABossRaidGameState, SliceCount);
 	DOREPLIFETIME(ABossRaidGameState, ArenaCenter);
+	DOREPLIFETIME(ABossRaidGameState, ArenaFloorZ);
+	DOREPLIFETIME(ABossRaidGameState, bRaidCleared);
 }
 
 bool ABossRaidGameState::IsSliceDestroyed(int32 SliceIndex) const
@@ -60,4 +67,84 @@ void ABossRaidGameState::MarkSliceDestroyed(int32 SliceIndex)
 void ABossRaidGameState::OnRep_DestroyedSliceMask()
 {
 	OnArenaSlicesChanged.Broadcast();
+}
+
+void ABossRaidGameState::MarkRaidCleared()
+{
+	if (!HasAuthority() || bRaidCleared)
+	{
+		return;
+	}
+	bRaidCleared = true;
+	ForceNetUpdate();
+
+	// OnRep 은 서버에서 안 불리므로 서버(리슨 호스트 포함)도 직접 처리
+	HandleRaidCleared();
+}
+
+void ABossRaidGameState::OnRep_RaidCleared()
+{
+	if (bRaidCleared)
+	{
+		HandleRaidCleared();
+	}
+}
+
+void ABossRaidGameState::HandleRaidCleared()
+{
+	OnRaidCleared.Broadcast();
+	ShowClearBannerLocally();
+}
+
+void ABossRaidGameState::ShowClearBannerLocally()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 이 머신의 로컬 플레이어에게만 배너 (데디 서버는 로컬 PC 없음 -> 자연스럽게 스킵)
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (!PC || !PC->IsLocalController())
+		{
+			continue;
+		}
+
+		if (ClearWidgetClass)
+		{
+			if (UUserWidget* Widget = CreateWidget<UUserWidget>(PC, ClearWidgetClass))
+			{
+				Widget->AddToViewport(/*ZOrder=*/100);	// 다른 HUD 위에
+				ActiveClearWidgets.Add(Widget);
+			}
+		}
+		else if (GEngine)
+		{
+			// WBP 없이도 흐름을 테스트할 수 있는 폴백
+			GEngine->AddOnScreenDebugMessage(-1, FMath::Max(ClearWidgetLifetime, 3.f), FColor::Yellow,
+				TEXT("== RAID CLEAR == (GameState BP 의 ClearWidgetClass 미지정 폴백)"));
+		}
+	}
+
+	if (ActiveClearWidgets.Num() > 0 && ClearWidgetLifetime > 0.f)
+	{
+		World->GetTimerManager().SetTimer(
+			ClearWidgetTimer, this, &ABossRaidGameState::RemoveClearWidgets,
+			ClearWidgetLifetime, false);
+	}
+}
+
+void ABossRaidGameState::RemoveClearWidgets()
+{
+	for (UUserWidget* Widget : ActiveClearWidgets)
+	{
+		if (Widget)
+		{
+			Widget->RemoveFromParent();
+		}
+	}
+	ActiveClearWidgets.Empty();
 }

@@ -15,6 +15,12 @@
 #include "Blueprint/UserWidget.h"
 #include "UI/LostArkHUDWidget.h"
 #include "Kismet/GameplayStatics.h"
+// [임시 디버그] 카운터 강제용 include (나중에 삭제)
+#include "EngineUtils.h"
+#include "Engine/Engine.h"
+#include "Boss/BossBase.h"
+#include "Boss/Combat/BossCounterComponent.h"
+#include "Boss/Combat/BossJustGuardComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -30,11 +36,23 @@ void ALostArkPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	if (IsLocalController())
 	{
-		Subsystem->AddMappingContext(DefaultMappingContext, 0);
-	}
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
 
+		if (HUDWidgetClass)
+		{
+			HUDWidget = CreateWidget<ULostArkHUDWidget>(this, HUDWidgetClass);
+			if (HUDWidget)
+			{
+				HUDWidget->AddToViewport();
+				HUDWidget->BindAttributeDelegates();
+			}
+		}
+	}
 }
 
 void ALostArkPlayerController::SetupInputComponent()
@@ -57,7 +75,82 @@ void ALostArkPlayerController::SetupInputComponent()
 	{
 		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input Component!"), *GetNameSafe(this));
 	}
+
+	// [임시 디버그] Q/G 직접 바인딩 (Enhanced Input IA/매핑 없이). 나중에 이 줄 삭제
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &ALostArkPlayerController::DebugForceCounterHit);
+		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ALostArkPlayerController::DebugTryJustGuard);
+	}
 }
+
+// ===== [임시 디버그] 아래 함수들은 카운터/그로기 확인용. 나중에 전부 삭제 =====
+void ALostArkPlayerController::DebugForceCounterHit()
+{
+	// 입력은 클라이언트에서 들어오므로 서버 권한으로 넘겨서 실제 판정을 돌린다
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow, TEXT("[DEBUG] Q -> 카운터 강제 시도"));
+	}
+	ServerDebugForceCounterHit();
+}
+
+void ALostArkPlayerController::ServerDebugForceCounterHit_Implementation()
+{
+	APawn* MyPawn = GetPawn();
+	UWorld* World = GetWorld();
+	if (!MyPawn || !World)
+	{
+		return;
+	}
+
+	// 월드의 첫 번째 보스를 찾아 헤드존 무시로 카운터 적중 강제 (창이 열려 있어야 실제로 먹힘)
+	for (TActorIterator<ABossBase> It(World); It; ++It)
+	{
+		if (UBossCounterComponent* Counter = It->FindComponentByClass<UBossCounterComponent>())
+		{
+			Counter->NotifyCounterAttackHit(MyPawn, /*bBypassHeadZone=*/true);
+		}
+		break;	// 보스 1개 가정 (임시)
+	}
+}
+
+void ALostArkPlayerController::DebugTryJustGuard()
+{
+	// 실제 판정/가드가능 여부는 서버가 안다 -> 서버로 넘겨 처리 + 메시지도 서버(리슨)에서 표시
+	ServerDebugTryJustGuard();
+}
+
+void ALostArkPlayerController::ServerDebugTryJustGuard_Implementation()
+{
+	APawn* MyPawn = GetPawn();
+	UWorld* World = GetWorld();
+	if (!MyPawn || !World)
+	{
+		return;
+	}
+
+	// 월드의 첫 보스의 저스트가드 컴포넌트로 가드 가능 여부 판단
+	for (TActorIterator<ABossBase> It(World); It; ++It)
+	{
+		UBossJustGuardComponent* JustGuard = It->FindComponentByClass<UBossJustGuardComponent>();
+		if (JustGuard && JustGuard->HasGuardReady(MyPawn))
+		{
+			// 창 열림 + 아직 가드 안 씀 -> 1회 가드 모션 발동 (성공/실패는 장판이 판정 시각에 표시)
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Cyan, TEXT("[DEBUG] G -> 저스트가드 모션 발동"));
+			}
+			JustGuard->NotifyGuardInput(MyPawn);
+		}
+		else if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Silver, TEXT("[DEBUG] G -> 저스트가드 모션 비활성화"));
+		}
+		break;	// 보스 1개 가정 (임시)
+	}
+}
+// ==============================================================================
 
 void ALostArkPlayerController::OnInputStarted()
 {
@@ -66,9 +159,12 @@ void ALostArkPlayerController::OnInputStarted()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ActivePawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 			{
-				return;
+				if (ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+				{
+					return;
+				}
 			}
 		}
 	}
@@ -82,9 +178,12 @@ void ALostArkPlayerController::OnSetDestinationTriggered()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ActivePawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 			{
-				return;
+				if (ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+				{
+					return;
+				}
 			}
 		}
 	}
@@ -122,10 +221,13 @@ void ALostArkPlayerController::OnSetDestinationReleased()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ControlledPawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 			{
-				FollowTime = 0.f;
-				return;
+				if (ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+				{
+					FollowTime = 0.f;
+					return;
+				}
 			}
 		}
 	}
@@ -161,7 +263,7 @@ void ALostArkPlayerController::OnTouchReleased()
 
 void ALostArkPlayerController::InitializeHUDForCharacter(class ALostArkCharacter* InCharacter)
 {
-	if (!InCharacter) return;
+	if (!InCharacter || !IsLocalController()) return;
 
 	// 기존 HUD가 있으면 제거
 	if (HUDWidget)
@@ -180,6 +282,23 @@ void ALostArkPlayerController::InitializeHUDForCharacter(class ALostArkCharacter
 		{
 			HUDWidget->AddToViewport();
 			HUDWidget->BindAttributeDelegates();
+		}
+	}
+}
+
+void ALostArkPlayerController::ClientShowStageClearUI_Implementation()
+{
+	if (HUDWidget)
+	{
+		HUDWidget->OnShowStageClearUI();
+	}
+
+	if (StageClearWidgetClass && !StageClearWidget)
+	{
+		StageClearWidget = CreateWidget<UUserWidget>(this, StageClearWidgetClass);
+		if (StageClearWidget)
+		{
+			StageClearWidget->AddToViewport();
 		}
 	}
 }

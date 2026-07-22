@@ -31,48 +31,8 @@ bool ABossAoe_Sector::IsInsideShape(const FVector& WorldPoint) const
 
 void ABossAoe_Sector::BuildTelegraph()
 {
-	// 로컬 좌표(X=Forward, Y=Right). 각도 A 방향 = (cos A, sin A). 메시 자체가 부채꼴.
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-
-	const int32 Segments = 48;
-
-	if (InnerRadius > KINDA_SMALL_NUMBER)
-	{
-		// 환형 부채꼴: 안쪽 호 + 바깥 호를 스트립으로 연결
-		for (int32 i = 0; i <= Segments; ++i)
-		{
-			const float A = FMath::Lerp(StartAngle, EndAngle, (float)i / Segments);
-			const float Rad = FMath::DegreesToRadians(A);
-			const float Cos = FMath::Cos(Rad);
-			const float Sin = FMath::Sin(Rad);
-			Vertices.Add(FVector(Cos * InnerRadius, Sin * InnerRadius, 0.f));
-			Vertices.Add(FVector(Cos * Radius, Sin * Radius, 0.f));
-		}
-		for (int32 i = 0; i < Segments; ++i)
-		{
-			const int32 i0 = i * 2, i1 = i * 2 + 1, i2 = i * 2 + 2, i3 = i * 2 + 3;
-			Triangles.Add(i0); Triangles.Add(i1); Triangles.Add(i3);
-			Triangles.Add(i0); Triangles.Add(i3); Triangles.Add(i2);
-		}
-	}
-	else
-	{
-		// 꽉 찬 부채꼴: 중심 + 바깥 호 팬
-		Vertices.Add(FVector::ZeroVector);
-		for (int32 i = 0; i <= Segments; ++i)
-		{
-			const float A = FMath::Lerp(StartAngle, EndAngle, (float)i / Segments);
-			const float Rad = FMath::DegreesToRadians(A);
-			Vertices.Add(FVector(FMath::Cos(Rad) * Radius, FMath::Sin(Rad) * Radius, 0.f));
-		}
-		for (int32 i = 0; i < Segments; ++i)
-		{
-			Triangles.Add(0); Triangles.Add(i + 1); Triangles.Add(i + 2);
-		}
-	}
-
-	CreateTelegraphMesh(Vertices, Triangles);
+	// 베이스 공용 아크 헬퍼 사용 (InnerRadius>0 이면 환형 부채꼴)
+	CreateArcTelegraphMesh(StartAngle, EndAngle, InnerRadius, Radius);
 }
 
 void ABossAoe_Sector::DebugDrawShape() const

@@ -1,4 +1,4 @@
-﻿#include "Monster/LostArkMonster.h"
+#include "Monster/LostArkMonster.h"
 #include "AbilitySystemComponent.h"
 #include "Character/LostArkAttributeSet.h"
 #include "Components/CapsuleComponent.h"
@@ -8,12 +8,16 @@
 #include "Monster/LostArkAIController.h"
 #include "TimerManager.h"
 #include "GameplayTagsManager.h"
+#include "Net/UnrealNetwork.h"
 
 static const float MonsterDefaultRotationRateYaw = 480.f;
 
 ALostArkMonster::ALostArkMonster()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	bReplicates = true;
+	SetReplicateMovement(true);
 
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AttributeSet = CreateDefaultSubobject<ULostArkAttributeSet>(TEXT("AttributeSet"));
@@ -29,11 +33,36 @@ ALostArkMonster::ALostArkMonster()
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, MonsterDefaultRotationRateYaw, 0.f);
+
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+	AIControllerClass = ALostArkAIController::StaticClass();
 }
 
 UAbilitySystemComponent* ALostArkMonster::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
+}
+
+void ALostArkMonster::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ALostArkMonster, bIsDead);
+	DOREPLIFETIME(ALostArkMonster, CurrentStateTag);
+}
+
+void ALostArkMonster::OnRep_CurrentStateTag(FGameplayTag OldTag)
+{
+	if (AbilitySystemComponent)
+	{
+		if (OldTag.IsValid())
+		{
+			AbilitySystemComponent->RemoveLooseGameplayTag(OldTag);
+		}
+		if (CurrentStateTag.IsValid())
+		{
+			AbilitySystemComponent->AddLooseGameplayTag(CurrentStateTag);
+		}
+	}
 }
 
 void ALostArkMonster::BeginPlay()
@@ -155,24 +184,9 @@ void ALostArkMonster::Die()
 
 void ALostArkMonster::ShowDamageText(float DamageAmount)
 {
-	if (DamageTextClass)
-	{
-		if (ULostArkObjectPoolSubsystem* Pool = GetWorld()->GetSubsystem<ULostArkObjectPoolSubsystem>())
-		{
-			float RandomX = FMath::RandRange(-50.f, 50.f);
-			float RandomY = FMath::RandRange(-50.f, 50.f);
-			float RandomZ = FMath::RandRange(50.f, 150.f);
-			FVector SpawnLoc = GetActorLocation() + FVector(RandomX, RandomY, RandomZ);
-			
-			if (AActor* SpawnedText = Pool->AcquireActor(DamageTextClass, SpawnLoc, FRotator::ZeroRotator))
-			{
-				if (ALostArkDamageTextActor* TextActor = Cast<ALostArkDamageTextActor>(SpawnedText))
-				{
-					TextActor->SetupDamageText(DamageAmount);
-				}
-			}
-		}
-	}
+	// 모룬터가 피겿을 때는 공격한 플레이어(Source)의 ShowDamageText가 대신 호출됨
+	// (LostArkAttributeSet::PostGameplayEffectExecute 참조)
+	// 모룬터 자체에서는 아무 처리 불필요
 }
 
 void ALostArkMonster::FinishDeath()

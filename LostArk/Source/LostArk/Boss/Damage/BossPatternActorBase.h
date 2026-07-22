@@ -10,10 +10,13 @@
 class UGameplayEffect;
 class UAbilitySystemComponent;
 class UPrimitiveComponent;
+class ACharacter;
 class UProceduralMeshComponent;
 class UBossAoeEffect;
 class UNiagaraSystem;
 class UNiagaraComponent;
+class UParticleSystem;
+class UParticleSystemComponent;
 
 /**
  * 장판을 '어디에' 생성할지. (스폰 원점 정책 — Base가 BeginPlay에서 해석)
@@ -40,6 +43,7 @@ enum class EAoeSpawnOrigin : uint8
  * - Homing       : 타겟 위치로 서서히 이동 (유도 장판). Duration>0 이어야 지속 추적처럼 보임
  * - FollowTarget : 매 틱 타겟 '발밑'에 부착되어 따라다님 (전하 변환장판 등)
  * - Spiral       : 타겟을 향해 직선 이동하면서 나선형으로 회전 궤도를 그리며 접근 (유도탄/번개 낙하 등)
+ * - Straight     : 타겟 없이 스폰 방향(Forward)으로 등속 직진. 추적하지 않음 (방사형 투사체/번개 등)
  */
 UENUM(BlueprintType)
 enum class EAoeTargetingMode : uint8
@@ -48,7 +52,73 @@ enum class EAoeTargetingMode : uint8
 	Follow		UMETA(DisplayName = "시전자 추적"),
 	Homing		UMETA(DisplayName = "타겟 유도"),
 	FollowTarget	UMETA(DisplayName = "타겟 부착(발밑)"),
-	Spiral		UMETA(DisplayName = "나선형 유도")
+	Spiral		UMETA(DisplayName = "나선형 유도"),
+	Straight	UMETA(DisplayName = "직선 발사")
+};
+
+/**
+ * 피격 리액션(넉백) 종류. 패턴마다 '맞으면 어떻게 되는가'를 구분한다.
+ * - None     : 데미지만. 넉백 없음
+ * - PushBack : 뒤로 밀려 날아감 (수평 넉백 + 수직 팝). 낙사 허용 여부는 bCanCauseFallDeath 가 결정
+ * - LaunchUp : 그 자리에서 공중에 잠깐 위로 솟기만 함 (수평 이동 0 -> 제자리 착지, 낙사 없음)
+ */
+UENUM(BlueprintType)
+enum class EAoeHitReaction : uint8
+{
+	None		UMETA(DisplayName = "없음 (데미지만)"),
+	PushBack	UMETA(DisplayName = "뒤로 밀림"),
+	LaunchUp	UMETA(DisplayName = "제자리 띄움")
+};
+
+/** PushBack 시 밀려나는 방향 기준 */
+UENUM(BlueprintType)
+enum class EAoeKnockbackDirection : uint8
+{
+	/** 장판 중심 -> 대상 방향 (원형/부채꼴 기본. 폭발처럼 바깥으로) */
+	FromCenter		UMETA(DisplayName = "장판 중심에서 바깥"),
+	/** 장판 전방 (직선/사각 장판, 투사체 진행 방향으로 떠밀기) */
+	AlongForward	UMETA(DisplayName = "장판 전방"),
+	/** 시전자(보스) 중심 -> 대상 방향 (Follow 회전 장판 등 보스 기준 바깥으로) */
+	FromCaster		UMETA(DisplayName = "시전자에서 바깥")
+};
+
+/**
+ * 패턴별 피격 리액션(넉백) 설정.
+ * 장판 BP 디폴트에 두거나, 스폰 노티파이의 KnockbackOverride 로 패턴(몽타주)마다 덮어쓴다.
+ *
+ * 낙사 규칙:
+ *  - LaunchUp 은 수평 이동이 없으므로 낙사가 원천적으로 불가능
+ *  - PushBack + bCanCauseFallDeath=true  : 밀린 방향에 파괴 지형/아레나 밖이 있으면 그대로 추락 (낙사 연계 패턴)
+ *  - PushBack + bCanCauseFallDeath=false : 착지 경로의 바닥을 검사해 구멍 직전까지만 밀리게 수평 속도를 줄인다
+ */
+USTRUCT(BlueprintType)
+struct FBossAoeKnockbackConfig
+{
+	GENERATED_BODY()
+
+	/** 피격 리액션 종류 */
+	UPROPERTY(EditAnywhere)
+	EAoeHitReaction Reaction = EAoeHitReaction::None;
+
+	/** 밀려나는 방향 기준 (PushBack 전용) */
+	UPROPERTY(EditAnywhere, meta = (EditCondition = "Reaction == EAoeHitReaction::PushBack"))
+	EAoeKnockbackDirection Direction = EAoeKnockbackDirection::FromCenter;
+
+	/** 수평 넉백 속도(cm/s). PushBack 전용 */
+	UPROPERTY(EditAnywhere, meta = (ClampMin = "0.0", EditCondition = "Reaction == EAoeHitReaction::PushBack"))
+	float HorizontalSpeed = 1200.f;
+
+	/** 수직(위) 속도(cm/s). PushBack 의 팝 높이 / LaunchUp 의 솟는 높이 */
+	UPROPERTY(EditAnywhere, meta = (ClampMin = "0.0", EditCondition = "Reaction != EAoeHitReaction::None"))
+	float VerticalSpeed = 420.f;
+
+	/**
+	 * 이 공격이 낙사를 유발할 수 있는가 (PushBack 전용).
+	 * false 면 밀려나는 경로의 바닥을 검사해 파괴된 슬라이스/아레나 밖 구멍 '직전'까지만 밀린다.
+	 * true 면 검사 없이 그대로 날려서 파괴 지형 위로 밀리면 낙사한다 (KillVolume 처리).
+	 */
+	UPROPERTY(EditAnywhere, meta = (EditCondition = "Reaction == EAoeHitReaction::PushBack"))
+	bool bCanCauseFallDeath = false;
 };
 
 /**
@@ -84,6 +154,14 @@ struct FBossAoeCommonOverride
 	UPROPERTY(EditAnywhere)
 	bool bInstant = false;
 
+	/** 유지시간 동안 예고 비주얼을 계속 표시 (회전 장판 등 지속 위험지대용) */
+	UPROPERTY(EditAnywhere)
+	bool bKeepTelegraphWhileActive = false;
+
+	/** 예고가 시전 중앙에서 판정 범위까지 CastTime 동안 점차 차오름 (저스트가드 등 타이밍 읽기 패턴용) */
+	UPROPERTY(EditAnywhere)
+	bool bTelegraphFill = false;
+
 	/** 장판 이동 방식 */
 	UPROPERTY(EditAnywhere)
 	EAoeTargetingMode TargetingMode = EAoeTargetingMode::Fixed;
@@ -117,6 +195,30 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	/**
+	 * AOE 지연 스폰 공용 팩토리 (서버에서만 호출할 것).
+	 * InitAoe/오버라이드 주입은 반드시 BeginPlay(ResolveOrigin) '전'에 이뤄져야 하므로
+	 * [Deferred 스폰 -> InitAoe -> Configure(호출자 주입) -> FinishSpawning] 순서를 여기서 보증한다.
+	 * 스폰 노티파이/기믹 타워/과충전 게이지 등 모든 AOE 스포너가 이 경로를 쓴다.
+	 *
+	 * @param SpawnOwner 스폰 Owner. 잡기 해제 노티파이가 'Owner==보스' 로 걸러내므로
+	 *                   보스 패턴은 보스를, 타워 장판은 타워를 넘긴다
+	 * @param Configure  InitAoe 후 FinishSpawning 전에 호출되는 훅 (공통/도형/넉백 오버라이드 주입)
+	 */
+	static ABossPatternActorBase* SpawnAoeDeferred(UWorld* World,
+		TSubclassOf<ABossPatternActorBase> AoeClass, const FTransform& SpawnTM,
+		AActor* SpawnOwner, AActor* Caster, AActor* Target, float DamageCoefficient,
+		TFunctionRef<void(ABossPatternActorBase&)> Configure);
+
+	/** Configure 훅 없는 축약형 */
+	static ABossPatternActorBase* SpawnAoeDeferred(UWorld* World,
+		TSubclassOf<ABossPatternActorBase> AoeClass, const FTransform& SpawnTM,
+		AActor* SpawnOwner, AActor* Caster, AActor* Target, float DamageCoefficient)
+	{
+		return SpawnAoeDeferred(World, AoeClass, SpawnTM, SpawnOwner, Caster, Target,
+			DamageCoefficient, [](ABossPatternActorBase&) {});
+	}
+
+	/**
 	 * 스폰 직후 브레인/노티파이가 호출해 런타임 값 주입.
 	 * @param InCaster            패턴 시전자(보스). 데미지 Instigator + 스폰원점/Follow 기준
 	 * @param InTarget            타겟. Homing/TargetLocation/GroundUnderTarget 기준
@@ -128,6 +230,35 @@ public:
 	/** 패턴별 공통값 오버라이드 주입 (스폰 노티파이가 BeginPlay 전에 호출) */
 	UFUNCTION(BlueprintCallable, Category = "Aoe")
 	void ApplyCommonOverride(const FBossAoeCommonOverride& Override);
+
+	/**
+	 * 직선 투사체 셋업. 방사형(Radial) 등 투사체 스폰 노티파이가 BeginPlay 전에 호출해
+	 * BP 클래스 설정과 무관하게 '스폰 트랜스폼 방향으로 등속 직진'을 강제한다.
+	 *  - TargetingMode=Straight, SpawnOrigin=SpawnTransform 고정
+	 *    (BP가 CasterLocation 등으로 돼 있으면 방사 방향/위치가 보스 것으로 덮여 전부 뭉개지는 사고 방지)
+	 *  - 수명 = Range / Speed (사거리 끝까지 날아간 뒤 소멸)
+	 * @param Speed       진행 속도(cm/s)
+	 * @param Range       사거리(cm). 이만큼 이동하면 소멸
+	 * @param HitInterval 비행 중 판정 주기(초)
+	 * @param InCastTime  발사 전 대기(초). 0이면 예고 없이 즉시 발사, >0이면 예고 후 발사
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetupStraightProjectile(float Speed, float Range, float HitInterval, float InCastTime);
+
+	/**
+	 * 본체 VFX 를 이 스폰 1회에만 덮어씀 (스폰 노티파이가 BeginPlay 전에 호출).
+	 * BP 클래스에 박힌 BodyEffect 대신 노티파이(패턴)마다 다른 몸통 이펙트를 쓸 때 사용.
+	 * null 인자는 무시(해당 종류는 BP 기본값 유지). 나이아가라/캐스케이드 각각 지정 가능.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetBodyEffectOverride(UNiagaraSystem* InNiagara, UParticleSystem* InCascade);
+
+	/**
+	 * 스폰 원점 정책을 코드에서 강제 (BeginPlay 전 호출).
+	 * 기믹 타워 등 외부 스포너가 BP 설정과 무관하게 '스폰 트랜스폼 그대로'를 보장할 때 사용.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetSpawnOriginPolicy(EAoeSpawnOrigin InOrigin) { SpawnOrigin = InOrigin; }
 
 	// ─── 행동 오브젝트(UBossAoeEffect)가 쓰는 공개 API ───
 
@@ -145,6 +276,17 @@ public:
 
 	/** 기본 데미지+상태이상 GE 적용 (서버). 행동 오브젝트가 데미지가 필요할 때 호출(잡기 해제 시 등) */
 	void ApplyDamageAndStatus(AActor* Target);
+
+	/**
+	 * 피격 리액션(넉백) 적용 (서버). Knockback.Reaction 이 None 이면 아무것도 안 함.
+	 * 기본 데미지 경로는 자동 호출되고, 행동 오브젝트(저스트가드 실패 등)도 데미지 적용 후 직접 호출할 수 있다.
+	 * 이동이 잠긴 대상(잡힘 = MOVE_None)은 건드리지 않는다.
+	 */
+	void ApplyKnockback(AActor* Target);
+
+	/** 패턴별 넉백 설정 주입 (스폰 노티파이가 BeginPlay 전에 호출. BP 클래스 디폴트는 불변) */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetKnockbackOverride(const FBossAoeKnockbackConfig& InKnockback) { Knockback = InKnockback; }
 
 	/** 실제 파괴(이벤트 방송 + Destroy). 행동 오브젝트가 파괴 타이밍을 제어할 때 호출(잡기 해제 후) */
 	void DestroyAoeNow();
@@ -210,6 +352,15 @@ protected:
 	 */
 	UProceduralMeshComponent* CreateTelegraphMesh(const TArray<FVector>& Vertices, const TArray<int32>& Triangles);
 
+	/**
+	 * 원/도넛/부채꼴 계열 텔레그래프 메시 생성 헬퍼.
+	 * [StartAngleDeg, EndAngleDeg] 구간(전방=0°, 우측 +)을 InInnerRadius>0 이면 링 스트립,
+	 * 아니면 중심 팬으로 삼각화해 CreateTelegraphMesh 로 등록한다.
+	 * (원 = 0~360° 부채꼴이므로 Circle/Sector 도형이 이 하나를 공유)
+	 */
+	UProceduralMeshComponent* CreateArcTelegraphMesh(float StartAngleDeg, float EndAngleDeg,
+		float InInnerRadius, float InOuterRadius, int32 Segments = 48);
+
 	// ═══════════════ 설정 프로퍼티 ═══════════════
 
 	/**
@@ -253,6 +404,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Status")
 	TArray<TSubclassOf<UGameplayEffect>> StatusEffects;
 
+	/**
+	 * 피격 리액션(넉백) 설정. 기본 데미지 경로(OnHitEffect 미지정)에서 데미지 직후 자동 적용.
+	 * 패턴(몽타주)마다 다르게 쓰려면 스폰 노티파이의 KnockbackOverride 로 덮어쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Knockback")
+	FBossAoeKnockbackConfig Knockback;
+
 	/** 시전시간 = 예고 표시 후 첫 판정까지의 대기(초). 즉발이면 예고만 스킵되고 이 대기는 유지 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Timing", meta = (ClampMin = "0.0"))
 	float CastTime = 1.f;
@@ -269,9 +427,43 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
 	bool bSingleHitPerTarget = true;
 
+	/**
+	 * 켜면 높이(Z) 게이트를 건너뛰고 XY 도형(Radius/각도)만으로 판정한다.
+	 * 보스 캡슐/메시 크기에 따라 스폰 높이가 흔들려 판정이 어긋나는 패턴(특히 잡기)에서 사용.
+	 * 잡기 행동(UBossAoeGrabEffect)은 이 값과 무관하게 항상 높이를 무시한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
+	bool bIgnoreHeightCheck = false;
+
 	/** 즉발: 예고 장판 비주얼을 표시하지 않음 (판정 타이밍은 CastTime 그대로) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
 	bool bInstant = false;
+
+	/**
+	 * 켜면 플레이어 외에 기믹 타워(ABossGimmickTower)도 판정 대상에 포함한다.
+	 * 지형파괴 기믹의 '레이저' 장판 BP 에서만 켤 것 — 타워는 이 장판으로만 파괴 가능 규칙.
+	 * (타워는 데미지 GE 대신 OnBossLaserHit 호출로 즉시 파괴 처리된다)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
+	bool bCanHitGimmickTargets = false;
+
+	/**
+	 * 켜면 CastTime 경과 후에도 예고 비주얼을 파괴하지 않고 유지시간(Duration) 내내 표시한다.
+	 * 보스를 따라 도는 회전 장판처럼 '지금 위험한 지대'를 계속 보여줘야 하는 패턴용.
+	 * (예고 컴포넌트는 루트에 붙어 있어 Follow 회전/이동을 자동 추종, 액터 소멸 시 함께 정리)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
+	bool bKeepTelegraphWhileActive = false;
+
+	/**
+	 * 켜면 예고 비주얼이 시전 중앙에서 판정 범위까지 CastTime 동안 점차 차오른다.
+	 * 일반 장판은 전체 범위가 한 번에 표시되지만, 저스트가드처럼 '차오른 정도 = 남은 시간'을
+	 * 읽고 타이밍을 잡아야 하는 패턴은 이걸 켠다 (docs/09_JUSTGUARD_PATTERN.md).
+	 *  - 프로시저럴 메시 예고: XY 스케일 0->1 (중앙에서 바깥으로 확장. 판정 크기는 불변 — T에 전체 도형으로 판정)
+	 *  - VFX 예고(TelegraphEffect): "FillRatio"(0~1) User 파라미터로 매 틱 전달 (시스템 쪽에서 소비)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
+	bool bTelegraphFill = false;
 
 	/** 수직 판정 허용 오차(cm). |대상.Z - 중심.Z| 가 이 값 이하일 때만 적중 (공중 대상 제외) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit", meta = (ClampMin = "0.0"))
@@ -281,9 +473,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting")
 	EAoeTargetingMode TargetingMode = EAoeTargetingMode::Fixed;
 
-	/** Homing/Spiral 진행 속도(cm/s). 타겟을 향한 직선 이동 속도. 0이면 순간 이동 */
+	/** Homing/Spiral/Straight 진행 속도(cm/s). Homing/Spiral은 타겟을 향한, Straight는 발사 방향으로의 이동 속도. 0이면 정지 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting",
-		meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Homing || TargetingMode == EAoeTargetingMode::Spiral"))
+		meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Homing || TargetingMode == EAoeTargetingMode::Spiral || TargetingMode == EAoeTargetingMode::Straight"))
 	float HomingSpeed = 400.f;
 
 	/** 나선 궤도 반지름(cm). 진행 경로 기준 옆으로 도는 원의 크기 */
@@ -322,6 +514,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
 	TObjectPtr<UNiagaraSystem> TelegraphEffect;
 
+	/**
+	 * 예고와 별개로, 액터가 살아있는 동안 계속 루트에 붙어 함께 이동하는 '본체' VFX.
+	 * (직선 발사 투사체의 번개 몸통 등). BeginPlay에서 스폰되어 소멸 시 함께 정리된다.
+	 * TelegraphEffect(예고, 판정 시작 시 제거)와 달리 수명 내내 유지되고 Straight/Homing 이동을 따라간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Body")
+	TObjectPtr<UNiagaraSystem> BodyEffect;
+
+	/**
+	 * BodyEffect 의 캐스케이드(UParticleSystem) 버전. 토네이도처럼 기존 Cascade 파티클을
+	 * 본체로 쓸 때 지정 (Niagara 와 둘 다 지정하면 둘 다 스폰됨).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Body")
+	TObjectPtr<UParticleSystem> BodyEffectCascade;
+
 	// ═══════════════ 런타임 상태 ═══════════════
 
 	/** 시전자(보스). 데미지 Instigator, 스폰원점/Follow 기준 */
@@ -338,6 +545,14 @@ protected:
 	/** 자식이 예고 비주얼을 저장하는 컴포넌트 (HideTelegraph 시 파괴) */
 	UPROPERTY(Transient)
 	TObjectPtr<UPrimitiveComponent> WarningComp;
+
+	/** BodyEffect 로 스폰된 본체 VFX 컴포넌트 (액터 소멸 시 AutoDestroy) */
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> BodyComp;
+
+	/** BodyEffectCascade 로 스폰된 본체 캐스케이드 컴포넌트 */
+	UPROPERTY(Transient)
+	TObjectPtr<UParticleSystemComponent> BodyCascadeComp;
 
 	// ═══════════════ 내부 로직 ═══════════════
 
@@ -365,8 +580,14 @@ protected:
 	/** 예고 비주얼 제거 */
 	void HideTelegraph();
 
+	/** 차오르는 예고(bTelegraphFill) 갱신: CastTime 진행률만큼 메시 스케일/VFX FillRatio 반영 (매 틱) */
+	void UpdateTelegraphFill();
+
 	/** TelegraphEffect 가 지정된 경우 나이아가라 컴포넌트를 루트에 부착 스폰 + ConfigureTelegraphEffect 호출 */
 	void BuildTelegraphEffect();
+
+	/** BodyEffect 가 지정된 경우 본체 VFX 를 루트에 부착 스폰 (수명 내내 유지, 이동 추종) */
+	void SpawnBodyEffect();
 
 	/** Follow/Homing 이동 처리 */
 	void UpdateCenter(float DeltaTime);
@@ -374,12 +595,77 @@ protected:
 	/** 스폰/Follow 시 시전자 기준 위치 (소켓 지정 시 소켓, 아니면 액터 위치) */
 	FVector GetCasterOriginLocation() const;
 
+	/**
+	 * At 위치의 바닥 Z 를 구한다 (위에서 아래로 트레이스). 성공 시 OutZ 채우고 true.
+	 * 오브젝트 타입(WorldStatic/WorldDynamic) 쿼리라 바닥 메시의 Visibility 응답과 무관하게 잡힌다.
+	 * (거대 보스 캡슐 높이만큼 위에서 쏘고 충분히 아래까지 내려감)
+	 */
+	bool TraceGroundZ(const FVector& At, float& OutZ) const;
+
+	/**
+	 * At 위치의 바닥 Z 를 항상 반환 (폴백 포함).
+	 *  1) TraceGroundZ 성공 시 그 값
+	 *  2) 실패 시 시전자(보스) 발밑 Z — 보스는 아레나 바닥에 서 있으므로 바닥 높이와 같다
+	 *     (머지 바닥 메시에 콜리전이 없어 트레이스가 아예 안 잡히는 경우 대비)
+	 *  3) 시전자도 없으면 At.Z 그대로
+	 */
+	float ResolveGroundZ(const FVector& At) const;
+
+	/** 예고/본체 메시를 바닥에서 살짝 띄우는 오프셋(cm). Z-파이팅 방지 */
+	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph", meta = (ClampMin = "0.0"))
+	float TelegraphZOffset = 5.f;
+
+	/**
+	 * 바닥 트레이스 실패 시 폴백 Z(시전자 캡슐 발밑)에 더할 수동 보정(cm).
+	 * 보스가 중앙 구덩이에 잠겨 있어 발밑이 실제 아레나 바닥보다 낮으면 그 차이만큼 +로 올린다.
+	 * (BP 디폴트에서 맵에 맞게 한 번 맞춰두면 됨. 트레이스가 잡히는 위치에선 사용되지 않음)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
+	float GroundFallbackZOffset = 0.f;
+
+	/**
+	 * 켜면 바닥 트레이스를 아예 건너뛰고 항상 '시전자 발밑 Z + GroundFallbackZOffset' 을 바닥으로 사용.
+	 * 트레이스가 엉뚱한 것(투명 볼륨/부착 무기/구덩이 밑바닥 등)을 잡아 높이가 이상할 때
+	 * 수동으로 확실하게 제어하는 스위치. (켜면 오프셋이 반드시 적용됨)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
+	bool bForceGroundFallback = false;
+
+	/**
+	 * 켜면 바닥 Z 를 '월드 절대값(AbsoluteGroundZ)' 으로 고정한다. 트레이스/발밑 무시.
+	 * 보스가 중앙 구덩이에 잠긴 평평한 아레나처럼 바닥 높이가 일정할 때 가장 확실한 방법.
+	 * (로그에서 확인한 실제 바닥 Z 를 그대로 넣으면 됨)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
+	bool bUseAbsoluteGroundZ = false;
+
+	/** bUseAbsoluteGroundZ 가 켜졌을 때 사용할 바닥의 월드 Z (cm) */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn", meta = (EditCondition = "bUseAbsoluteGroundZ"))
+	float AbsoluteGroundZ = 0.f;
+
 	/** 대상이 생존 상태인지 (DeadTag 없으면 생존 간주) */
 	bool IsAlive(const AActor* Target) const;
 
+	/** PushBack 방향 계산 (Knockback.Direction 기준, 수평 정규화. 퇴화 시 ShapeForward 폴백) */
+	FVector ComputeKnockbackDirection(const AActor* Target) const;
+
+	/**
+	 * 낙사 금지(bCanCauseFallDeath=false) 넉백의 수평 속도 클램프.
+	 * 예상 체공시간으로 수평 이동거리를 추정하고, 밀려나는 경로를 샘플링해
+	 * 바닥이 끊기는(파괴 슬라이스/아레나 밖) 지점 '직전'까지만 밀리도록 속도를 줄인다.
+	 */
+	float ClampPushSpeedToGround(const ACharacter* Char, const FVector& Dir, float HSpeed, float VSpeed) const;
+
+	/** At(발밑 높이) 주변 위 100 ~ 아래 300cm 에 이어진 바닥이 있는지 (구덩이 밑바닥은 바닥으로 안 침) */
+	bool HasLandingGroundAt(const FVector& At, const AActor* IgnoreTarget) const;
+
 private:
+	/** 현재 액터 회전에서 평면(Z=0) Forward/Right 를 다시 캐싱 (스폰/Follow 회전 시) */
+	void CacheShapeAxes();
+
 	FVector ShapeForward = FVector::ForwardVector;	// 스폰 시 캐싱된 평면 전방
 	FVector ShapeRight = FVector::RightVector;		// 스폰 시 캐싱된 평면 우측
+	FVector LaunchDirection = FVector::ForwardVector;	// Straight 모드 발사 방향(스폰 Forward, 수평)
 
 	FTimerHandle CastTimerHandle;	// 예고->첫 판정
 	FTimerHandle TickTimerHandle;	// 유지 중 틱뎀
@@ -391,8 +677,17 @@ private:
 
 	bool bFinished = false;
 
+	/** CastTime 경과(OnCastFinished) 여부. Straight 투사체는 이때부터 전진(예고 중엔 제자리) */
+	bool bCastFinished = false;
+
+	/** 시전 시작 시각(월드 초). 차오르는 예고(bTelegraphFill) 진행률 계산용 */
+	float CastStartTimeSeconds = 0.f;
+
 	/** CasterTagsOnHit 를 이미 부여했는지 (첫 적중 1회만) */
 	bool bCasterHitTagsApplied = false;
+
+	/** 바닥 트레이스 결과를 이번 수명에 1회만 로그 (Follow 매 틱 스팸 방지, 진단용) */
+	mutable bool bGroundTraceLogged = false;
 
 	/** Spiral 모드: 나선 궤도의 중심이 되는 직선 진행 위치 (매 틱 타겟 쪽으로 전진) */
 	FVector SpiralBasePos = FVector::ZeroVector;

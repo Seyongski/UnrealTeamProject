@@ -7,12 +7,23 @@
 #include "AbilitySystemInterface.h"
 #include "BossBase.generated.h"
 
+class UAnimMontage;
 class UBackHeadDecalComponent;
 class UAbilitySystemComponent;
 class UBossAttributeSet;
+class UBossCounterComponent;
+class UBossJustGuardComponent;
 class UBossPatternComponent;
 class UBossTargetingComponent;
+class UBossTerrainGimmickComponent;
+class UBossWeaponComponent;
 struct FOnAttributeChangeData;
+
+/** 보스 체력 변동 방송 (서버/클라 모두). 체력바 위젯이 구독해서 갱신 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBossHealthChanged, float, NewHealth, float, MaxHealth);
+
+/** 보스 사망 방송 (서버에서 1회). 클라 표현은 State.Dead 복제 태그/사망 몽타주 멀티캐스트가 담당 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossDied);
 
 UCLASS()
 class LOSTARK_API ABossBase : public ACharacter, public IAbilitySystemInterface
@@ -44,12 +55,55 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boss|Debug")
 	bool bDrawFacingDebug = false;
 
+	/** 체력 변동 방송 (서버/클라 모두). 보스 체력바 위젯이 여기 바인딩해서 갱신 */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|UI")
+	FOnBossHealthChanged OnBossHealthChanged;
+
+	/** 체력바를 몇 '줄'로 나눌지. 예) 500 -> 100%에서 x500줄, 50%에서 x250줄 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|UI", meta = (ClampMin = "1"))
+	int32 TotalHealthBars = 500;
+
+	/** 위젯 최초 구성용: 현재 체력 (없으면 0) */
+	UFUNCTION(BlueprintPure, Category = "Boss|UI")
+	float GetCurrentHealth() const;
+
+	/** 위젯 최초 구성용: 최대 체력 (없으면 0) */
+	UFUNCTION(BlueprintPure, Category = "Boss|UI")
+	float GetMaxHealthValue() const;
+
+	/** 사망 방송 (서버에서 1회. FX/사운드 등 BP 훅용) */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Death")
+	FOnBossDied OnBossDied;
+
+	/** 사망 여부 (서버 기준. 클라는 State.Dead 복제 태그로 판단할 것) */
+	UFUNCTION(BlueprintPure, Category = "Boss|Death")
+	bool IsDead() const { return bDead; }
+
+	/** 위치 판정 존 각도 (UBossCombatStatics 가 읽어감) */
+	float GetHeadZoneHalfAngle() const { return HeadZoneHalfAngle; }
+	float GetBackZoneHalfAngle() const { return BackZoneHalfAngle; }
+
 protected:
 	/** 초기 체력/무력화 게이지를 어트리뷰트에 세팅 (서버) */
 	void InitializeAttributes();
 
-	/** 체력 변화 콜백 -> 퍼센트 계산 후 패턴 컴포넌트에 전달 (지연 페이즈 전환) */
+	/** 체력 변화 콜백 -> 퍼센트 계산 후 패턴 컴포넌트에 전달 (지연 페이즈 전환). 0 도달 시 사망 진입 */
 	void OnHealthChanged(const FOnAttributeChangeData& Data);
+
+	/**
+	 * 사망 처리 (서버, 1회 가드).
+	 * State.Dead 복제 태그 -> 패턴 정지 + 어빌리티 취소 -> 장판/타워 정리 -> 이동 정지 +
+	 * 플레이어 통과 허용 -> 사망 몽타주 멀티캐스트 -> OnBossDied 방송 + 레이드 게임모드에 통지.
+	 */
+	virtual void HandleDeath();
+
+	/** 사망 몽타주 재생 (전 머신). 종료 시 마지막 포즈로 고정(bPauseAnims) — 일어나기 방지 */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayDeathMontage();
+
+	/** 사망 몽타주 (BP 에서 지정. 미지정 시 로그만 남기고 포즈 유지) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Death")
+	TObjectPtr<UAnimMontage> DeathMontage;
 
 	/** 백/헤드 어택 방향을 표시하는 지면 데칼 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|BackHead")
@@ -71,6 +125,30 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
 	TObjectPtr<UBossTargetingComponent> TargetingComponent;
 
+	/** 카운터 창/판정 (창 열림은 AnimNotifyState_BossCounter 가 토글) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Combat")
+	TObjectPtr<UBossCounterComponent> CounterComponent;
+
+	/** 저스트가드 창/판정 (창 열림은 AnimNotifyState_BossJustGuard 가 토글) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Combat")
+	TObjectPtr<UBossJustGuardComponent> JustGuardComponent;
+
+	/** 무기 착용 상태 표시 (맨손/양손/합체 — 전환은 AnimNotify_BossSetWeapon 이 호출) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Weapon")
+	TObjectPtr<UBossWeaponComponent> WeaponComponent;
+
+	/** 지형파괴 기믹 (타워 스폰/무력화 페이즈/슬라이스 파괴 — 각 단계는 AnimNotify_BossGimmick* 가 호출) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
+	TObjectPtr<UBossTerrainGimmickComponent> TerrainGimmickComponent;
+
+	/** 헤드어택 존: 보스 정면 기준 반각(도). 백헤드 데칼 표시 각도와 맞춰둘 것 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Combat", meta = (ClampMin = "0", ClampMax = "180"))
+	float HeadZoneHalfAngle = 45.f;
+
+	/** 백어택 존: 보스 후면 기준 반각(도) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Combat", meta = (ClampMin = "0", ClampMax = "180"))
+	float BackZoneHalfAngle = 45.f;
+
 	/** 시작 최대 체력 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Stats")
 	float InitialMaxHealth = 1000000.f;
@@ -80,6 +158,12 @@ protected:
 	float InitialMaxStaggerGauge = 1000.f;
 
 private:
+	/** 사망 몽타주 종료 콜백: 마지막 포즈 고정 */
+	void OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	/** 재빙의 시 어트리뷰트 리셋/델리게이트 중복 바인딩/전투 재시작 방지 */
 	bool bGASInitialized = false;
+
+	/** 사망 처리 1회 가드 (서버) */
+	bool bDead = false;
 };

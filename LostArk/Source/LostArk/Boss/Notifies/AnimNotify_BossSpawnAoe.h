@@ -9,6 +9,8 @@
 #include "AnimNotify_BossSpawnAoe.generated.h"
 
 class ABossPatternActorBase;
+class UNiagaraSystem;
+class UParticleSystem;
 
 /**
  * 몽타주 특정 프레임에 보스 AOE 장판 액터를 스폰하는 노티파이.
@@ -38,6 +40,20 @@ protected:
 	 */
 	virtual void ConfigureAoe(ABossPatternActorBase* Aoe) const {}
 
+	/**
+	 * 스폰 공통 준비: 서버 권위/월드/타겟/베이스 스폰 트랜스폼(소켓·오프셋·스케일 반영)을 계산.
+	 * 방사형 등 여러 개를 스폰하는 서브클래스가 재사용. 스폰 불가(클라/월드 없음 등)면 false.
+	 */
+	bool PrepareSpawn(USkeletalMeshComponent* MeshComp, class UWorld*& OutWorld,
+		AActor*& OutBoss, AActor*& OutTarget, FTransform& OutBaseTM) const;
+
+	/**
+	 * 주어진 트랜스폼으로 AoeClass 액터 1개를 Deferred 스폰 + InitAoe/오버라이드/ConfigureAoe/FinishSpawning.
+	 * 방사형 노티파이가 방향만 바꿔 여러 번 호출한다.
+	 */
+	ABossPatternActorBase* SpawnAoeActor(class UWorld* World, AActor* Boss,
+		AActor* Target, const FTransform& SpawnTM) const;
+
 	/** 스폰할 장판 액터 클래스 (BP_Aoe_Circle / _Rect / _Sector ...) */
 	UPROPERTY(EditAnywhere, Category = "Aoe")
 	TSubclassOf<ABossPatternActorBase> AoeClass;
@@ -66,6 +82,18 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Aoe|Grab", meta = (EditCondition = "bOverrideGrab"))
 	FBossGrabOverride GrabOverride;
 
+	/**
+	 * 켜면 아래 값으로 피격 리액션(넉백)을 이 스폰 1회에만 덮어씀 (BP 클래스 디폴트는 불변).
+	 * 같은 장판 BP 를 '뒤로 밀리는 패턴 / 제자리에서 솟는 패턴 / 낙사 되는·안 되는 패턴'으로
+	 * 몽타주마다 다르게 쓸 때 사용.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Knockback")
+	bool bOverrideKnockback = false;
+
+	/** 넉백 오버라이드 (bOverrideKnockback 켤 때만 적용) */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Knockback", meta = (EditCondition = "bOverrideKnockback"))
+	FBossAoeKnockbackConfig KnockbackOverride;
+
 	/** 초기 스폰 트랜스폼 기준 소켓 (지정 시 이 소켓 위치, 아니면 보스 액터 위치) */
 	UPROPERTY(EditAnywhere, Category = "Aoe")
 	FName SpawnSocketName = NAME_None;
@@ -73,4 +101,16 @@ protected:
 	/** 스폰 위치 오프셋 (소켓/보스 로컬 기준) */
 	UPROPERTY(EditAnywhere, Category = "Aoe")
 	FVector LocationOffset = FVector::ZeroVector;
+
+	/**
+	 * 본체 VFX(나이아가라)를 이 노티파이에서 지정. 켜면 AoeClass BP 의 BodyEffect 를 덮어쓴다.
+	 * 같은 장판 BP 를 패턴마다 다른 몸통 이펙트로 쓰고 싶을 때 사용(예: 뻗어나가는 원장판을
+	 * 빨간 경고 대신 토네이도 등 이펙트로). 비우면 BP 기본값 유지.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Body")
+	TObjectPtr<UNiagaraSystem> BodyEffectOverride = nullptr;
+
+	/** 본체 VFX(캐스케이드 UParticleSystem)를 이 노티파이에서 지정. 토네이도 등 기존 캐스케이드 에셋용. 비우면 BP 기본값 유지 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Body")
+	TObjectPtr<UParticleSystem> BodyEffectCascadeOverride = nullptr;
 };

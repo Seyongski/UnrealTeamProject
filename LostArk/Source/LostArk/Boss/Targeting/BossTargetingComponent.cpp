@@ -2,9 +2,9 @@
 
 #include "Boss/Targeting/BossTargetingComponent.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
-#include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
@@ -50,6 +50,7 @@ void UBossTargetingComponent::TickComponent(float DeltaTime, ELevelTick TickType
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	UpdateFacing(DeltaTime);
+	UpdateScriptedTurn(DeltaTime);
 }
 
 UAbilitySystemComponent* UBossTargetingComponent::GetOwnerASC() const
@@ -59,21 +60,8 @@ UAbilitySystemComponent* UBossTargetingComponent::GetOwnerASC() const
 
 bool UBossTargetingComponent::IsAlive(const AActor* PlayerActor) const
 {
-	if (!PlayerActor)
-	{
-		return false;
-	}
-	// 사망 태그가 설정 안 됐으면 판정 불가 -> 살아있다고 간주(후보 포함)
-	if (!DeadTag.IsValid())
-	{
-		return true;
-	}
-	if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerActor))
-	{
-		return !ASC->HasMatchingGameplayTag(DeadTag);
-	}
-	// ASC 없으면 판정 불가 -> 후보 포함
-	return true;
+	// 태그 미지정/ASC 없음 = 판정 불가 -> 후보 포함 (규약은 공용 헬퍼 참고)
+	return UBossCombatStatics::IsAliveActor(PlayerActor, DeadTag);
 }
 
 AActor* UBossTargetingComponent::SelectTarget(ETargetSelectPolicy Policy)
@@ -89,15 +77,8 @@ AActor* UBossTargetingComponent::SelectTarget(ETargetSelectPolicy Policy)
 
 	// 생존 플레이어 폰 수집
 	TArray<APawn*> Candidates;
-	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
-	{
-		APlayerController* PC = It->Get();
-		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-		if (Pawn && IsAlive(Pawn))
-		{
-			Candidates.Add(Pawn);
-		}
-	}
+	UBossCombatStatics::GetPlayerPawns(World, Candidates);
+	Candidates.RemoveAll([this](const APawn* Pawn) { return !IsAlive(Pawn); });
 
 	if (Candidates.Num() == 0)
 	{
@@ -146,7 +127,16 @@ void UBossTargetingComponent::UpdateFacing(float DeltaTime)
 
 	// TrackTarget 태그가 있을 때만 회전 (NotifyState가 켜고 끔)
 	UAbilitySystemComponent* ASC = GetOwnerASC();
-	if (!ASC || !TrackTargetTag.IsValid() || !ASC->HasMatchingGameplayTag(TrackTargetTag))
+	const bool bTracking = ASC && TrackTargetTag.IsValid() && ASC->HasMatchingGameplayTag(TrackTargetTag);
+
+	// 추적 시작 엣지: 이번 세션의 회전 방향을 새로 캡처하도록 리셋
+	if (bTracking && !bWasTracking)
+	{
+		LastTrackTurnSign = 0.f;
+	}
+	bWasTracking = bTracking;
+
+	if (!bTracking)
 	{
 		return;
 	}
@@ -171,6 +161,54 @@ void UBossTargetingComponent::UpdateFacing(float DeltaTime)
 
 	const float DesiredYaw = ToTarget.Rotation().Yaw;
 	const FRotator Current = Owner->GetActorRotation();
+
+	// 이번 추적 세션에서 아직 방향 미정이면, 유효한 각도 차가 생긴 첫 프레임에 부호 확정.
+	// (RInterpTo 는 최단경로 회전이므로 시작 시점의 델타 부호 = 실제 도는 방향)
+	if (LastTrackTurnSign == 0.f)
+	{
+		const float Delta = FMath::FindDeltaAngleDegrees(Current.Yaw, DesiredYaw);
+		if (FMath::Abs(Delta) > 2.f)	// 미세 노이즈로 방향이 확정되는 것 방지
+		{
+			LastTrackTurnSign = FMath::Sign(Delta);
+		}
+	}
+
 	const FRotator NewRot = FMath::RInterpTo(Current, FRotator(0.f, DesiredYaw, 0.f), DeltaTime, RotationInterpSpeed);
 	Owner->SetActorRotation(FRotator(0.f, NewRot.Yaw, 0.f));
+}
+
+void UBossTargetingComponent::BeginScriptedTurn(float TurnRateDegPerSec, float FallbackSign)
+{
+	ScriptedTurnRate = FMath::Max(TurnRateDegPerSec, 0.f);
+
+	// 추적 이력이 없으면(패턴이 추적 없이 바로 회전) 폴백 부호로 확정
+	if (LastTrackTurnSign == 0.f)
+	{
+		LastTrackTurnSign = (FallbackSign < 0.f) ? -1.f : 1.f;
+	}
+
+	bScriptedTurnActive = true;
+}
+
+void UBossTargetingComponent::EndScriptedTurn()
+{
+	bScriptedTurnActive = false;
+}
+
+void UBossTargetingComponent::UpdateScriptedTurn(float DeltaTime)
+{
+	AActor* Owner = GetOwner();
+	if (!bScriptedTurnActive || !Owner || !Owner->HasAuthority())
+	{
+		return;
+	}
+
+	// 추적 구간과 겹치면 추적(UpdateFacing)이 우선 -> 이중 회전 방지
+	if (bWasTracking)
+	{
+		return;
+	}
+
+	const float DeltaYaw = LastTrackTurnSign * ScriptedTurnRate * DeltaTime;
+	Owner->AddActorWorldRotation(FRotator(0.f, DeltaYaw, 0.f));
 }

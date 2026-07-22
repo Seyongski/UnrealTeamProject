@@ -4,11 +4,24 @@
 #include "Boss/BossBase.h"
 #include "Boss/BackHeadDecalComponent.h"
 #include "Boss/BossAttributeSet.h"
+#include "Boss/BossGameplayTags.h"
+#include "Boss/Combat/BossCombatStatics.h"
+#include "Boss/Combat/BossCounterComponent.h"
+#include "Boss/Combat/BossJustGuardComponent.h"
+#include "Boss/Damage/BossPatternActorBase.h"
+#include "Boss/Gimmick/BossGimmickTower.h"
 #include "Boss/Pattern/BossPatternComponent.h"
+#include "Boss/Raid/BossRaidGameMode.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
+#include "Boss/Gimmick/BossTerrainGimmickComponent.h"
+#include "Boss/Weapon/BossWeaponComponent.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "DrawDebugHelpers.h"
+#include "EngineUtils.h"
 
 // Sets default values
 ABossBase::ABossBase()
@@ -43,6 +56,18 @@ ABossBase::ABossBase()
 
 	// 타겟 선정 + 추적 회전
 	TargetingComponent = CreateDefaultSubobject<UBossTargetingComponent>(TEXT("TargetingComponent"));
+
+	// 카운터 창/판정
+	CounterComponent = CreateDefaultSubobject<UBossCounterComponent>(TEXT("CounterComponent"));
+
+	// 저스트가드 창/판정
+	JustGuardComponent = CreateDefaultSubobject<UBossJustGuardComponent>(TEXT("JustGuardComponent"));
+
+	// 무기 착용 상태 표시 (맨손/양손/합체 토글)
+	WeaponComponent = CreateDefaultSubobject<UBossWeaponComponent>(TEXT("WeaponComponent"));
+
+	// 지형파괴 기믹 (미설정 시 아무것도 안 함 — 기믹 없는 보스도 안전)
+	TerrainGimmickComponent = CreateDefaultSubobject<UBossTerrainGimmickComponent>(TEXT("TerrainGimmickComponent"));
 }
 
 UAbilitySystemComponent* ABossBase::GetAbilitySystemComponent() const
@@ -94,6 +119,11 @@ void ABossBase::BeginPlay()
 	if (AbilitySystemComponent && !HasAuthority())
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+		// 서버 소유가 아니므로 PossessedBy가 안 불린다 -> 체력바 위젯 갱신을 위해
+		// 여기서 체력 변화(리플리케이션 OnRep)를 구독한다. (서버는 PossessedBy에서 1회 바인딩)
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UBossAttributeSet::GetHealthAttribute())
+			.AddUObject(this, &ABossBase::OnHealthChanged);
 	}
 }
 
@@ -128,16 +158,140 @@ void ABossBase::InitializeAttributes()
 
 void ABossBase::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
-	if (!AttributeSet || !PatternComponent)
+	if (!AttributeSet)
 	{
 		return;
 	}
 
 	const float Max = AttributeSet->GetMaxHealth();
-	const float Percent = (Max > 0.f) ? (Data.NewValue / Max) * 100.f : 0.f;
 
-	// 전환은 예약만 됨(현재 패턴 완주 후 반영)
-	PatternComponent->NotifyHealthPercent(Percent);
+	// 체력바 위젯 갱신 방송 (서버/클라 공통). 줄 수 계산은 위젯이 UBossHealthBarLibrary로 수행.
+	OnBossHealthChanged.Broadcast(Data.NewValue, Max);
+
+	// 체력 0 -> 사망 (서버 권위, 1회). 이후 페이즈 전환 로직은 타지 않는다.
+	if (Data.NewValue <= 0.f && HasAuthority())
+	{
+		HandleDeath();
+		return;
+	}
+
+	// 페이즈 전환 예약 (현재 패턴 완주 후 반영). 클라에선 CurrentPhaseIndex==INDEX_NONE 라 no-op.
+	if (PatternComponent && !bDead)
+	{
+		const float Percent = (Max > 0.f) ? (Data.NewValue / Max) * 100.f : 0.f;
+		PatternComponent->NotifyHealthPercent(Percent);
+	}
+}
+
+void ABossBase::HandleDeath()
+{
+	if (bDead || !HasAuthority())
+	{
+		return;
+	}
+	bDead = true;
+
+	// 1) 사망 태그 (복제 -> 클라 UI/플레이어 파트가 State.Dead 로 감지)
+	if (AbilitySystemComponent)
+	{
+		UBossCombatStatics::AddReplicatedLooseTag(AbilitySystemComponent, LostArkTags::State_Dead);
+	}
+
+	// 2) 패턴 정지 -> 진행 중 어빌리티 취소 (순서 중요: 취소가 부르는 종료 콜백이 다음 패턴을 못 돌게 먼저 정지)
+	if (PatternComponent)
+	{
+		PatternComponent->StopCombat();
+	}
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->CancelAllAbilities();
+	}
+
+	// 3) 기믹 정리: 무력화 페이즈 내리기 (게이지 UI 숨김)
+	if (TerrainGimmickComponent)
+	{
+		TerrainGimmickComponent->EndStaggerPhase();
+	}
+
+	// 4) 남아있는 장판/타워 정리. 잡힌 플레이어는 장판 EndPlay(OnEndPlay)가 안전 복구한다
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ABossPatternActorBase> It(World); It; ++It)
+		{
+			It->DestroyAoeNow();
+		}
+		for (TActorIterator<ABossGimmickTower> It(World); It; ++It)
+		{
+			It->Destroy();
+		}
+	}
+
+	// 5) 이동 정지 + 플레이어 통과 허용 (시체가 길을 막지 않게. 바닥 지지용 나머지 채널은 유지)
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->StopMovementImmediately();
+		Move->DisableMovement();
+	}
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}
+
+	// 6) 사망 몽타주 (전 머신 재생, 종료 시 포즈 고정)
+	MulticastPlayDeathMontage();
+
+	// 7) 사망 방송 + 클리어 연출은 레이드 게임모드가 오케스트레이션 (레이드 모드가 아니면 통지 생략)
+	OnBossDied.Broadcast();
+	if (ABossRaidGameMode* RaidGM = GetWorld() ? GetWorld()->GetAuthGameMode<ABossRaidGameMode>() : nullptr)
+	{
+		RaidGM->NotifyBossDied(this);
+	}
+}
+
+void ABossBase::MulticastPlayDeathMontage_Implementation()
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	UAnimInstance* Anim = MeshComp ? MeshComp->GetAnimInstance() : nullptr;
+	if (!Anim)
+	{
+		return;
+	}
+
+	// 패턴 몽타주 잔여분 중단 후 사망 몽타주
+	Anim->StopAllMontages(0.1f);
+
+	if (DeathMontage)
+	{
+		Anim->Montage_Play(DeathMontage);
+
+		// 몽타주가 끝나면 마지막 포즈로 고정 -> 블렌드아웃으로 일어나는(Idle 복귀) 현상 방지
+		FOnMontageEnded EndDelegate;
+		EndDelegate.BindUObject(this, &ABossBase::OnDeathMontageEnded);
+		Anim->Montage_SetEndDelegate(EndDelegate, DeathMontage);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Boss] %s DeathMontage 미지정 — 사망 모션 없이 현재 포즈 유지"), *GetName());
+	}
+}
+
+void ABossBase::OnDeathMontageEnded(UAnimMontage* /*Montage*/, bool /*bInterrupted*/)
+{
+	// 사망 후엔 어떤 이유로 끝났든 포즈 고정 (인터럽트 포함 — 죽은 보스가 다시 움직이면 안 됨)
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->bPauseAnims = true;
+	}
+}
+
+float ABossBase::GetCurrentHealth() const
+{
+	return AttributeSet ? AttributeSet->GetHealth() : 0.f;
+}
+
+float ABossBase::GetMaxHealthValue() const
+{
+	return AttributeSet ? AttributeSet->GetMaxHealth() : 0.f;
 }
 
 void ABossBase::UpdateBackHeadDecal()
@@ -152,5 +306,3 @@ void ABossBase::UpdateBackHeadDecal()
 	BackHeadDecal->SetRelativeLocation(FVector(0.f, 0.f, -HalfHeight));
 	BackHeadDecal->UpdateRadius(GetCapsuleComponent()->GetScaledCapsuleRadius());
 }
-
-

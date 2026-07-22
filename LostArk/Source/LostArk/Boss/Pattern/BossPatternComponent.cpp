@@ -48,6 +48,18 @@ void UBossPatternComponent::StartCombat()
 	EnterPhase(0);
 }
 
+void UBossPatternComponent::StopCombat()
+{
+	bCombatStopped = true;
+	PendingPhaseIndex = INDEX_NONE;
+
+	// 그로기 대기 등으로 걸려 있던 발동 재시도 중단
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ActivateRetryTimer);
+	}
+}
+
 void UBossPatternComponent::NotifyHealthPercent(float HealthPercent)
 {
 	// 전투 시작 전이면 무시
@@ -154,6 +166,12 @@ void UBossPatternComponent::RunPatternData(UPatternDataAsset* Data)
 
 void UBossPatternComponent::ActivateAbilityNow()
 {
+	// 정지 후엔 발동/재시도 모두 금지 (RunPatternData 의 다음 틱 예약이 정지 직후 도착하는 경우 포함)
+	if (bCombatStopped)
+	{
+		return;
+	}
+
 	UAbilitySystemComponent* ASC = GetASC();
 	if (!ASC)
 	{
@@ -212,6 +230,13 @@ void UBossPatternComponent::PreloadPhaseAssets(const UBossPhaseDataAsset* Phase)
 
 void UBossPatternComponent::OnPatternAbilityFinished()
 {
+	// 0) 전투 정지(사망 등) 후엔 다음 패턴을 돌리지 않는다
+	//    (사망 시 CancelAllAbilities 가 이 콜백을 부르며 들어오는 경로)
+	if (bCombatStopped)
+	{
+		return;
+	}
+
 	// 1) 방금 끝난 게 페이즈 전환 기믹이면 -> 새 페이즈의 일반 패턴 시작
 	if (bRunningTransition)
 	{

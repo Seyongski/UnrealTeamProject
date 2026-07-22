@@ -146,6 +146,9 @@ public:
 	virtual bool OnFinish(ABossPatternActorBase* Aoe) override;
 	virtual void OnEndPlay(ABossPatternActorBase* Aoe) override;
 
+	/** 잡기는 항상 높이를 무시하고 XY 도형(Radius/각도)만으로 판정 (보스 크기 변동에 강건) */
+	virtual bool IgnoresAoeHeight() const override { return true; }
+
 	/** 몽타주 노티파이가 스폰 직후 호출: 이 인스턴스만 파라미터 덮어쓰기 (BP 클래스 디폴트는 불변) */
 	void ApplyOverride(const FBossGrabOverride& Override);
 

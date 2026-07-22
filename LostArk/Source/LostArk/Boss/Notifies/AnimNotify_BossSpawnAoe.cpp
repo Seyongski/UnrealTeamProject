@@ -45,12 +45,23 @@ bool UAnimNotify_BossSpawnAoe::PrepareSpawn(USkeletalMeshComponent* MeshComp, UW
 		return false;
 	}
 
-	// 초기 스폰 트랜스폼: 소켓 지정 시 소켓, 아니면 보스 위치 (+오프셋)
-	FTransform SpawnTM = Boss->GetActorTransform();
-	if (SpawnSocketName != NAME_None && MeshComp->DoesSocketExist(SpawnSocketName))
+	// 초기 스폰 트랜스폼: 소켓 지정 시 소켓 위치, 아니면 보스 위치 (+오프셋)
+	const bool bHasSocket = (SpawnSocketName != NAME_None && MeshComp->DoesSocketExist(SpawnSocketName));
+	FTransform SpawnTM = bHasSocket ? MeshComp->GetSocketTransform(SpawnSocketName) : Boss->GetActorTransform();
+
+	// 회전(=장판 발사 방향) 결정
+	if (bAimBySocketForward)
 	{
-		SpawnTM = MeshComp->GetSocketTransform(SpawnSocketName);
-		// 회전은 보스 기준으로 (소켓 트위스트 무시하고 장판 방향 일관성 유지)
+		// 레이저 등: 헤드(소켓) 정면의 X/Y 만 사용 (Z 무시 = pitch/roll 0, yaw 만).
+		// 소켓이 없으면 보스 액터 정면을 평면으로 눕혀 쓴다.
+		const FQuat SrcRot = bHasSocket ? MeshComp->GetSocketQuaternion(SpawnSocketName) : Boss->GetActorQuat();
+		FVector Fwd = SrcRot.GetForwardVector();
+		Fwd.Z = 0.f;
+		SpawnTM.SetRotation(Fwd.Normalize() ? Fwd.ToOrientationQuat() : Boss->GetActorQuat());
+	}
+	else if (bHasSocket)
+	{
+		// 기존 동작: 소켓 트위스트 무시하고 보스 액터 회전으로 방향 일관성 유지
 		SpawnTM.SetRotation(Boss->GetActorQuat());
 	}
 	SpawnTM.AddToTranslation(SpawnTM.GetRotation().RotateVector(LocationOffset));

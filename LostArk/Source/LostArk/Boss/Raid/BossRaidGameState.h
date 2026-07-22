@@ -82,6 +82,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Arena")
 	int32 GetSliceIndexAt(const FVector& WorldLocation) const;
 
+	/**
+	 * 슬라이스 N 중심 방향의 월드 위치 (아레나 중심에서 Radius 만큼). GetSliceIndexAt 의 역함수격.
+	 * 보스가 '이번에 파괴되는 슬라이스'를 바라볼 때 등에 사용. 범위 밖 인덱스면 아레나 중심 반환.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Arena")
+	FVector GetSliceCenterLocation(int32 SliceIndex, float Radius = 500.f) const;
+
 	/** 조각 파괴 마킹 (서버 전용. GameMode::DestroySlice 가 호출) */
 	void MarkSliceDestroyed(int32 SliceIndex);
 

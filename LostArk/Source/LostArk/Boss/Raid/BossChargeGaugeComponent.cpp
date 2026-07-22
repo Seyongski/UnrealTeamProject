@@ -175,8 +175,8 @@ void UBossChargeGaugeComponent::ResetGauge()
 
 void UBossChargeGaugeComponent::FlipOwnerCharge()
 {
-	// 전하 변환장판(UBossAoeChargeSwapEffect)과 동일한 공용 로직: 가진 쪽 GE 제거 + 반대 GE 부여
-	UBossCombatStatics::FlipCharge(GetOwnerASC(), RedChargeEffect, BlueChargeEffect, this,
+	// 전하 변환장판(UBossAoeChargeSwapEffect)과 동일한 공용 로직: 복제 루스 태그 반전 (GE 애셋 불필요)
+	UBossCombatStatics::FlipChargeLoose(GetOwnerASC(),
 		LostArkTags::State_Charge_Red.GetTag(), LostArkTags::State_Charge_Blue.GetTag());
 }
 

@@ -7,9 +7,22 @@
 #include "BossTerrainGimmickComponent.generated.h"
 
 class ABossGimmickTower;
+class ABossRaidGameState;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 struct FOnAttributeChangeData;
+struct FGameplayEventData;
+
+/** 무력화 게이지가 0이 됐을 때의 처리 방식 (BeginStaggerPhase 에서 지정) */
+UENUM(BlueprintType)
+enum class EStaggerResolve : uint8
+{
+	Groggy		UMETA(DisplayName = "그로기 (기믹)"),		// 보스 그로기 GE
+	GrabRelease	UMETA(DisplayName = "잡기 해제 (구출)")		// 이 보스가 잡은 대상 전원 해제
+};
+
+/** 무력화 게이지 변경 방송 (Current, Max). 서버+클라 모두 발동 -> WBP_StaggerGauge 바인딩 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStaggerGaugeChanged, float, Gauge, float, MaxGauge);
 
 /**
  * 지형파괴 기믹 오케스트레이터 (서버 전용 로직).
@@ -43,13 +56,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
 	ABossGimmickTower* SpawnGimmickTower();
 
-	/** 무력화 페이즈 시작: 게이지 리필 + UI 태그 부여. 게이지 0 -> 즉시 그로기 (서버) */
+	/**
+	 * 무력화 페이즈 시작 (서버): 게이지를 RequiredAmount 로 세팅(Max 도 동일) + UI 태그 부여.
+	 * 게이지 0 도달 시 Resolve 에 따라 그로기(기믹) 또는 잡기 해제(구출)를 실행한다.
+	 * @param RequiredAmount 이 무력화의 요구량(=최대치). 패턴/노티파이가 지정, 디폴트 100
+	 * @param Resolve        0 도달 시 처리 방식 (그로기 / 잡기 해제)
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
-	void BeginStaggerPhase();
+	void BeginStaggerPhase(float RequiredAmount = 100.f, EStaggerResolve Resolve = EStaggerResolve::Groggy);
 
 	/** 무력화 페이즈 종료: UI 태그 회수 (중복 호출 안전) */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
 	void EndStaggerPhase();
+
+	/**
+	 * 무력화 게이지 감소 (서버). 페이즈 중일 때만 유효. 0 도달 시 BeginStaggerPhase 의 Resolve 처리.
+	 * 디버그 E / 스킬(Event.Boss.StaggerHit)이 호출. 잡힌 플레이어는 어차피 입력 불가라 팀원만 깎는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
+	void ApplyStaggerHit(float Amount);
 
 	/** 그로기 GE 적용 (SetByCaller Data.Duration). 무력화 성공 시 내부 호출되지만 외부(노티파이)도 사용 가능 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
@@ -71,6 +96,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
 	TArray<FVector> TowerSpawnPoints;
 
+	/**
+	 * 지형 파괴 순서(고정). 라운드마다 이 배열 순서대로 슬라이스 번호를 하나씩 파괴한다.
+	 * 타워 스폰 위치와는 무관 — 타워는 랜덤 위치, 파괴는 여기 정해진 순서. 레벨 팀 슬라이스 번호와 맞출 것.
+	 * 이미 파괴된 번호는 건너뛴다. 비우면 파괴 대상 미확정(경고 로그) — 반드시 채울 것.
+	 * 예: [2, 5, 0, 7] 이면 2 -> 5 -> 0 -> 7 순으로 파괴.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
+	TArray<int32> DestructionOrder;
+
+	/** 보스가 파괴 슬라이스를 바라볼 때의 기준 거리(cm). 아레나 중심에서 슬라이스 방향으로 이만큼 앞 */
+	UPROPERTY(EditAnywhere, Category = "Boss|Gimmick", meta = (ClampMin = "1.0"))
+	float GimmickLookRadius = 500.f;
+
 	/** 스폰할 타워 클래스 (BP_BossGimmickTower) */
 	UPROPERTY(EditAnywhere, Category = "Boss|Gimmick")
 	TSubclassOf<ABossGimmickTower> TowerClass;
@@ -83,14 +121,30 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Boss|Gimmick|Stagger", meta = (ClampMin = "0.1"))
 	float StaggerGroggyDuration = 6.f;
 
+	/** 무력화 게이지 변경 방송 (Current, Max). WBP_StaggerGauge 가 여기 바인딩 (잡기/기믹 공용) */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Gimmick|Stagger")
+	FOnStaggerGaugeChanged OnStaggerGaugeChanged;
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
 	UAbilitySystemComponent* GetASC() const;
 
-	/** 무력화 게이지 변화 감시: 페이즈 중 0 도달 -> 즉시 그로기 */
-	void OnStaggerGaugeChanged(const FOnAttributeChangeData& Data);
+	/** 고정 순서(DestructionOrder)에서 아직 안 부서진 다음 슬라이스 번호. 없으면 INDEX_NONE (인덱스 진행) */
+	int32 NextDestructionSlice(ABossRaidGameState* GS);
+
+	/** 무력화 게이지 변화 감시(서버+클라): UI 방송 + 서버 0 도달 시 Resolve 처리 */
+	void HandleStaggerGaugeChanged(const FOnAttributeChangeData& Data);
+
+	/** Event.Boss.StaggerHit 수신 (서버) -> ApplyStaggerHit(EventMagnitude) */
+	void HandleStaggerHitEvent(const FGameplayEventData* Payload);
+
+	/** 이 보스가 잡고 있는 모든 잡기 장판 해제 (GrabRelease 모드 0 도달 시) */
+	void ReleaseBossGrabs();
+
+	/** 그로기 종료: State.Boss.Groggy 복제 루스 태그 회수 (GroggyTimer 콜백) */
+	void EndGroggy();
 
 	/** 예약된 슬라이스 파괴 실행 */
 	void ExecuteDestroySlice();
@@ -104,6 +158,9 @@ private:
 	/** 이번 라운드의 파괴 대상 (파괴 요청 시 INDEX_NONE 으로 리셋 -> 이중 파괴 방지) */
 	int32 CurrentSliceIndex = INDEX_NONE;
 
+	/** DestructionOrder 진행 위치 (라운드마다 증가. 배열 크기로 나눠 순환) */
+	int32 DestructionOrderIndex = 0;
+
 	/** 이번(직전) 라운드의 기믹 위치. 다음 라운드 시작까지 유지 (바라보기 회전용) */
 	FVector CurrentGimmickLocation = FVector::ZeroVector;
 	bool bHasGimmickLocation = false;
@@ -113,5 +170,11 @@ private:
 
 	bool bStaggerPhaseActive = false;
 
+	/** 이번 무력화 페이즈가 0 도달 시 무엇을 할지 (BeginStaggerPhase 에서 설정) */
+	EStaggerResolve CurrentStaggerResolve = EStaggerResolve::Groggy;
+
 	FTimerHandle DestroySliceTimer;
+
+	/** 그로기 지속시간 타이머 (만료 시 EndGroggy 로 태그 회수) */
+	FTimerHandle GroggyTimer;
 };

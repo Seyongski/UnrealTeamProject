@@ -4,6 +4,14 @@
 #include "Boss/Damage/BossAoe_Circle.h"
 #include "DrawDebugHelpers.h"
 #include "NiagaraComponent.h"
+#include "Net/UnrealNetwork.h"
+
+void ABossAoe_Circle::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABossAoe_Circle, Radius);
+	DOREPLIFETIME(ABossAoe_Circle, InnerRadius);
+}
 
 bool ABossAoe_Circle::IsInsideShape(const FVector& WorldPoint) const
 {

@@ -19,16 +19,17 @@ class LOSTARK_API ABossAoe_Rect : public ABossPatternActorBase
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
 	float HalfLength = 300.f;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape", meta = (ClampMin = "0.0"))
 	float HalfWidth = 150.f;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Shape")
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Shape")
 	float ForwardOffset = 0.f;
 
 protected:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual bool IsInsideShape(const FVector& WorldPoint) const override;
 	virtual void BuildTelegraph() override;
 	virtual void DebugDrawShape() const override;

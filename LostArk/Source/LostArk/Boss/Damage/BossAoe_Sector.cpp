@@ -4,6 +4,16 @@
 #include "Boss/Damage/BossAoe_Sector.h"
 #include "DrawDebugHelpers.h"
 #include "NiagaraComponent.h"
+#include "Net/UnrealNetwork.h"
+
+void ABossAoe_Sector::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABossAoe_Sector, Radius);
+	DOREPLIFETIME(ABossAoe_Sector, InnerRadius);
+	DOREPLIFETIME(ABossAoe_Sector, StartAngle);
+	DOREPLIFETIME(ABossAoe_Sector, EndAngle);
+}
 
 bool ABossAoe_Sector::IsInsideShape(const FVector& WorldPoint) const
 {

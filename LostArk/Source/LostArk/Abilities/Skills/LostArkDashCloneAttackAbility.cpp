@@ -1,4 +1,4 @@
-﻿#include "Abilities/Skills/LostArkDashCloneAttackAbility.h"
+#include "Abilities/Skills/LostArkDashCloneAttackAbility.h"
 #include "Actor/LostArkShadowClone.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -131,7 +131,7 @@ void ULostArkDashCloneAttackAbility::OnDashMovementCompleted()
 	UAnimMontage* LoadedCloneMontage = CloneAttackMontage.LoadSynchronous();
 	USkeletalMeshComponent* SourceMesh = AvatarChar->FindComponentByClass<USkeletalMeshComponent>();
 
-	if (LoadedShadowCloneClass && LoadedCloneMontage && SourceMesh)
+	if (LoadedShadowCloneClass && LoadedCloneMontage && SourceMesh && AvatarChar->HasAuthority())
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = nullptr;

@@ -1,4 +1,4 @@
-﻿#include "Abilities/Skills/LostArkReaperComboAbility.h"
+#include "Abilities/Skills/LostArkReaperComboAbility.h"
 #include "Actor/LostArkShadowClone.h"
 #include "Character/LostArkCharacter.h"
 #include "AbilitySystemComponent.h"
@@ -59,7 +59,7 @@ void ULostArkReaperComboAbility::PlayComboSegment(int32 Index)
 				ALostArkCharacter* LAChar = Cast<ALostArkCharacter>(AvatarPawn);
 				USkeletalMeshComponent* SourceWeapon = LAChar ? LAChar->GetWeaponMesh() : nullptr;
 
-				if (LoadedShadowCloneClass && SourceMesh)
+				if (LoadedShadowCloneClass && SourceMesh && AvatarPawn->HasAuthority())
 				{
 					FVector PlayerLoc = AvatarPawn->GetActorLocation();
 					FRotator PlayerRot = AvatarPawn->GetActorRotation();

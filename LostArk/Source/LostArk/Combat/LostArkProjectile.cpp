@@ -1,9 +1,11 @@
-﻿#include "Combat/LostArkProjectile.h"
+#include "Combat/LostArkProjectile.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Particles/ParticleSystemComponent.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "Character/LostArkCharacter.h"
+#include "Monster/LostArkMonster.h"
 
 ALostArkProjectile::ALostArkProjectile()
 {
@@ -13,6 +15,7 @@ ALostArkProjectile::ALostArkProjectile()
 	CollisionComponent->InitSphereRadius(15.0f);
 	CollisionComponent->BodyInstance.SetCollisionProfileName("Projectile");
 	CollisionComponent->OnComponentHit.AddDynamic(this, &ALostArkProjectile::OnProjectileStop);
+	CollisionComponent->OnComponentBeginOverlap.AddDynamic(this, &ALostArkProjectile::OnProjectileOverlap);
 	
 	RootComponent = CollisionComponent;
 
@@ -35,11 +38,66 @@ void ALostArkProjectile::BeginPlay()
 
 void ALostArkProjectile::OnProjectileStop(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
+	HandleImpact(OtherActor, Hit.Location);
+}
+
+void ALostArkProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (OtherActor && OtherActor != GetInstigator() && OtherActor != this)
+	{
+		FVector ImpactLoc = bFromSweep ? FVector(SweepResult.Location) : GetActorLocation();
+		HandleImpact(OtherActor, ImpactLoc);
+	}
+}
+
+void ALostArkProjectile::HandleImpact(AActor* OtherActor, const FVector& ImpactLocation)
+{
 	if (!DamageEffectSpecHandle.IsValid())
 	{
-		Destroy();
+		if (bDestroyOnImpact && !bIsPenetrating)
+		{
+			Destroy();
+		}
 		return;
 	}
+
+	AActor* InstigatorActor = GetInstigator();
+	if (OtherActor == InstigatorActor)
+	{
+		return;
+	}
+
+	float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+	auto CanHitTarget = [&](AActor* Target) -> bool
+	{
+		if (!Target || Target == InstigatorActor || Target == this)
+		{
+			return false;
+		}
+
+		// PvP 아군 피격 방지
+		bool bPvP = InstigatorActor && Target->IsA<ALostArkCharacter>() && InstigatorActor->IsA<ALostArkCharacter>();
+		if (bPvP)
+		{
+			return false;
+		}
+
+		if (bIsPenetrating || !bDestroyOnImpact)
+		{
+			TWeakObjectPtr<AActor> WeakTarget(Target);
+			if (float* LastTime = LastHitTimeMap.Find(WeakTarget))
+			{
+				if (CurrentTime - *LastTime < DamageInterval)
+				{
+					return false;
+				}
+			}
+			LastHitTimeMap.Add(WeakTarget, CurrentTime);
+		}
+
+		return true;
+	};
 
 	if (ExplodeRadius > 0.f)
 	{
@@ -49,14 +107,17 @@ void ALostArkProjectile::OnProjectileStop(UPrimitiveComponent* HitComponent, AAc
 
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
-		QueryParams.AddIgnoredActor(GetInstigator());
+		if (InstigatorActor)
+		{
+			QueryParams.AddIgnoredActor(InstigatorActor);
+		}
 
-		GetWorld()->OverlapMultiByObjectType(Overlaps, GetActorLocation(), FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(ExplodeRadius), QueryParams);
+		GetWorld()->OverlapMultiByObjectType(Overlaps, ImpactLocation, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(ExplodeRadius), QueryParams);
 
 		for (const FOverlapResult& Overlap : Overlaps)
 		{
 			AActor* HitActor = Overlap.GetActor();
-			if (HitActor && HitActor != GetInstigator())
+			if (CanHitTarget(HitActor))
 			{
 				if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor))
 				{
@@ -65,9 +126,9 @@ void ALostArkProjectile::OnProjectileStop(UPrimitiveComponent* HitComponent, AAc
 			}
 		}
 	}
-	else
+	else if (OtherActor)
 	{
-		if (OtherActor && OtherActor != GetInstigator())
+		if (CanHitTarget(OtherActor))
 		{
 			if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
 			{
@@ -76,7 +137,10 @@ void ALostArkProjectile::OnProjectileStop(UPrimitiveComponent* HitComponent, AAc
 		}
 	}
 
-	Destroy();
+	if (bDestroyOnImpact && !bIsPenetrating)
+	{
+		Destroy();
+	}
 }
 
 

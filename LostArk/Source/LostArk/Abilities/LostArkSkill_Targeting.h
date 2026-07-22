@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Abilities/LostArkSkillGameplayAbility.h"
@@ -27,6 +27,14 @@ protected:
 	UFUNCTION()
 	void OnTargetCancelledDirect();
 
+	UFUNCTION(Server, Reliable)
+	void Server_OnTargetSelected(FVector Location);
+
+	UFUNCTION(Server, Reliable)
+	void Server_OnTargetCancelled();
+
+	void ContinueTargetingExecution();
+
 	virtual void OnHitCheckReceived(FGameplayEventData Payload) override;
 
 public:
@@ -36,8 +44,12 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Skill|Targeting")
 	void K2_OnTargetConfirmed(const FVector& TargetLocation);
 
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_OnTargetConfirmed(FVector TargetLocation);
+
 private:
 	FVector CachedTargetLocation;
+	bool bIsTargetConfirmed = false;
 
 	UPROPERTY()
 	class ALostArkTargetActor_GroundSelect* SpawnedTargetActor;

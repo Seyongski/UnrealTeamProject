@@ -1,4 +1,4 @@
-﻿#include "Abilities/LostArkSkillGameplayAbility.h"
+#include "Abilities/LostArkSkillGameplayAbility.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
@@ -24,6 +24,8 @@ ULostArkSkillGameplayAbility::ULostArkSkillGameplayAbility()
 
 	bRotateToMouseOnActivate = true;
 	bAbortNavigationMove = true;
+
+	SkillPlayRate = 1.0f;
 
 	AbilityTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false));
 	AbilityTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Skill"), false));
@@ -110,7 +112,7 @@ void ULostArkSkillGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHan
 				this,
 				TEXT("SkillPlayTask"),
 				LoadedMontage,
-				1.0f,
+				SkillPlayRate,
 				NAME_None,
 				false,
 				1.0f
@@ -229,6 +231,15 @@ UGameplayEffect* ULostArkSkillGameplayAbility::GetCooldownGameplayEffect() const
 		return CooldownEffectClass->GetDefaultObject<UGameplayEffect>();
 	}
 	return Super::GetCooldownGameplayEffect();
+}
+
+UGameplayEffect* ULostArkSkillGameplayAbility::GetCostGameplayEffect() const
+{
+	if (CostEffectClass)
+	{
+		return CostEffectClass->GetDefaultObject<UGameplayEffect>();
+	}
+	return Super::GetCostGameplayEffect();
 }
 
 

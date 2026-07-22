@@ -21,7 +21,6 @@
 #include "Boss/BossBase.h"
 #include "Boss/Combat/BossCounterComponent.h"
 #include "Boss/Combat/BossJustGuardComponent.h"
-#include "Boss/Gimmick/BossTerrainGimmickComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -37,18 +36,21 @@ void ALostArkPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	if (IsLocalController())
 	{
-		Subsystem->AddMappingContext(DefaultMappingContext, 0);
-	}
-
-	if (HUDWidgetClass)
-	{
-		HUDWidget = CreateWidget<ULostArkHUDWidget>(this, HUDWidgetClass);
-		if (HUDWidget)
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 		{
-			HUDWidget->AddToViewport();
-			HUDWidget->BindAttributeDelegates();
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+
+		if (HUDWidgetClass)
+		{
+			HUDWidget = CreateWidget<ULostArkHUDWidget>(this, HUDWidgetClass);
+			if (HUDWidget)
+			{
+				HUDWidget->AddToViewport();
+				HUDWidget->BindAttributeDelegates();
+			}
 		}
 	}
 }
@@ -79,7 +81,6 @@ void ALostArkPlayerController::SetupInputComponent()
 	{
 		InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &ALostArkPlayerController::DebugForceCounterHit);
 		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ALostArkPlayerController::DebugTryJustGuard);
-		InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ALostArkPlayerController::DebugStaggerHit);
 	}
 }
 
@@ -149,35 +150,6 @@ void ALostArkPlayerController::ServerDebugTryJustGuard_Implementation()
 		break;	// 보스 1개 가정 (임시)
 	}
 }
-
-void ALostArkPlayerController::DebugStaggerHit()
-{
-	// 무력화 게이지를 10 깎는다 (E). 실제 감소는 서버 권위에서. 나중에 스킬이 자기 무력화 수치로 대체.
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Orange, TEXT("[DEBUG] E -> 무력화 -10"));
-	}
-	ServerDebugStaggerHit();
-}
-
-void ALostArkPlayerController::ServerDebugStaggerHit_Implementation()
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	// 월드의 첫 보스 무력화 게이지 10 감소 (페이즈 중이 아니면 컴포넌트가 무시)
-	for (TActorIterator<ABossBase> It(World); It; ++It)
-	{
-		if (UBossTerrainGimmickComponent* Gimmick = It->FindComponentByClass<UBossTerrainGimmickComponent>())
-		{
-			Gimmick->ApplyStaggerHit(10.f);
-		}
-		break;	// 보스 1개 가정 (임시)
-	}
-}
 // ==============================================================================
 
 void ALostArkPlayerController::OnInputStarted()
@@ -187,9 +159,12 @@ void ALostArkPlayerController::OnInputStarted()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ActivePawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 			{
-				return;
+				if (ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+				{
+					return;
+				}
 			}
 		}
 	}
@@ -203,9 +178,12 @@ void ALostArkPlayerController::OnSetDestinationTriggered()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ActivePawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 			{
-				return;
+				if (ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+				{
+					return;
+				}
 			}
 		}
 	}
@@ -243,10 +221,13 @@ void ALostArkPlayerController::OnSetDestinationReleased()
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ControlledPawn))
 		{
-			if (ASI->GetAbilitySystemComponent()->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 			{
-				FollowTime = 0.f;
-				return;
+				if (ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"), false)))
+				{
+					FollowTime = 0.f;
+					return;
+				}
 			}
 		}
 	}
@@ -282,7 +263,7 @@ void ALostArkPlayerController::OnTouchReleased()
 
 void ALostArkPlayerController::InitializeHUDForCharacter(class ALostArkCharacter* InCharacter)
 {
-	if (!InCharacter) return;
+	if (!InCharacter || !IsLocalController()) return;
 
 	// 기존 HUD가 있으면 제거
 	if (HUDWidget)
@@ -301,6 +282,23 @@ void ALostArkPlayerController::InitializeHUDForCharacter(class ALostArkCharacter
 		{
 			HUDWidget->AddToViewport();
 			HUDWidget->BindAttributeDelegates();
+		}
+	}
+}
+
+void ALostArkPlayerController::ClientShowStageClearUI_Implementation()
+{
+	if (HUDWidget)
+	{
+		HUDWidget->OnShowStageClearUI();
+	}
+
+	if (StageClearWidgetClass && !StageClearWidget)
+	{
+		StageClearWidget = CreateWidget<UUserWidget>(this, StageClearWidgetClass);
+		if (StageClearWidget)
+		{
+			StageClearWidget->AddToViewport();
 		}
 	}
 }

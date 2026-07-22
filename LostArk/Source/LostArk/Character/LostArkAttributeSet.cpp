@@ -1,8 +1,12 @@
-﻿#include "Character/LostArkAttributeSet.h"
+#include "Character/LostArkAttributeSet.h"
 #include "GameplayEffectExtension.h"
 #include "Core/LostArkCombatInterface.h"
 #include "Engine/Engine.h"
 #include "TimerManager.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/PlayerController.h"
+#include "Character/LostArkCharacter.h"
+#include "Net/UnrealNetwork.h"
 
 static const float DefaultHealth = 100.f;
 static const float DefaultMaxHealth = 100.f;
@@ -22,6 +26,48 @@ ULostArkAttributeSet::ULostArkAttributeSet()
 	InitMaxMana(DefaultMaxMana);
 	InitIdentityGauge(0.f);
 	InitMaxIdentityGauge(DefaultMaxIdentityGauge);
+}
+
+void ULostArkAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION_NOTIFY(ULostArkAttributeSet, Health, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(ULostArkAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(ULostArkAttributeSet, Mana, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(ULostArkAttributeSet, MaxMana, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(ULostArkAttributeSet, IdentityGauge, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(ULostArkAttributeSet, MaxIdentityGauge, COND_None, REPNOTIFY_Always);
+}
+
+void ULostArkAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(ULostArkAttributeSet, Health, OldHealth);
+}
+
+void ULostArkAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(ULostArkAttributeSet, MaxHealth, OldMaxHealth);
+}
+
+void ULostArkAttributeSet::OnRep_Mana(const FGameplayAttributeData& OldMana)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(ULostArkAttributeSet, Mana, OldMana);
+}
+
+void ULostArkAttributeSet::OnRep_MaxMana(const FGameplayAttributeData& OldMaxMana)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(ULostArkAttributeSet, MaxMana, OldMaxMana);
+}
+
+void ULostArkAttributeSet::OnRep_IdentityGauge(const FGameplayAttributeData& OldIdentityGauge)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(ULostArkAttributeSet, IdentityGauge, OldIdentityGauge);
+}
+
+void ULostArkAttributeSet::OnRep_MaxIdentityGauge(const FGameplayAttributeData& OldMaxIdentityGauge)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(ULostArkAttributeSet, MaxIdentityGauge, OldMaxIdentityGauge);
 }
 
 void ULostArkAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -91,11 +137,6 @@ void ULostArkAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCal
 
 			if (TargetActor)
 			{
-				if (ILostArkCombatInterface* CombatInterface = Cast<ILostArkCombatInterface>(TargetActor))
-				{
-					CombatInterface->ShowDamageText(LocalIncomingDamage);
-				}
-
 				FString TargetName = TargetActor->GetName();
 				FString SourceName = SourceActor ? SourceActor->GetName() : TEXT("Unknown");
 				FString DebugMsg = FString::Printf(TEXT("[%s] Hit by [%s]! Damage: %.1f | Health: %.1f / %.1f"),
@@ -106,12 +147,38 @@ void ULostArkAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCal
 					GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, DebugMsg);
 				}
 				UE_LOG(LogTemp, Warning, TEXT("%s"), *DebugMsg);
-				
-				// ?곕?吏 ?띿뒪???앹뾽???꾪빐 ?명꽣?섏씠???몄텧
-				ILostArkCombatInterface* CombatInterface = Cast<ILostArkCombatInterface>(TargetActor);
-				if (CombatInterface)
+
+				// 데미지 텍스트 위치 계산 (타겟 위치 기준)
+				float RandomX = FMath::RandRange(-50.f, 50.f);
+				float RandomY = FMath::RandRange(-50.f, 50.f);
+				float RandomZ = FMath::RandRange(50.f, 150.f);
+				FVector DamageTextSpawnLoc = TargetActor->GetActorLocation() + FVector(RandomX, RandomY, RandomZ);
+
+				// 대상이 플레이어 캐릭터인지 확인 (PlayerController 보유 여부)
+				bool bTargetIsPlayer = false;
+				if (ACharacter* TargetChar = Cast<ACharacter>(TargetActor))
 				{
-					CombatInterface->ShowDamageText(LocalIncomingDamage);
+					if (Cast<APlayerController>(TargetChar->GetController()))
+					{
+						bTargetIsPlayer = true;
+					}
+				}
+
+				if (bTargetIsPlayer)
+				{
+					// 플레이어가 피격당함 → 피격당한 본인의 클라이언트에서 표시
+					if (ALostArkCharacter* TargetLostChar = Cast<ALostArkCharacter>(TargetActor))
+					{
+						TargetLostChar->Client_ShowDamageText(LocalIncomingDamage, DamageTextSpawnLoc);
+					}
+				}
+				else if (SourceActor)
+				{
+					// 몬스터/보스를 타격함 → 공격한 플레이어의 클라이언트에서 표시 (타겟 위치에)
+					if (ALostArkCharacter* SourceLostChar = Cast<ALostArkCharacter>(SourceActor))
+					{
+						SourceLostChar->Client_ShowDamageText(LocalIncomingDamage, DamageTextSpawnLoc);
+					}
 				}
 			}
 

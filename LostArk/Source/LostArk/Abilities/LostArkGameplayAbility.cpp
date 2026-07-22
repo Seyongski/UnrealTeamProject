@@ -1,4 +1,4 @@
-﻿#include "Abilities/LostArkGameplayAbility.h"
+#include "Abilities/LostArkGameplayAbility.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayEffect.h"
@@ -9,6 +9,30 @@
 #include "Engine/World.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Character/LostArkAttributeSet.h"
+#include "Character/LostArkCharacter.h"
+#include "Monster/LostArkMonster.h"
+
+static bool IsValidDamageTarget(AActor* Instigator, AActor* Target)
+{
+	if (!Instigator || !Target || Instigator == Target)
+	{
+		return false;
+	}
+
+	// 플레이어끼리는 서로 피격/공격 불가 (PvP / Friendly Fire 방지)
+	if (Instigator->IsA<ALostArkCharacter>() && Target->IsA<ALostArkCharacter>())
+	{
+		return false;
+	}
+
+	// 몬스터끼리도 서로 공격 불가
+	if (Instigator->IsA<ALostArkMonster>() && Target->IsA<ALostArkMonster>())
+	{
+		return false;
+	}
+
+	return true;
+}
 
 ULostArkGameplayAbility::ULostArkGameplayAbility()
 {
@@ -48,7 +72,7 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 		for (const FOverlapResult& Overlap : Overlaps)
 		{
 			AActor* HitActor = Overlap.GetActor();
-			if (HitActor && HitActor != InstigatorActor && HitActor->GetClass() != InstigatorActor->GetClass())
+			if (IsValidDamageTarget(InstigatorActor, HitActor))
 			{
 				FVector HitLocation = HitActor->GetActorLocation();
 				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) > DamageShapeParams.ZTolerance)
@@ -129,7 +153,7 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 		for (const FOverlapResult& Overlap : Overlaps)
 		{
 			AActor* HitActor = Overlap.GetActor();
-			if (HitActor && HitActor != InstigatorActor && HitActor->GetClass() != InstigatorActor->GetClass())
+			if (IsValidDamageTarget(InstigatorActor, HitActor))
 			{
 				FVector HitLocation = HitActor->GetActorLocation();
 				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) <= DamageShapeParams.ZTolerance)

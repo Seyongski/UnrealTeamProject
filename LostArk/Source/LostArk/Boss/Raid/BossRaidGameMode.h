@@ -13,6 +13,7 @@ class APlayerController;
 class UBossChargeGaugeComponent;
 class UBossReviveComponent;
 class UGameplayEffect;
+class USoundBase;
 
 /**
  * 보스 레이드 GameMode (서버 전용 규칙).
@@ -156,6 +157,14 @@ protected:
 	/** 배너 표시 후 카메라 복귀(EndEncounter)까지 유지 시간(초) */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
 	float ClearHoldTime = 4.f;
+
+	/**
+	 * 레벨 진입 시 재생할 BGM (BP_MordumGameMode 에 지정). 미지정 시 재생 없음.
+	 * BeginPlay 에서 GameState 로 넘겨 복제 -> 각 클라(리슨 호스트 포함)가 로컬로 1회 재생.
+	 * 늦게 접속한 클라도 복제로 자동 재생된다. Looping 은 SoundWave 에셋에서 설정.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|BGM")
+	TObjectPtr<USoundBase> LevelBgm;
 
 	/** 테스트용: BeginPlay 후 자동으로 StartEncounter 호출 (실전은 off, 트리거에서 호출) */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Debug")

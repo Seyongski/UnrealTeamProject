@@ -23,6 +23,8 @@
 #include "Boss/Combat/BossCounterComponent.h"
 #include "Boss/Combat/BossJustGuardComponent.h"
 #include "Boss/Gimmick/BossTerrainGimmickComponent.h"
+#include "Boss/Raid/BossRaidGameState.h"
+#include "Boss/UI/BossHUDWidget.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -54,6 +56,65 @@ void ALostArkPlayerController::BeginPlay()
 				HUDWidget->BindAttributeDelegates();
 			}
 		}
+
+		// 보스 레벨에서만 보스 체력 HUD 생성 (GameState 로 판별. 내부에서 복제 대기 재시도)
+		TryCreateBossHUD();
+	}
+}
+
+void ALostArkPlayerController::TryCreateBossHUD()
+{
+	// 로컬 화면 위젯이므로 로컬 컨트롤러만. 클래스 미지정/이미 생성됐으면 스킵.
+	if (!IsLocalController() || !BossHUDWidgetClass || BossHUDWidget)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 보스 레벨 판별: 이 GameState 는 보스 레이드 레벨에서만 쓴다 (튜토/카오스던전은 다른 GameState).
+	AGameStateBase* GameState = World->GetGameState();
+	if (!GameState)
+	{
+		// GameState 아직 미복제 -> 잠깐 후 재시도 (아직 보스 레벨인지 알 수 없음)
+		if (BossHUDRetryCount++ < 40) // 0.25s * 40 = 10s 상한
+		{
+			World->GetTimerManager().SetTimer(BossHUDRetryTimer, this, &ALostArkPlayerController::TryCreateBossHUD, 0.25f, false);
+		}
+		return;
+	}
+	if (!GameState->IsA<ABossRaidGameState>())
+	{
+		// 보스 레벨 아님 -> HUD 안 띄움 (재시도도 중단)
+		return;
+	}
+
+	// 보스 찾기 (레벨 배치/스폰 후 복제까지 지연될 수 있음)
+	ABossBase* Boss = nullptr;
+	for (TActorIterator<ABossBase> It(World); It; ++It)
+	{
+		Boss = *It;
+		break;
+	}
+	if (!Boss)
+	{
+		if (BossHUDRetryCount++ < 40)
+		{
+			World->GetTimerManager().SetTimer(BossHUDRetryTimer, this, &ALostArkPlayerController::TryCreateBossHUD, 0.25f, false);
+		}
+		return;
+	}
+
+	// 생성 + 배치 + 보스 체력 바인딩
+	BossHUDWidget = CreateWidget<UBossHUDWidget>(this, BossHUDWidgetClass);
+	if (BossHUDWidget)
+	{
+		BossHUDWidget->AddToViewport();
+		BossHUDWidget->InitForBoss(Boss);
 	}
 }
 

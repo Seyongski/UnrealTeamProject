@@ -111,19 +111,26 @@
 
 ### 2-1. 화면 상단 체력바
 
-**현황 (C++ 준비 완료 — 위젯만 만들면 됨)**
+**현황 (C++ 준비 완료 — WBP Reparent + 그래프만 만들면 됨)**
 
-- `ABossBase::OnBossHealthChanged(NewHealth, MaxHealth)` — 서버/클라 모두 방송되는 델리게이트. 위젯이 여기 바인딩.
+- `ABossBase::OnBossHealthChanged(NewHealth, MaxHealth)` — 서버/클라 모두 방송되는 델리게이트.
 - `ABossBase::TotalHealthBars`(기본 500줄), `GetCurrentHealth()` / `GetMaxHealthValue()` — 위젯 최초 구성용.
 - `UBossHealthBarLibrary` (BlueprintPure 3종):
   - `GetHealthFraction` — 퍼센트 텍스트용 (0~1)
   - `GetBarsRemaining` — `xN줄` 표기
   - `GetCurrentBarFill` — 지금 깎이는 '한 줄'의 0~1 채움 (줄 경계마다 1.0 리필, 위젯에서 보간하면 피 닳는 연출)
+- **`UBossHUDWidget`** (`Boss/UI/BossHUDWidget.h`, 신규) — WBP_BossHUD 의 C++ 베이스. `BossPlayerStatusWidget` 과 동일한 주입 패턴.
+  - `InitForBoss(Boss)` (컨트롤러가 호출) → `OnBossHealthChanged` 바인딩 + 초기값 1회 반영 + `GameState.OnRaidCleared` 구독.
+  - `OnBossHealthUpdated(NewHealth, MaxHealth)` — **BlueprintImplementableEvent**. WBP 가 여기서 라이브러리로 막대/줄수/퍼센트 갱신. `Boss->TotalHealthBars` 로 줄 수 참조.
+  - `OnRaidCleared` — **BlueprintNativeEvent**. 기본 Collapsed(숨김), WBP 에서 페이드 연출로 오버라이드 가능.
+- **생성/배치는 `ALostArkPlayerController::TryCreateBossHUD()`** — 로컬 컨트롤러 BeginPlay 에서 호출. **보스 레벨 판별 = 월드 GameState 가 `ABossRaidGameState` 인지** (튜토/카오스던전은 다른 GameState 라 자동 제외). GameState/보스 복제 지연 시 0.25s 간격으로 최대 10s 재시도. 생성 후 `AddToViewport` + `InitForBoss`.
 
-**남은 작업**
+**남은 작업 (전부 에디터)**
 
-- [ ] **WBP_BossHealthBar 제작**: 화면 상단 고정. 구성 = 보스 이름 + 체력바(한 줄 채움) + `xN` 줄 수 + 퍼센트. `OnBossHealthChanged` 바인딩, 표시 값은 위 라이브러리 함수로 계산.
-- [ ] **표시/숨김 타이밍**: 조우 시작 시 추가, 보스 사망/조우 종료 시 제거. 클라가 조우 상태를 알 방법이 현재 없음 → §3 에서 `ABossRaidGameState` 에 조우 상태 복제 추가할 때 함께 처리 (임시로는 레벨에 보스 존재 시 표시로 시작해도 됨).
+- [ ] **WBP_BossHUD 부모 재지정**: `UBossHUDWidget` 으로 Reparent (`Content/Levels/UI/WBP_BossHUD`).
+- [ ] **WBP 그래프**: `OnBossHealthUpdated(NewHealth, MaxHealth)` 이벤트 구현 → `UBossHealthBarLibrary`(`GetHealthFraction`/`GetBarsRemaining`/`GetCurrentBarFill`, 줄수는 `Boss->TotalHealthBars`)로 체력바·`xN`·퍼센트 갱신. 화면 상단 고정 + 보스 이름.
+- [ ] **PlayerController BP 에 `BossHUDWidgetClass = WBP_BossHUD` 지정** (UI 카테고리). 보스 레벨이 쓰는 컨트롤러 BP 에 설정하면 됨 — 게이트가 있어 튜토/카오스던전에 같은 PC 를 써도 안 뜬다.
+- [ ] (선택) `OnRaidCleared` 오버라이드로 클리어 시 페이드아웃. (기본은 즉시 숨김)
 - [ ] (선택) 페이즈 표시: `Boss.Phase.N` 태그 기반.
 
 ### 2-2. 무력화(스태거) 게이지 — 보스 메쉬 아래(발밑) 표시로 확정

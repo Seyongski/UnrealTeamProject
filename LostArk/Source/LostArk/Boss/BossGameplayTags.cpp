@@ -37,16 +37,13 @@ namespace LostArkTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_Grabbed, "State.Boss.PatternResult.Grabbed", "이번 패턴에서 잡기 성공 (Branch 조건용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_AoeHit, "State.Boss.PatternResult.AoeHit", "이번 패턴에서 장판 적중 (Branch 조건용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_JustGuarded, "State.Boss.PatternResult.JustGuarded", "이번 패턴에서 저스트가드 성공 (Branch 조건용)");
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_JustGuardFailed, "State.Boss.PatternResult.JustGuardFailed", "저스트가드 기믹 실패 확정 (패턴 종료까지 유지, 남은 저스트가드 창 무시 게이트)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_Countered, "State.Boss.PatternResult.Countered", "진짜 카운터 성공 (패턴 종료까지 유지, 그로기 분기용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_FakeCountered, "State.Boss.PatternResult.FakeCountered", "이 창에서 가짜 카운터를 침 (창 닫힘 시 제거, 즉시 분기용)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_PatternResult_CounterFailed, "State.Boss.PatternResult.CounterFailed", "카운터 기믹 실패 확정 (패턴 종료까지 유지, 남은 카운터 창 무시 게이트)");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Boss_CounterHit, "Event.Boss.CounterHit", "플레이어 카운터 스킬이 보스에 적중 (Instigator=플레이어, 판정은 보스 쪽)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Boss_JustGuardInput, "Event.Boss.JustGuardInput", "플레이어 저스트가드(G) 입력 (Instigator=플레이어, 판정은 보스 쪽)");
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Boss_StaggerHit, "Event.Boss.StaggerHit", "무력화 게이지 감소 (EventMagnitude=무력화 수치, 판정은 보스 쪽)");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Damage, "Data.Damage", "SetByCaller: 데미지 GE에 실을 공격력계수");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Duration, "Data.Duration", "SetByCaller: 지속시간형 GE(그로기 등)의 지속시간(초)");
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Stagger, "Data.Stagger", "SetByCaller: 무력화 감소량 (스킬별 무력화 수치)");
 }

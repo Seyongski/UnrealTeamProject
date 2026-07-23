@@ -14,8 +14,8 @@ UBossAoeChargeSwapEffect::UBossAoeChargeSwapEffect()
 
 void UBossAoeChargeSwapEffect::OnHit(ABossPatternActorBase* /*Aoe*/, AActor* Target)
 {
-	// 데미지 GE 대신 전하 스왑만 수행 (과충전 게이지 반전과 동일한 공용 로직 — 복제 루스 태그판)
-	UBossCombatStatics::FlipChargeLoose(
+	// 데미지 GE 대신 전하 스왑만 수행 (과충전 게이지 반전과 동일한 공용 로직)
+	UBossCombatStatics::FlipCharge(
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target),
-		RedTag, BlueTag);
+		RedChargeEffect, BlueChargeEffect, this, RedTag, BlueTag);
 }

@@ -24,7 +24,6 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "CollisionQueryParams.h"
-#include "Net/UnrealNetwork.h"
 
 ABossPatternActorBase::ABossPatternActorBase()
 {
@@ -39,27 +38,6 @@ ABossPatternActorBase::ABossPatternActorBase()
 
 	// 공격력계수 기본 전달 태그 (에디터에서 변경 가능)
 	DamageSetByCallerTag = LostArkTags::Data_Damage;
-}
-
-void ABossPatternActorBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	// 스폰 노티파이/오버라이드가 서버에서 런타임으로 주입하는 값들 -> 클라 예고 비주얼이
-	// 서버와 같게 그려지도록 복제 (미복제 시 클라는 클래스 기본값으로 그려 모양/타이밍이 어긋남).
-	//
-	// [규칙] 새 도형/예고 파생 클래스를 만들 때, '스폰 시 노티파이/Setup 이 런타임으로 대입하는'
-	//        비주얼/타이밍 파라미터는 반드시 이렇게 Replicated + DOREPLIFETIME 해야 한다.
-	//        (도형별 Radius/각도 등은 각 파생 클래스에서 replicate — Sector/Rect/Circle 참고.
-	//         저스트가드 등은 이 도형들 + bTelegraphFill 을 쓰므로 여기서 이미 커버됨.)
-	//        순수 EditDefaultsOnly(런타임에 안 바뀜)면 CDO 로 동일하니 복제 불필요.
-	DOREPLIFETIME(ABossPatternActorBase, CastTime);
-	DOREPLIFETIME(ABossPatternActorBase, Duration);
-	DOREPLIFETIME(ABossPatternActorBase, bInstant);
-	DOREPLIFETIME(ABossPatternActorBase, bKeepTelegraphWhileActive);
-	DOREPLIFETIME(ABossPatternActorBase, bTelegraphFill);
-	DOREPLIFETIME(ABossPatternActorBase, TargetingMode);
-	DOREPLIFETIME(ABossPatternActorBase, HomingSpeed);	// Straight/Homing/Spiral 이동속도 (SetupStraightProjectile 런타임 주입)
 }
 
 ABossPatternActorBase* ABossPatternActorBase::SpawnAoeDeferred(UWorld* World,
@@ -173,21 +151,6 @@ void ABossPatternActorBase::BeginPlay()
 
 void ABossPatternActorBase::ResolveOrigin()
 {
-	// 클라: 서버가 스폰 직후 BeginPlay 에서 원점+바닥Z 스냅까지 끝낸 위치가 이미 복제돼 있다.
-	// 여기서 바닥 Z 를 재계산하면(플레이어 발밑 등 클라마다 다를 수 있는 폴백) 서버와 어긋나
-	// 데칼/예고가 딴 데 뜬다 -> 판정은 서버 전용이므로 클라는 복제된 트랜스폼을 그대로 채택만 한다.
-	if (!HasAuthority())
-	{
-		AttackCenter = GetActorLocation();
-		CacheShapeAxes();
-		LaunchDirection = ShapeForward;
-		SpiralBasePos = AttackCenter;
-		UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s ResolveOrigin(클라): 위치=(%.1f,%.1f,%.1f) Yaw=%.1f Fwd=(%.2f,%.2f)"),
-			*GetName(), AttackCenter.X, AttackCenter.Y, AttackCenter.Z,
-			GetActorRotation().Yaw, ShapeForward.X, ShapeForward.Y);
-		return;
-	}
-
 	FVector Loc = GetActorLocation();
 	FRotator Rot = GetActorRotation();
 
@@ -246,10 +209,6 @@ void ABossPatternActorBase::ResolveOrigin()
 
 	// Spiral 모드: 나선 중심(직선 진행 위치)을 스폰 지점에서 시작
 	SpiralBasePos = AttackCenter;
-
-	UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s ResolveOrigin(서버): 위치=(%.1f,%.1f,%.1f) Yaw=%.1f Fwd=(%.2f,%.2f)"),
-		*GetName(), AttackCenter.X, AttackCenter.Y, AttackCenter.Z,
-		GetActorRotation().Yaw, ShapeForward.X, ShapeForward.Y);
 }
 
 bool ABossPatternActorBase::TraceGroundZ(const FVector& At, float& OutZ) const
@@ -272,10 +231,8 @@ bool ABossPatternActorBase::TraceGroundZ(const FVector& At, float& OutZ) const
 	ObjParams.AddObjectTypesToQuery(ECC_WorldStatic);
 	ObjParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
-	// 위에서 아래로 훑는다. 시작 높이를 GroundTraceStartHeight 로 넉넉히 잡아, 보스 캡슐이
-	// 지형 아래로 잠겨 기준 Z(At) 가 바닥보다 낮은 맵에서도 시작점이 바닥 위가 되게 한다.
-	// (시작점이 바닥 밑이면 아래로 쏴봐야 바닥을 못 맞춰 데칼이 맵 아래에 찍힌다)
-	const FVector Start = At + FVector(0.f, 0.f, GroundTraceStartHeight);
+	// 거대 보스 캡슐 중심에서 시작해도 확실히 바닥 위에서 아래로 훑도록 넉넉히
+	const FVector Start = At + FVector(0.f, 0.f, 500.f);
 	const FVector End = At - FVector(0.f, 0.f, 5000.f);
 
 	FHitResult Hit;
@@ -334,24 +291,7 @@ float ABossPatternActorBase::ResolveGroundZ(const FVector& At) const
 		}
 	}
 
-	// 폴백 2순위: 생존 플레이어 발밑 Z. 플레이어는 실제 아레나 바닥에 서 있으므로,
-	// 보스가 구덩이에 잠겨 시전자 발밑/트레이스가 바닥을 못 줄 때 이게 진짜 바닥이다.
-	{
-		float PlayerZ = 0.f;
-		if (TryGetPlayerGroundZ(At, PlayerZ))
-		{
-			const float FinalZ = PlayerZ + GroundFallbackZOffset;
-			if (!bGroundTraceLogged)
-			{
-				bGroundTraceLogged = true;
-				UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 폴백 Z(플레이어 발밑): 발밑=%.1f + 오프셋=%.1f => %.1f"),
-					*GetName(), PlayerZ, GroundFallbackZOffset, FinalZ);
-			}
-			return FinalZ;
-		}
-	}
-
-	// 폴백 3순위: 시전자(보스) 발밑 Z + 수동 보정 (플레이어도 못 찾을 때)
+	// 폴백 2순위: 시전자(보스) 발밑 Z + 수동 보정 (GameState 조차 없을 때)
 	if (Caster)
 	{
 		const float FeetZ = GetFeetLocation(Caster).Z;
@@ -359,39 +299,13 @@ float ABossPatternActorBase::ResolveGroundZ(const FVector& At) const
 		if (!bGroundTraceLogged)
 		{
 			bGroundTraceLogged = true;
-			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 폴백 Z(시전자 발밑): 발밑=%.1f + 오프셋=%.1f => %.1f"),
+			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 폴백 Z(발밑): 발밑=%.1f + 오프셋=%.1f => %.1f"),
 				*GetName(), FeetZ, GroundFallbackZOffset, FinalZ);
 		}
 		return FinalZ;
 	}
 
 	return At.Z;
-}
-
-bool ABossPatternActorBase::TryGetPlayerGroundZ(const FVector& At, float& OutZ) const
-{
-	TArray<APawn*> PlayerPawns;
-	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
-
-	float BestDistSq = TNumericLimits<float>::Max();
-	bool bFound = false;
-	for (const APawn* Pawn : PlayerPawns)
-	{
-		if (!Pawn || !IsAlive(Pawn))
-		{
-			continue;
-		}
-		// XY 로 가장 가까운 생존 플레이어 (경사/단차 있어도 이 장판 근처 바닥을 대표)
-		const FVector Feet = GetFeetLocation(Pawn);
-		const float DistSq = FVector::DistSquaredXY(At, Pawn->GetActorLocation());
-		if (DistSq < BestDistSq)
-		{
-			BestDistSq = DistSq;
-			OutZ = Feet.Z;
-			bFound = true;
-		}
-	}
-	return bFound;
 }
 
 void ABossPatternActorBase::CacheShapeAxes()

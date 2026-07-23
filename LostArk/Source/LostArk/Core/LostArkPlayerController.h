@@ -28,9 +28,6 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientShowStageClearUI();
 
-	UFUNCTION(Client, Reliable)
-	void ClientShowLoadingScreen();
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	TSoftObjectPtr<UNiagaraSystem> FXCursor;
 

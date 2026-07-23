@@ -141,13 +141,4 @@ public:
 	static bool FlipCharge(UAbilitySystemComponent* ASC,
 		TSubclassOf<UGameplayEffect> RedEffect, TSubclassOf<UGameplayEffect> BlueEffect,
 		UObject* SourceObject, const FGameplayTag& RedTag, const FGameplayTag& BlueTag);
-
-	/**
-	 * 전하 반전(복제 루스 태그판): 가진 쪽 전하 태그를 회수하고 반대쪽을 부여. GE 애셋 불필요.
-	 * 전하는 복제 루스 태그로 관리(서버/클라 모두 HasMatchingGameplayTag 로 조회, 아이콘 자동 갱신).
-	 * 초기 부여(AddReplicatedLooseTag)와 짝을 이룬다. 서버 권위에서만 호출.
-	 * @return 반전 수행 여부. 전하 미부여(또는 비정상 중복)면 아무것도 안 하고 false
-	 */
-	static bool FlipChargeLoose(UAbilitySystemComponent* ASC,
-		const FGameplayTag& RedTag, const FGameplayTag& BlueTag);
 };

@@ -11,15 +11,15 @@ void UAnimNotify_BossGimmickSpawnTower::Notify(USkeletalMeshComponent* MeshComp,
 
 	if (UBossTerrainGimmickComponent* Gimmick = BossNotify::GetServerComponent<UBossTerrainGimmickComponent>(MeshComp))
 	{
-		Gimmick->SpawnGimmickTower(TargetSlice);
+		Gimmick->SpawnGimmickTower();
 		if (bBeginStaggerPhase)
 		{
-			Gimmick->BeginStaggerPhase(StaggerRequiredAmount, EStaggerResolve::Groggy);
+			Gimmick->BeginStaggerPhase();
 		}
 	}
 }
 
 FString UAnimNotify_BossGimmickSpawnTower::GetNotifyName_Implementation() const
 {
-	return FString::Printf(TEXT("Gimmick: Spawn Tower (Slice %d)"), TargetSlice);
+	return TEXT("Gimmick: Spawn Tower");
 }

@@ -9,7 +9,6 @@
 class ABossBase;
 class ABossArenaCamera;
 class ACameraActor;
-class APlayerController;
 class UBossChargeGaugeComponent;
 class UBossReviveComponent;
 class UGameplayEffect;
@@ -67,13 +66,6 @@ public:
 	void ApplyChargeResonancePulse();
 
 protected:
-	/**
-	 * 플레이어 폰 possess 완료 콜백 (서버). 조우가 이미 시작된 뒤 늦게 접속/possess 한
-	 * 플레이어(리슨서버에서 호스트보다 늦게 join 하는 원격 클라 포함)도 여기서 전하 + 레이드
-	 * 컴포넌트를 받는다. StartEncounter 시점에 아직 possess 전이라 누락되던 문제를 메운다.
-	 */
-	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
-
 	/** 빨간 전하 GE (State.Charge.Red 부여, Infinite). 변환장판과 동일 애셋 사용 */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge")
 	TSubclassOf<UGameplayEffect> RedChargeEffect;
@@ -92,13 +84,6 @@ protected:
 	/** 전하 공명 주기(초). 0 이면 자동 펄스 없음 (패턴에서 수동 호출만) */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge", meta = (ClampMin = "0.0"))
 	float ChargeResonanceInterval = 5.f;
-
-	/**
-	 * 초기 전하 부여 후/늦은 접속 후 이 지연(초) 뒤 1회 RebalanceCharges 를 돌려 +/- 인원을 맞춘다.
-	 * 부여/복제가 정착된 뒤(타이머) 읽어야 인원수 조회가 신뢰되므로 즉시가 아니라 짧게 늦춘다.
-	 */
-	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge", meta = (ClampMin = "0.0"))
-	float ChargeRebalanceDelay = 1.f;
 
 	/** 인원 차이 1당 데미지 계수 (GE SetByCaller Data.Damage 에 곱해 전달) */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Charge", meta = (ClampMin = "0.0"))
@@ -165,48 +150,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Debug", meta = (EditCondition = "bAutoStartOnBeginPlay", ClampMin = "0.0"))
 	float AutoStartDelay = 0.5f;
 
-	/**
-	 * 플레이어 스폰 분산 반경(cm). 여러 명이 한 스폰지점에 겹쳐 나타나면 캡슐끼리 밀어내 한 명이
-	 * 튕겨 나가는 문제 방지 — possess 직후 이 반경의 링 위 슬롯으로 흩어 놓는다. 0 이면 분산 끔.
-	 */
-	UPROPERTY(EditDefaultsOnly, Category = "Raid|Spawn", meta = (ClampMin = "0.0"))
-	float PlayerSpawnSpacingRadius = 140.f;
-
 private:
 	ABossBase* FindBoss() const;
-
-	/** possess 직후 폰을 스폰지점 주변 링 슬롯으로 흩어 캡슐 겹침(튕김)을 방지 (서버) */
-	void SpaceOutSpawn(APawn* Pawn);
-
-	/**
-	 * 한 명에게 전하 부여 (이미 있으면 스킵). 다른 플레이어 상태를 읽지 않고 '이 플레이어 자신의
-	 * PlayerId 홀짝'으로만 +/- 를 정한다 -> 공유 카운터/타인 태그 조회 불필요라 접속 순서·복제
-	 * 타이밍·PIE 격리와 무관하게 항상 균형. PlayerId 는 접속 순서대로 연속 부여되므로 홀짝이
-	 * 교대해 2명=1:1, 3명=2:1, 4명=2:2 가 된다.
-	 */
-	void AssignBalancedChargeTo(APawn* Pawn);
-
-	/** 이 폰에 빨강(+)을 줄지 여부 = PlayerId 짝수. (초기 부여용 임시값 — 최종 균형은 RebalanceCharges 가 보장) */
-	bool ShouldGiveRedCharge(const APawn* Pawn) const;
-
-	/**
-	 * 정착된 전하를 세서 |빨강-파랑| <= 1 이 되도록 많은 쪽 일부를 반대로 뒤집는다 (서버).
-	 * 타이머로 늦게 실행되므로 부여/복제가 정착돼 인원수 조회가 신뢰된다 (공명 카운트와 동일 원리).
-	 * 2명 -> 1:1, 3명 -> 2:1, 4명 -> 2:2. 접속 순서/PlayerId 간격과 무관하게 항상 균형.
-	 */
-	void RebalanceCharges();
-
-	/** RebalanceCharges 를 ChargeRebalanceDelay 뒤 1회 예약 (재호출 시 디바운스 -> 마지막 접속 기준 1회) */
-	void ScheduleChargeRebalance();
+	void ApplyChargeTo(APawn* Pawn);
 
 	/** 전 플레이어 컨트롤러의 뷰타겟 일괄 전환. NewViewTarget=null 이면 각자 자기 폰으로 복귀 */
 	void SetViewTargetForAll(AActor* NewViewTarget, float BlendTime);
 
 	/** 전하 게이지/부활 컴포넌트를 플레이어 폰에 부착 (조우 시작 시. 이미 있으면 스킵) */
 	void SetupRaidComponentsForPlayers();
-
-	/** 폰 1개에 전하 게이지/부활 컴포넌트 부착 (이미 있으면 스킵). 늦게 join 한 플레이어에도 재사용 */
-	void SetupRaidComponentsForPawn(APawn* Pawn, ABossBase* Boss);
 
 	/** 클리어 배너 시점: GameState 에 클리어 마킹 (복제 -> 전 머신 배너) */
 	void ShowClearBanner();
@@ -227,13 +179,7 @@ private:
 	bool bEncounterStarted = false;
 	bool bBossDied = false;	// NotifyBossDied 1회 가드
 
-	// 스폰 분산: 첫 플레이어 스폰 위치를 링 중심으로 잡고, 접속 순서대로 슬롯을 하나씩 배정
-	FVector PartySpawnOrigin = FVector::ZeroVector;
-	bool bPartySpawnOriginSet = false;
-	int32 SpawnSlotIndex = 0;
-
 	FTimerHandle ResonanceTimer;
-	FTimerHandle ChargeRebalanceTimer;
 	FTimerHandle ClearSlomoTimer;
 	FTimerHandle ClearBannerTimer;
 	FTimerHandle ClearEndTimer;

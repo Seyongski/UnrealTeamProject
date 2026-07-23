@@ -183,6 +183,28 @@
 - 데칼 크기/판정은 이미 캡슐 반경 연동(`UpdateBackHeadDecal`) — 머티리얼은 UV 0~1 만 신경 쓰면 된다.
 - (선택) 약점포착(`State.Boss.WeakPointExposed`) 중에는 어디서 때려도 보너스이므로 링 전체를 금색으로 바꾸는 연출을 붙이면 판정 규칙(§`BossCombatStatics` 주석)과 표시가 일치한다.
 
+### 2-4. 어그로 표식(몸통 마커) — 지정된 1명 시각화 (✅ C++ 완료, WBP만 남음)
+
+기믹이 랜덤 지정한 **1명의 몸통**에 마커를 띄워 "이 사람이 어그로(레이저 대상 + 나중에 나올 저스트가드 담당)"임을 전원에게 보여준다.
+머리 위(전하)·발밑(무력화 게이지)과 겹치지 않게 **몸통 중앙(Z=+30)** 에 표시.
+
+**현황 (C++ 완료 — 빌드 검증됨)**
+
+- 태그: `State.Player.Marked` (복제 루스). **타겟 선정(`SelectTarget`)과 독립** — 이 태그는 아래 API/노티로만 켠다. 그래서 일반 패턴의 타겟 선정으론 마커가 안 뜬다.
+- `UBossTargetingComponent::MarkCurrentTarget()` / `ClearMark()` — 현재 타겟에 표식 부여/회수(항상 최대 1명, 대상은 스냅샷 보관). `GetMarkedTarget()` 조회.
+- 노티파이 2개: **`Boss Mark Target (표식 켜기)`** / **`Boss Clear Mark (표식 끄기)`** (서버 게이트, `Boss Select Target` 과 동일 패턴).
+- 위젯 호스트: `UBossChargeGaugeComponent` 에 몸통 슬롯 추가 — `BodyMarkWidgetClass` / `BodyMarkZOffset(+30)` / `BodyMarkDrawSize`. 표식 태그 감시 → `OnMarkedChanged(bool)` 델리게이트 + `IsMarked()`.
+- 안전장치: 보스 사망(`ABossBase::HandleDeath`) 시 `ClearMark()` 자동 호출(몽타주 중단돼도 마커 안 남음).
+
+**남은 작업 (전부 에디터)**
+
+- [ ] **`WBP_BossMark` 제작** 후 부모를 `UBossPlayerStatusWidget` 으로 **Reparent** (전하/게이지 위젯과 동일 베이스).
+- [ ] WBP 그래프: `OnStatusInitialized` 에서 `ChargeComponent->OnMarkedChanged` 바인딩 → 표식 시 Visible / 해제 시 Collapsed. Construct 초기값은 `IsMarked()`. (기본 Hidden)
+- [ ] 전하 게이지 컴포넌트 디폴트의 `Boss|Charge|UI > BodyMarkWidgetClass` 에 `WBP_BossMark` 지정 (몸통 높이는 `BodyMarkZOffset`).
+- [ ] **기믹 몽타주 노티 배치**: `Boss Select Target(랜덤)` → 바로 뒤 `Boss Mark Target` … 레이저·저스트가드 지나 시퀀스 끝에 `Boss Clear Mark`.
+
+> ⚠️ 저스트가드는 판정 순간 `GetCurrentTarget()` 을 쓰고 마커는 켠 시점 스냅샷이므로, **표식~저스트가드 사이에 다른 `SelectTarget` 을 부르면 대상이 어긋난다.** 이 기믹 몽타주 안에서 재선정을 안 하면 항상 일치(현재 방식). 중간 재선정이 필요해지면 저스트가드가 `GetMarkedTarget()` 을 쓰도록 바꿔 묶을 것.
+
 ---
 
 ## 3. 보스 사망 → 클리어 (✅ 코드 구현 완료)

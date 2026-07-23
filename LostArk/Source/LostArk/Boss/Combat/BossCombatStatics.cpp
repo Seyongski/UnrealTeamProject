@@ -233,31 +233,3 @@ bool UBossCombatStatics::FlipCharge(UAbilitySystemComponent* ASC,
 	}
 	return true;
 }
-
-bool UBossCombatStatics::FlipChargeLoose(UAbilitySystemComponent* ASC,
-	const FGameplayTag& RedTag, const FGameplayTag& BlueTag)
-{
-	if (!ASC)
-	{
-		return false;
-	}
-
-	const bool bHasRed = ASC->HasMatchingGameplayTag(RedTag);
-	const bool bHasBlue = ASC->HasMatchingGameplayTag(BlueTag);
-	if (bHasRed == bHasBlue)
-	{
-		return false;	// 전하 미부여(또는 비정상 중복) 대상은 스킵
-	}
-
-	if (bHasRed)
-	{
-		RemoveReplicatedLooseTag(ASC, RedTag);
-		AddReplicatedLooseTag(ASC, BlueTag);
-	}
-	else
-	{
-		RemoveReplicatedLooseTag(ASC, BlueTag);
-		AddReplicatedLooseTag(ASC, RedTag);
-	}
-	return true;
-}

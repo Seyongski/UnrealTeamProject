@@ -21,13 +21,7 @@ void UAnimNotifyState_BossJustGuard::NotifyBegin(USkeletalMeshComponent* MeshCom
 				JustGuard->SetExclusiveGuardPlayer(Targeting->GetCurrentTarget());
 			}
 		}
-		else
-		{
-			// 전원 가드 창: 이전 기믹에서 stale 하게 남았을 수 있는 전용 대상을 명시적으로 해제(자가 치유)
-			// -> 인터럽트로 NotifyEnd 가 누락돼도 이 창은 전원에게 GuardReady 를 준다
-			JustGuard->ClearExclusiveGuardPlayer();
-		}
-		JustGuard->OpenWindow(GuardStateDuration);
+		JustGuard->OpenWindow();
 	}
 }
 

@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
+#include "Core/LostArkCombatInterface.h"
+#include "GameplayTagContainer.h"
 #include "BossBase.generated.h"
 
 class UAnimMontage;
@@ -26,7 +28,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBossHealthChanged, float, NewHea
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossDied);
 
 UCLASS()
-class LOSTARK_API ABossBase : public ACharacter, public IAbilitySystemInterface
+class LOSTARK_API ABossBase : public ACharacter, public IAbilitySystemInterface, public ILostArkCombatInterface
 {
 	GENERATED_BODY()
 
@@ -77,7 +79,18 @@ public:
 
 	/** 사망 여부 (서버 기준. 클라는 State.Dead 복제 태그로 판단할 것) */
 	UFUNCTION(BlueprintPure, Category = "Boss|Death")
-	bool IsDead() const { return bDead; }
+	virtual bool IsDead() const override { return bDead; }
+
+	//~ ILostArkCombatInterface
+	virtual void Die() override;
+	virtual void Revive() override {}
+	virtual FGameplayTag GetCurrentStateTag() const override { return CurrentStateTag; }
+	virtual void SetCombatState(FGameplayTag NewStateTag) override;
+	virtual void ShowDamageText(float DamageAmount) override;
+
+	/** 데미지 텍스트 액터 클래스 (몬스터/캐릭터와 동일한 방식) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|UI")
+	TSubclassOf<class ALostArkDamageTextActor> DamageTextClass;
 
 	/** 위치 판정 존 각도 (UBossCombatStatics 가 읽어감) */
 	float GetHeadZoneHalfAngle() const { return HeadZoneHalfAngle; }
@@ -166,4 +179,8 @@ private:
 
 	/** 사망 처리 1회 가드 (서버) */
 	bool bDead = false;
+protected:
+	/** 현재 상태 태그 (전투 인터페이스용) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|State")
+	FGameplayTag CurrentStateTag;
 };

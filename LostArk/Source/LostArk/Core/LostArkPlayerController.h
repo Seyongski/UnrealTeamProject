@@ -80,6 +80,12 @@ protected:
 	void ServerDebugTryJustGuard();
 	// ============================================================================================
 
+	// ===== [임시 디버그] E -> 보스 무력화 게이지 10 감소 (페이즈 중에만 유효). 나중에 스킬로 대체/삭제 =====
+	void DebugStaggerHit();
+	UFUNCTION(Server, Reliable)
+	void ServerDebugStaggerHit();
+	// ============================================================================================
+
 private:
 	FVector CachedDestination;
 	bool bIsTouch;

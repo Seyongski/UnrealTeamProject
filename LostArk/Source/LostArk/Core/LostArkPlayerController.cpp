@@ -1,4 +1,5 @@
 #include "Core/LostArkPlayerController.h"
+#include "Core/LostArkGameInstance.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "NiagaraSystem.h"
@@ -299,6 +300,17 @@ void ALostArkPlayerController::ClientShowStageClearUI_Implementation()
 		if (StageClearWidget)
 		{
 			StageClearWidget->AddToViewport();
+		}
+	}
+}
+
+void ALostArkPlayerController::ClientShowLoadingScreen_Implementation()
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (ULostArkGameInstance* LostArkGI = Cast<ULostArkGameInstance>(GameInstance))
+		{
+			LostArkGI->ShowLoadingScreen();
 		}
 	}
 }

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전하 게이지 아트 생성기</title>
+<style>
+  body{background:#20242b;color:#e8e8e8;font-family:'Segoe UI',sans-serif;margin:0;padding:24px}
+  h1{font-size:20px;margin:0 0 4px} p.desc{color:#9aa;margin:0 0 20px;font-size:13px}
+  .row{display:flex;flex-wrap:wrap;gap:16px}
+  .card{background:#2b3038;border:1px solid #3a4048;border-radius:8px;padding:14px;min-width:180px}
+  .card h3{margin:0 0 8px;font-size:13px;color:#ffcf6b}
+  .card .prev{background:
+     linear-gradient(45deg,#3a3f47 25%,transparent 25%,transparent 75%,#3a3f47 75%),
+     linear-gradient(45deg,#3a3f47 25%,#2b3038 25%,#2b3038 75%,#3a3f47 75%);
+     background-size:16px 16px;background-position:0 0,8px 8px;border-radius:4px;padding:10px;display:flex;justify-content:center}
+  button{margin-top:10px;background:#c8892a;border:0;color:#1a1206;font-weight:600;padding:7px 12px;border-radius:5px;cursor:pointer;width:100%}
+  button:hover{background:#e0a03a}
+  .filename{font-size:11px;color:#889;margin-top:6px;text-align:center}
+  .assembled{margin:26px 0 8px;padding:18px;background:#12151a;border-radius:8px}
+  .assembled h2{font-size:14px;color:#ffcf6b;margin:0 0 14px}
+  #allBtn{background:#4a7bc8;color:#fff;max-width:240px;margin:18px 0}
+  #allBtn:hover{background:#5a8bd8}
+  code{background:#1a1e24;padding:1px 5px;border-radius:3px;color:#ffcf6b}
+</style>
+</head>
+<body>
+<h1>전하 게이지 아트 생성기</h1>
+<p class="desc">각 <b>PNG 저장</b> 버튼을 누르면 투명 PNG가 다운로드됩니다(2배 해상도). 언리얼에 드래그해서 임포트 → Texture로 사용하세요. 아래 "전체 다운로드"도 가능합니다.</p>
+
+<button id="allBtn">전체 PNG 5장 한번에 다운로드</button>
+
+<div class="row" id="cards"></div>
+
+<div class="assembled">
+  <h2>조립 미리보기 (약 65% 충전 모습)</h2>
+  <div id="assembled"></div>
+</div>
+
+<!-- ================= SVG 원본들 (여기 색/모양 직접 수정 가능) ================= -->
+<div style="display:none">
+
+<!-- 1. FILL 256x64 : 세로 그라디언트 + 상단 하이라이트 (가로로 잘려도 자연스러움) -->
+<svg id="svg_fill" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 64" width="256" height="64">
+  <defs>
+    <linearGradient id="fillV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#fff3c0"/>
+      <stop offset="0.13" stop-color="#ffd451"/>
+      <stop offset="0.5"  stop-color="#ff9e1f"/>
+      <stop offset="0.86" stop-color="#e86f0c"/>
+      <stop offset="1"    stop-color="#bf5007"/>
+    </linearGradient>
+    <linearGradient id="fillGlow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffbe8" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#fffbe8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="64" fill="url(#fillV)"/>
+  <rect width="256" height="18" fill="url(#fillGlow)"/>
+  <rect width="256" height="2" y="1" fill="#fffdf2" opacity="0.85"/>
+  <rect width="256" height="4" y="60" fill="#8f3d05" opacity="0.5"/>
+</svg>
+
+<!-- 2. BG 256x64 : 어두운 내부 -->
+<svg id="svg_bg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 64" width="256" height="64">
+  <defs>
+    <linearGradient id="bgV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1e0d"/>
+      <stop offset="0.5" stop-color="#150e05"/>
+      <stop offset="1" stop-color="#0a0703"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="64" fill="url(#bgV)"/>
+  <rect width="256" height="6" fill="#000" opacity="0.45"/>
+  <rect width="256" height="4" y="60" fill="#e8720f" opacity="0.12"/>
+</svg>
+
+<!-- 3. FRAME 320x96 : 금장 프레임 (가운데 투명 창) -->
+<svg id="svg_frame" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" width="320" height="96">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#5a3c14"/>
+      <stop offset="0.18" stop-color="#c79a3e"/>
+      <stop offset="0.42" stop-color="#f6d887"/>
+      <stop offset="0.5" stop-color="#fff0b8"/>
+      <stop offset="0.58" stop-color="#f0cf72"/>
+      <stop offset="0.82" stop-color="#a8792c"/>
+      <stop offset="1"   stop-color="#4a300f"/>
+    </linearGradient>
+  </defs>
+  <!-- 프레임 링(가운데 구멍): evenodd 로 안쪽을 투명하게 -->
+  <path fill-rule="evenodd" fill="url(#gold)" stroke="#241405" stroke-width="2.5" stroke-linejoin="round"
+        d="M8,8 h304 a6,6 0 0 1 6,6 v68 a6,6 0 0 1 -6,6 h-304 a6,6 0 0 1 -6,-6 v-68 a6,6 0 0 1 6,-6 Z
+           M30,28 h260 v40 h-260 Z"/>
+  <!-- 안쪽 창 베벨(윗/왼 그림자, 아래/오른 하이라이트) -->
+  <path fill="none" stroke="#1c0f03" stroke-width="2" d="M30,68 h260 M30,28 v40"/>
+  <path fill="none" stroke="#ffedb0" stroke-width="1.2" opacity="0.7" d="M30,28 h260 M290,28 v40"/>
+  <!-- 바깥 테두리 하이라이트 -->
+  <rect x="9.5" y="9.5" width="301" height="77" rx="5" fill="none" stroke="#fff3cc" stroke-width="1" opacity="0.5"/>
+  <!-- 좌/우 끝 장식 다이아 -->
+  <g stroke="#241405" stroke-width="1.5">
+    <path fill="url(#gold)" d="M16,48 l10,-12 l10,12 l-10,12 Z"/>
+    <path fill="url(#gold)" d="M304,48 l-10,-12 l-10,12 l10,12 Z"/>
+  </g>
+  <circle cx="26" cy="48" r="2.5" fill="#fff3cc"/>
+  <circle cx="294" cy="48" r="2.5" fill="#fff3cc"/>
+</svg>
+
+<!-- 4. BOLT 128x128 : 번개 아이콘 -->
+<svg id="svg_bolt" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="boltG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff7cc"/>
+      <stop offset="0.4" stop-color="#ffd83a"/>
+      <stop offset="0.75" stop-color="#ffab1f"/>
+      <stop offset="1" stop-color="#ff7a00"/>
+    </linearGradient>
+    <filter id="boltGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#boltGlow)">
+    <path d="M74,10 L34,68 L58,68 L48,118 L96,52 L70,52 L84,10 Z"
+          fill="url(#boltG)" stroke="#a85400" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M70,20 L46,62 L60,62" fill="none" stroke="#fffce8" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+  </g>
+</svg>
+
+<!-- 5. TICK 32x96 : 중앙 50% 눈금 -->
+<svg id="svg_tick" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 96" width="32" height="96">
+  <defs>
+    <linearGradient id="tickG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff3cc"/>
+      <stop offset="0.5" stop-color="#ffd451"/>
+      <stop offset="1" stop-color="#c8892a"/>
+    </linearGradient>
+    <filter id="tickGlow" x="-80%" y="-30%" width="260%" height="160%">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+  </defs>
+  <rect x="13" y="20" width="6" height="56" rx="3" fill="#ffe89a" opacity="0.5" filter="url(#tickGlow)"/>
+  <rect x="14" y="22" width="4" height="52" rx="2" fill="url(#tickG)" stroke="#5a3c14" stroke-width="0.8"/>
+  <path d="M16,10 l7,10 l-7,10 l-7,-10 Z" fill="url(#tickG)" stroke="#5a3c14" stroke-width="1"/>
+  <path d="M16,66 l7,10 l-7,10 l-7,-10 Z" fill="url(#tickG)" stroke="#5a3c14" stroke-width="1"/>
+</svg>
+
+</div>
+
+<script>
+const ASSETS = [
+  {id:'svg_fill',  name:'T_ChargeGauge_Fill.png',  w:256, h:64,  label:'Fill (채움)'},
+  {id:'svg_bg',    name:'T_ChargeGauge_BG.png',    w:256, h:64,  label:'BG (바닥)'},
+  {id:'svg_frame', name:'T_ChargeGauge_Frame.png', w:320, h:96,  label:'Frame (금장 프레임·중앙 투명)'},
+  {id:'svg_bolt',  name:'T_ChargeGauge_Bolt.png',  w:128, h:128, label:'Bolt (번개)'},
+  {id:'svg_tick',  name:'T_ChargeGauge_Tick.png',  w:32,  h:96,  label:'Tick (50% 눈금)'},
+];
+const EXPORT_SCALE = 2; // 2배 해상도로 저장 (언리얼에서 선명)
+
+function svgDataUrl(id){
+  const svg = document.getElementById(id).cloneNode(true);
+  const xml = new XMLSerializer().serializeToString(svg);
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+}
+function download(id, name, w, h){
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = w*EXPORT_SCALE; c.height = h*EXPORT_SCALE;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    c.toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = name; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+    }, 'image/png');
+  };
+  img.src = svgDataUrl(id);
+}
+
+// 카드 UI
+const cards = document.getElementById('cards');
+ASSETS.forEach(a => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const svgHtml = document.getElementById(a.id).outerHTML;
+  card.innerHTML = `<h3>${a.label}</h3><div class="prev">${svgHtml.replace(a.id, a.id+'_p')}</div>
+    <button>PNG 저장</button><div class="filename">${a.name} · ${a.w*EXPORT_SCALE}×${a.h*EXPORT_SCALE}</div>`;
+  card.querySelector('button').onclick = () => download(a.id, a.name, a.w, a.h);
+  cards.appendChild(card);
+});
+document.getElementById('allBtn').onclick = () => ASSETS.forEach((a,i)=>setTimeout(()=>download(a.id,a.name,a.w,a.h), i*400));
+
+// 조립 미리보기: 프레임(320x96) 기준, 창(30..290 x 28..68)에 BG+65% fill, 중앙 tick, 왼쪽 bolt
+const asm = document.getElementById('assembled');
+asm.innerHTML = `
+  <div style="position:relative;width:320px;height:96px">
+    <div style="position:absolute;left:30px;top:28px;width:260px;height:40px;overflow:hidden;border-radius:2px">
+      ${document.getElementById('svg_bg').outerHTML.replace('svg_bg','svg_bg_a').replace('width="256" height="64"','width="260" height="40"')}
+      <div style="position:absolute;left:0;top:0;width:65%;height:100%;overflow:hidden">
+        ${document.getElementById('svg_fill').outerHTML.replace('svg_fill','svg_fill_a').replace('width="256" height="64"','width="260" height="40"')}
+      </div>
+    </div>
+    <div style="position:absolute;left:0;top:0">${document.getElementById('svg_frame').outerHTML.replace('svg_frame','svg_frame_a')}</div>
+    <div style="position:absolute;left:144px;top:8px">${document.getElementById('svg_tick').outerHTML.replace('svg_tick','svg_tick_a').replace('width="32" height="96"','width="32" height="80"')}</div>
+    <div style="position:absolute;left:-30px;top:-16px">${document.getElementById('svg_bolt').outerHTML.replace('svg_bolt','svg_bolt_a')}</div>
+  </div>`;
+</script>
+</body>
+</html>

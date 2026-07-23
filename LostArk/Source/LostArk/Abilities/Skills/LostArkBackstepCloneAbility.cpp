@@ -45,21 +45,8 @@ void ULostArkBackstepCloneAbility::ActivateAbility(const FGameplayAbilitySpecHan
 	FVector PlayerForward = AvatarChar->GetActorForwardVector();
 	USkeletalMeshComponent* SourceMesh = AvatarChar->FindComponentByClass<USkeletalMeshComponent>();
 
-	FVector DestLocation = PlayerLoc - PlayerForward * BackstepDistance;
-
-	float CapsuleRadius = AvatarChar->GetCapsuleComponent()->GetScaledCapsuleRadius();
-	float CapsuleHalfHeight = AvatarChar->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-
-	FHitResult ObstacleHit;
-	FCollisionQueryParams ObstacleParams;
-	ObstacleParams.AddIgnoredActor(AvatarChar);
-
-	FCollisionShape CharacterShape = FCollisionShape::MakeCapsule(CapsuleRadius, CapsuleHalfHeight);
-	bool bHitObstacle = GetWorld()->SweepSingleByChannel(ObstacleHit, PlayerLoc, DestLocation, FQuat::Identity, ECC_WorldStatic, CharacterShape, ObstacleParams);
-	if (bHitObstacle)
-	{
-		DestLocation = ObstacleHit.Location + ObstacleHit.ImpactNormal * CapsuleRadius;
-	}
+	// 목적지 안전 보정: 벽/보스 앞에서 멈추고(보스 밀기 방지), 아레나 밖(맵 뚫기)으로 못 나가게 클램프.
+	FVector DestLocation = ComputeSafeDashDestination(AvatarChar, PlayerLoc, PlayerLoc - PlayerForward * BackstepDistance);
 
 	float CalcBackstepSpeed = BackstepDuration > 0.f ? (FVector::Distance(PlayerLoc, DestLocation) / BackstepDuration) : 0.f;
 	FVector MoveDirection = (DestLocation - PlayerLoc).GetSafeNormal2D();

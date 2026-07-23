@@ -115,6 +115,18 @@ void ABossBase::BeginPlay()
 	// 회전 검증 디버그가 켜져 있을 때만 틱 활성화
 	SetActorTickEnabled(bDrawFacingDebug);
 
+	// 보스는 '회전만' 하고 절대 이동하지 않는 설계.
+	// 캐릭터끼리 캡슐이 겹치면 각자의 CharacterMovement 가 매 틱 겹침을 해소하며 자기 위치를 옮긴다
+	// (속도 0이어도). Walking 모드면 보스가 스스로 밀려난다 -> 이동을 꺼서(MOVE_None) 원천 차단.
+	// 회전은 SetActorRotation(BossTargetingComponent)이라 영향 없고, 캡슐은 계속 Pawn 을 Block 하므로
+	// 플레이어는 보스를 통과하지 못한다(백/헤드어택 위치 판정 유지). 전 머신에서 적용.
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->StopMovementImmediately();
+		Move->DisableMovement();                 // MOVE_None: 겹침 해소로 자기 위치를 옮기지 않음 = 안 밀림
+		Move->bEnablePhysicsInteraction = false; // 물리 상호작용 push 로도 안 밀리게
+	}
+
 	// 클라이언트: 태그/큐 표현을 위해 ActorInfo 초기화 (서버는 PossessedBy에서 처리)
 	if (AbilitySystemComponent && !HasAuthority())
 	{

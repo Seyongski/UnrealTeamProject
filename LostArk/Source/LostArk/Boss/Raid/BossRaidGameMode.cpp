@@ -15,6 +15,9 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PawnMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -75,6 +78,8 @@ void ABossRaidGameMode::StartEncounter()
 	}
 	bEncounterStarted = true;
 
+	UE_LOG(LogTemp, Warning, TEXT("[Charge] StartEncounter 진입 (조우 배분 시작)"));
+
 	ABossBase* Boss = FindBoss();
 
 	// 아레나 중심: 슬라이스 액터(관례: 액터 위치=중심) > 보스 위치 순으로 결정
@@ -98,6 +103,9 @@ void ABossRaidGameMode::StartEncounter()
 	// 조우 시 전하 랜덤 부여 + 전하 게이지/부활 컴포넌트 부착
 	AssignRandomCharges();
 	SetupRaidComponentsForPlayers();
+
+	// 부여/복제 정착 후 +/- 인원 균형 보정 (즉시 조회는 타이밍상 불안정 -> 짧게 늦춰 실행)
+	ScheduleChargeRebalance();
 
 	// 전하 공명 주기 시작 (균등이면 상쇄라 자동 무피해 -> 켜둬도 안전)
 	if (ResonanceDamageEffect && ChargeResonanceInterval > 0.f)
@@ -133,8 +141,57 @@ void ABossRaidGameMode::EndEncounter()
 	}
 
 	GetWorldTimerManager().ClearTimer(ResonanceTimer);
+	GetWorldTimerManager().ClearTimer(ChargeRebalanceTimer);
 
 	bEncounterStarted = false;
+}
+
+void ABossRaidGameMode::SpaceOutSpawn(APawn* Pawn)
+{
+	if (!Pawn || PlayerSpawnSpacingRadius <= 0.f)
+	{
+		return;
+	}
+
+	// 첫 플레이어의 스폰 위치를 파티 링의 중심으로 고정 (이후 전원 이 중심 기준으로 흩어짐)
+	if (!bPartySpawnOriginSet)
+	{
+		PartySpawnOrigin = Pawn->GetActorLocation();
+		bPartySpawnOriginSet = true;
+	}
+
+	// 황금각으로 슬롯 배치 -> 몇 명이든 서로 겹치지 않게 고르게 흩어진다
+	const float AngleRad = FMath::DegreesToRadians(SpawnSlotIndex * 137.5f);
+	const FVector Offset(FMath::Cos(AngleRad) * PlayerSpawnSpacingRadius,
+		FMath::Sin(AngleRad) * PlayerSpawnSpacingRadius, 0.f);
+	++SpawnSlotIndex;
+
+	// 중심의 지면 높이를 유지(튕겨 오른 Z 무시)하고 링 위 슬롯으로 순간이동 + 튕김 속도 제거
+	FVector Target = PartySpawnOrigin + Offset;
+	Target.Z = PartySpawnOrigin.Z;
+	Pawn->TeleportTo(Target, Pawn->GetActorRotation());
+
+	if (UPawnMovementComponent* Move = Pawn->GetMovementComponent())
+	{
+		Move->StopMovementImmediately();	// 캡슐 겹침으로 실린 튕김 속도 제거
+	}
+}
+
+bool ABossRaidGameMode::ShouldGiveRedCharge(const APawn* Pawn) const
+{
+	int32 PlayerId = 0;
+	if (Pawn)
+	{
+		if (const AController* C = Pawn->GetController())
+		{
+			if (const APlayerState* PS = C->PlayerState)
+			{
+				PlayerId = PS->GetPlayerId();
+			}
+		}
+	}
+	// 짝수 PlayerId = 빨강(+), 홀수 = 파랑(-). 접속 순서대로 연속 부여되는 값이라 교대 -> 균형.
+	return (PlayerId % 2) == 0;
 }
 
 void ABossRaidGameMode::AssignRandomCharges()
@@ -143,11 +200,11 @@ void ABossRaidGameMode::AssignRandomCharges()
 	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
 	for (APawn* Pawn : PlayerPawns)
 	{
-		ApplyChargeTo(Pawn);
+		AssignBalancedChargeTo(Pawn);
 	}
 }
 
-void ABossRaidGameMode::ApplyChargeTo(APawn* Pawn)
+void ABossRaidGameMode::AssignBalancedChargeTo(APawn* Pawn)
 {
 	UAbilitySystemComponent* ASC =
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn);
@@ -163,8 +220,83 @@ void ABossRaidGameMode::ApplyChargeTo(APawn* Pawn)
 		return;
 	}
 
-	const TSubclassOf<UGameplayEffect> ChargeGE = FMath::RandBool() ? RedChargeEffect : BlueChargeEffect;
-	UBossCombatStatics::ApplyEffectToSelf(ASC, ChargeGE, this);
+	// 타인 상태를 읽지 않고 이 플레이어 자신의 PlayerId 홀짝으로 임시 결정 (최종 균형은 RebalanceCharges).
+	// 전하는 GE 가 아니라 '복제 루스 태그'로 부여 -> 애셋 불필요 + 서버/클라 즉시 조회 가능.
+	const bool bGiveRed = ShouldGiveRedCharge(Pawn);
+	UBossCombatStatics::AddReplicatedLooseTag(ASC,
+		bGiveRed ? LostArkTags::State_Charge_Red.GetTag() : LostArkTags::State_Charge_Blue.GetTag());
+
+	// 진단: 방금 부여한 태그가 같은 ASC 에서 즉시 조회되는지 (루스 태그라 서버에서 즉시 true 여야 정상)
+	const bool bVerifyRed = ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red);
+	const bool bVerifyBlue = ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Blue);
+
+	int32 PlayerId = -1;
+	if (const AController* C = Pawn->GetController())
+	{
+		if (const APlayerState* PS = C->PlayerState)
+		{
+			PlayerId = PS->GetPlayerId();
+		}
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[Charge] 부여 %s => %s (PlayerId=%d ASC=%p 즉시확인 R=%d B=%d)"),
+		*GetNameSafe(Pawn), bGiveRed ? TEXT("RED(+)") : TEXT("BLUE(-)"), PlayerId, ASC,
+		bVerifyRed ? 1 : 0, bVerifyBlue ? 1 : 0);
+}
+
+void ABossRaidGameMode::ScheduleChargeRebalance()
+{
+	// 재호출 시 기존 예약을 덮어써(디바운스) 마지막 접속 기준으로 한 번만 실행되게 한다.
+	GetWorldTimerManager().SetTimer(
+		ChargeRebalanceTimer, this, &ABossRaidGameMode::RebalanceCharges,
+		FMath::Max(ChargeRebalanceDelay, 0.05f), false);
+}
+
+void ABossRaidGameMode::RebalanceCharges()
+{
+	TArray<APawn*> PlayerPawns;
+	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Charge] Rebalance 시작: World=%s GetPlayerPawns=%d"),
+		*GetNameSafe(GetWorld()), PlayerPawns.Num());
+
+	// 정착된 전하(타이머 실행이라 신뢰 가능)를 편으로 모은다
+	TArray<UAbilitySystemComponent*> Reds;
+	TArray<UAbilitySystemComponent*> Blues;
+	for (APawn* Pawn : PlayerPawns)
+	{
+		UAbilitySystemComponent* ASC =
+			UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn);
+		const bool bR = ASC && ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red);
+		const bool bB = ASC && ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Blue);
+		UE_LOG(LogTemp, Warning, TEXT("  [Charge] pawn=%s ASC=%p red=%d blue=%d"),
+			*GetNameSafe(Pawn), ASC, bR ? 1 : 0, bB ? 1 : 0);
+		if (!ASC)
+		{
+			continue;
+		}
+		if (bR)
+		{
+			Reds.Add(ASC);
+		}
+		else if (bB)
+		{
+			Blues.Add(ASC);
+		}
+	}
+
+	// 많은 쪽에서 (차이/2) 명을 반대로 뒤집으면 |R-B| <= 1
+	const int32 Diff = Reds.Num() - Blues.Num();
+	const int32 FlipCount = FMath::Abs(Diff) / 2;
+	TArray<UAbilitySystemComponent*>& From = (Diff > 0) ? Reds : Blues;
+	for (int32 i = 0; i < FlipCount && From.Num() > 0; ++i)
+	{
+		UAbilitySystemComponent* ASC = From.Pop(/*bAllowShrinking=*/false);
+		UBossCombatStatics::FlipChargeLoose(ASC,
+			LostArkTags::State_Charge_Red.GetTag(), LostArkTags::State_Charge_Blue.GetTag());
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Charge] Rebalance: 반전전 R=%d B=%d, %d명 반전 => 균형"),
+		Reds.Num(), Blues.Num(), FlipCount);
 }
 
 void ABossRaidGameMode::SetupRaidComponentsForPlayers()
@@ -175,22 +307,68 @@ void ABossRaidGameMode::SetupRaidComponentsForPlayers()
 	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
 	for (APawn* Pawn : PlayerPawns)
 	{
-		// 전하 게이지 (충전 패턴 피격 -> 절반 시 전하 반전 / 가득 시 과충전 폭발)
-		if (ChargeGaugeComponentClass && !Pawn->FindComponentByClass<UBossChargeGaugeComponent>())
-		{
-			UBossChargeGaugeComponent* Gauge =
-				NewObject<UBossChargeGaugeComponent>(Pawn, ChargeGaugeComponentClass, TEXT("BossChargeGauge"));
-			Gauge->InitChargeGauge(Boss, RedChargeEffect, BlueChargeEffect);
-			Gauge->RegisterComponent();
-		}
+		SetupRaidComponentsForPawn(Pawn, Boss);
+	}
+}
 
-		// 부활 (30초 자동 / 지정 시간 후 클릭 부활)
-		if (ReviveComponentClass && !Pawn->FindComponentByClass<UBossReviveComponent>())
-		{
-			UBossReviveComponent* Revive =
-				NewObject<UBossReviveComponent>(Pawn, ReviveComponentClass, TEXT("BossRevive"));
-			Revive->RegisterComponent();
-		}
+void ABossRaidGameMode::SetupRaidComponentsForPawn(APawn* Pawn, ABossBase* Boss)
+{
+	if (!Pawn)
+	{
+		return;
+	}
+
+	// 전하 게이지 (충전 패턴 피격 -> 절반 시 전하 반전 / 가득 시 과충전 폭발)
+	if (ChargeGaugeComponentClass && !Pawn->FindComponentByClass<UBossChargeGaugeComponent>())
+	{
+		UBossChargeGaugeComponent* Gauge =
+			NewObject<UBossChargeGaugeComponent>(Pawn, ChargeGaugeComponentClass, TEXT("BossChargeGauge"));
+		Gauge->InitChargeGauge(Boss, RedChargeEffect, BlueChargeEffect);
+		Gauge->RegisterComponent();
+	}
+
+	// 부활 (30초 자동 / 지정 시간 후 클릭 부활)
+	if (ReviveComponentClass && !Pawn->FindComponentByClass<UBossReviveComponent>())
+	{
+		UBossReviveComponent* Revive =
+			NewObject<UBossReviveComponent>(Pawn, ReviveComponentClass, TEXT("BossRevive"));
+		Revive->RegisterComponent();
+	}
+}
+
+void ABossRaidGameMode::HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer)
+{
+	Super::HandleStartingNewPlayer_Implementation(NewPlayer);
+
+	// 조우가 아직 시작 전이면 StartEncounter 가 일괄 처리하므로 여기선 건드리지 않는다.
+	// 조우 시작 뒤 늦게 possess 된 플레이어(원격 클라 join 지연 등)만 즉시 세팅해 누락을 메운다.
+	APawn* Pawn = NewPlayer ? NewPlayer->GetPawn() : nullptr;
+
+	// 스폰 분산은 조우 여부와 무관하게 모든 플레이어에 적용 (한 점 겹침 튕김 방지)
+	if (Pawn)
+	{
+		SpaceOutSpawn(Pawn);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Charge] HandleStartingNewPlayer: PC=%s bEncounterStarted=%d Pawn=%s"),
+		*GetNameSafe(NewPlayer), bEncounterStarted ? 1 : 0, *GetNameSafe(Pawn));
+
+	if (!bEncounterStarted || !Pawn)
+	{
+		return;	// 조우 전이면 StartEncounter 가 일괄 처리 / 폰 없으면 다음 possess 시 재호출
+	}
+
+	AssignBalancedChargeTo(Pawn);
+	SetupRaidComponentsForPawn(Pawn, FindBoss());
+
+	// 늦게 들어온 인원까지 포함해 +/- 균형 재보정 (디바운스 -> 마지막 접속 기준 1회)
+	ScheduleChargeRebalance();
+
+	// 조우 시작 시의 일괄 SetViewTargetForAll 을 놓친 늦은 접속자에게도 아레나 카메라 지정.
+	// (아레나 카메라가 살아있으면 = 조우 진행 중. 클리어 시퀀스로 넘어가면 EndEncounter 가 정리해 null)
+	if (ArenaCamera)
+	{
+		NewPlayer->SetViewTargetWithBlend(ArenaCamera, CameraBlendTime, VTBlend_Cubic);
 	}
 }
 

@@ -193,6 +193,7 @@ public:
 	ABossPatternActorBase();
 
 	virtual void Tick(float DeltaTime) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/**
 	 * AOE 지연 스폰 공용 팩토리 (서버에서만 호출할 것).
@@ -412,11 +413,11 @@ protected:
 	FBossAoeKnockbackConfig Knockback;
 
 	/** 시전시간 = 예고 표시 후 첫 판정까지의 대기(초). 즉발이면 예고만 스킵되고 이 대기는 유지 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Timing", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Timing", meta = (ClampMin = "0.0"))
 	float CastTime = 1.f;
 
 	/** 유지시간(초). 0이면 첫 판정 1회 후 즉시 소멸. >0이면 장판이 남아 틱뎀 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Timing", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Timing", meta = (ClampMin = "0.0"))
 	float Duration = 0.f;
 
 	/** 틱뎀 주기(초). Duration>0 일 때만 사용. 0이면 첫 판정 1회만 */
@@ -436,7 +437,7 @@ protected:
 	bool bIgnoreHeightCheck = false;
 
 	/** 즉발: 예고 장판 비주얼을 표시하지 않음 (판정 타이밍은 CastTime 그대로) */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Hit")
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Hit")
 	bool bInstant = false;
 
 	/**
@@ -452,7 +453,7 @@ protected:
 	 * 보스를 따라 도는 회전 장판처럼 '지금 위험한 지대'를 계속 보여줘야 하는 패턴용.
 	 * (예고 컴포넌트는 루트에 붙어 있어 Follow 회전/이동을 자동 추종, 액터 소멸 시 함께 정리)
 	 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Telegraph")
 	bool bKeepTelegraphWhileActive = false;
 
 	/**
@@ -462,7 +463,7 @@ protected:
 	 *  - 프로시저럴 메시 예고: XY 스케일 0->1 (중앙에서 바깥으로 확장. 판정 크기는 불변 — T에 전체 도형으로 판정)
 	 *  - VFX 예고(TelegraphEffect): "FillRatio"(0~1) User 파라미터로 매 틱 전달 (시스템 쪽에서 소비)
 	 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph")
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Telegraph")
 	bool bTelegraphFill = false;
 
 	/** 수직 판정 허용 오차(cm). |대상.Z - 중심.Z| 가 이 값 이하일 때만 적중 (공중 대상 제외) */
@@ -470,11 +471,11 @@ protected:
 	float HeightTolerance = 200.f;
 
 	/** 장판 이동 방식 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting")
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Targeting")
 	EAoeTargetingMode TargetingMode = EAoeTargetingMode::Fixed;
 
 	/** Homing/Spiral/Straight 진행 속도(cm/s). Homing/Spiral은 타겟을 향한, Straight는 발사 방향으로의 이동 속도. 0이면 정지 */
-	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Targeting",
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Targeting",
 		meta = (EditCondition = "TargetingMode == EAoeTargetingMode::Homing || TargetingMode == EAoeTargetingMode::Spiral || TargetingMode == EAoeTargetingMode::Straight"))
 	float HomingSpeed = 400.f;
 
@@ -605,15 +606,33 @@ protected:
 	/**
 	 * At 위치의 바닥 Z 를 항상 반환 (폴백 포함).
 	 *  1) TraceGroundZ 성공 시 그 값
-	 *  2) 실패 시 시전자(보스) 발밑 Z — 보스는 아레나 바닥에 서 있으므로 바닥 높이와 같다
-	 *     (머지 바닥 메시에 콜리전이 없어 트레이스가 아예 안 잡히는 경우 대비)
-	 *  3) 시전자도 없으면 At.Z 그대로
+	 *  2) GameState.ArenaFloorZ (지정 시)
+	 *  3) 생존 플레이어 발밑 Z — 플레이어는 실제 아레나 바닥에 서 있으므로, 보스가 구덩이에
+	 *     잠긴 맵에서도 이게 진짜 바닥이다 (TryGetPlayerGroundZ)
+	 *  4) 시전자(보스) 발밑 Z + 보정
+	 *  5) 시전자도 없으면 At.Z 그대로
 	 */
 	float ResolveGroundZ(const FVector& At) const;
+
+	/**
+	 * At 에 XY로 가장 가까운 '생존 플레이어'의 발밑 Z 를 OutZ 에 채우고 true.
+	 * 보스가 지형 아래로 잠겨 발밑/트레이스가 바닥을 못 줄 때, 실제 바닥에 서 있는 플레이어를
+	 * 바닥 기준으로 삼는다. 생존 플레이어가 없으면 false.
+	 */
+	bool TryGetPlayerGroundZ(const FVector& At, float& OutZ) const;
 
 	/** 예고/본체 메시를 바닥에서 살짝 띄우는 오프셋(cm). Z-파이팅 방지 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Telegraph", meta = (ClampMin = "0.0"))
 	float TelegraphZOffset = 5.f;
+
+	/**
+	 * 바닥 트레이스를 시작하는 '기준 위 높이'(cm). 위에서 아래로 쏴서 첫 바닥 메시를 잡는데,
+	 * 시전자(보스) 캡슐이 지형 아래로 잠기는 맵에서는 기준 Z(보스 위치)가 이미 바닥보다 낮아
+	 * 시작점이 바닥 밑이면 아래로 쏴도 바닥을 못 맞춘다. 이 값을 '잠기는 깊이'보다 크게 두면
+	 * 시작점이 항상 바닥 위가 되어 데칼이 맵 위에 제대로 뜬다. (구덩이 깊이에 맞춰 조정)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn", meta = (ClampMin = "100.0"))
+	float GroundTraceStartHeight = 3000.f;
 
 	/**
 	 * 바닥 트레이스 실패 시 폴백 Z(시전자 캡슐 발밑)에 더할 수동 보정(cm).

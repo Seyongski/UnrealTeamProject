@@ -37,4 +37,12 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, Category = "JustGuard")
 	bool bOnlyCurrentTarget = false;
+
+	/**
+	 * 가드 상태(그림의 검정 구간) 유지시간(초). G 를 누른 순간부터 이 시간 동안 '가드 상태'로 간주된다.
+	 * 노티파이 판정(Just Guard Judge)이 "공격 순간이 이 가드 상태 안에 들어오는가"로 성공/실패를 가른다.
+	 * (창을 여는 이 노티파이가 가드의 지속시간을 정한다 — 판정 노티파이는 순수하게 '지금 판정'만 함)
+	 */
+	UPROPERTY(EditAnywhere, Category = "JustGuard", meta = (ClampMin = "0.0"))
+	float GuardStateDuration = 1.f;
 };

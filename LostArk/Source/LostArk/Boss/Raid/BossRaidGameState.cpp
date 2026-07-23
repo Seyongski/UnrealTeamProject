@@ -66,6 +66,8 @@ void ABossRaidGameState::MarkSliceDestroyed(int32 SliceIndex)
 {
 	if (!HasAuthority() || SliceIndex < 0 || SliceIndex >= SliceCount)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Arena] MarkSliceDestroyed 거부: Slice=%d SliceCount=%d Auth=%d (범위 밖이면 SliceCount 확인)"),
+			SliceIndex, SliceCount, HasAuthority() ? 1 : 0);
 		return;
 	}
 	if (IsSliceDestroyed(SliceIndex))
@@ -74,6 +76,8 @@ void ABossRaidGameState::MarkSliceDestroyed(int32 SliceIndex)
 	}
 
 	DestroyedSliceMask |= (1 << SliceIndex);
+	UE_LOG(LogTemp, Warning, TEXT("[Arena] MarkSliceDestroyed OK: Slice=%d Mask=%d -> OnArenaSlicesChanged 방송"),
+		SliceIndex, DestroyedSliceMask);
 	ForceNetUpdate();
 
 	// OnRep 은 서버에서 안 불리므로 서버도 직접 방송

@@ -171,20 +171,34 @@ void UBossTerrainGimmickComponent::ApplyStaggerHit(float Amount)
 {
 	AActor* Owner = GetOwner();
 	UAbilitySystemComponent* ASC = GetASC();
-	if (!Owner || !Owner->HasAuthority() || !ASC || !bStaggerPhaseActive || Amount <= 0.f)
+	if (!Owner || !Owner->HasAuthority() || !ASC)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] ApplyStaggerHit 무시 — Owner/Authority/ASC 없음 (서버에서 호출됐는지 확인)"));
+		return;
+	}
+	if (!bStaggerPhaseActive)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] ApplyStaggerHit 무시 — 무력화 페이즈 비활성 (BeginStaggerPhase 가 먼저 실행돼야 함)"));
+		return;
+	}
+	if (Amount <= 0.f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] ApplyStaggerHit 무시 — Amount=%.1f <= 0"), Amount);
 		return;
 	}
 
 	// 감소만 (PreAttributeChange 가 [0, Max] 로 클램프). 0 도달 처리는 HandleStaggerGaugeChanged 에서.
 	const float Current = ASC->GetNumericAttribute(UBossAttributeSet::GetStaggerGaugeAttribute());
-	ASC->SetNumericAttributeBase(UBossAttributeSet::GetStaggerGaugeAttribute(), Current - Amount);
+	const float Next = Current - Amount;
+	ASC->SetNumericAttributeBase(UBossAttributeSet::GetStaggerGaugeAttribute(), Next);
+	UE_LOG(LogTemp, Log, TEXT("[TerrainGimmick] 무력화 게이지 감소: %.1f -> %.1f (Amount=%.1f)"), Current, Next, Amount);
 }
 
 void UBossTerrainGimmickComponent::HandleStaggerHitEvent(const FGameplayEventData* Payload)
 {
 	// 스킬이 EventMagnitude 에 자기 무력화 수치를 실어 보낸다. 미지정(0)이면 디버그 기본 10.
 	const float Amount = (Payload && Payload->EventMagnitude > 0.f) ? Payload->EventMagnitude : 10.f;
+	UE_LOG(LogTemp, Log, TEXT("[TerrainGimmick] Event.Boss.StaggerHit 수신 (Amount=%.1f)"), Amount);
 	ApplyStaggerHit(Amount);
 }
 
@@ -384,7 +398,10 @@ void UBossTerrainGimmickComponent::ExecuteDestroySlice()
 		return;
 	}
 
-	if (ABossRaidGameMode* GM = GetWorld()->GetAuthGameMode<ABossRaidGameMode>())
+	ABossRaidGameMode* GM = GetWorld()->GetAuthGameMode<ABossRaidGameMode>();
+	UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] ExecuteDestroySlice: Slice=%d GameMode=%s"),
+		PendingDestroySliceIndex, GM ? TEXT("OK") : TEXT("NULL(레벨 GameMode 가 BossRaidGameMode 인지 확인)"));
+	if (GM)
 	{
 		// 슬라이스 파괴 (레벨팀 ID 시스템 호출). 타워가 그 위에 살아있으면 방송을 받고 함께 소멸
 		GM->DestroySlice(PendingDestroySliceIndex);

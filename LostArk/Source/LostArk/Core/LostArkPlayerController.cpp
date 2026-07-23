@@ -21,6 +21,7 @@
 #include "Boss/BossBase.h"
 #include "Boss/Combat/BossCounterComponent.h"
 #include "Boss/Combat/BossJustGuardComponent.h"
+#include "Boss/Gimmick/BossTerrainGimmickComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -81,6 +82,7 @@ void ALostArkPlayerController::SetupInputComponent()
 	{
 		InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &ALostArkPlayerController::DebugForceCounterHit);
 		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ALostArkPlayerController::DebugTryJustGuard);
+		InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ALostArkPlayerController::DebugStaggerHit);
 	}
 }
 
@@ -146,6 +148,35 @@ void ALostArkPlayerController::ServerDebugTryJustGuard_Implementation()
 		else if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Silver, TEXT("[DEBUG] G -> 저스트가드 모션 비활성화"));
+		}
+		break;	// 보스 1개 가정 (임시)
+	}
+}
+
+void ALostArkPlayerController::DebugStaggerHit()
+{
+	// 무력화 게이지를 10 깎는다 (E). 실제 감소는 서버 권위에서. 나중에 스킬이 자기 무력화 수치로 대체.
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Orange, TEXT("[DEBUG] E -> 무력화 -10"));
+	}
+	ServerDebugStaggerHit();
+}
+
+void ALostArkPlayerController::ServerDebugStaggerHit_Implementation()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 월드의 첫 보스 무력화 게이지 10 감소 (페이즈 중이 아니면 컴포넌트가 무시)
+	for (TActorIterator<ABossBase> It(World); It; ++It)
+	{
+		if (UBossTerrainGimmickComponent* Gimmick = It->FindComponentByClass<UBossTerrainGimmickComponent>())
+		{
+			Gimmick->ApplyStaggerHit(10.f);
 		}
 		break;	// 보스 1개 가정 (임시)
 	}

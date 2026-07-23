@@ -11,8 +11,7 @@
 #include "Character/LostArkAttributeSet.h"
 #include "Character/LostArkCharacter.h"
 #include "Monster/LostArkMonster.h"
-#include "GameFramework/Character.h"
-#include "Components/CapsuleComponent.h"
+#include "Boss/BossBase.h"
 
 static bool IsValidDamageTarget(AActor* Instigator, AActor* Target)
 {
@@ -77,7 +76,9 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 			if (IsValidDamageTarget(InstigatorActor, HitActor))
 			{
 				FVector HitLocation = HitActor->GetActorLocation();
-				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) > DamageShapeParams.ZTolerance)
+				// 보스는 캡슐이 크기 때문에 Z 체크를 건너뜀
+				bool bIsBoss = HitActor->IsA<ABossBase>();
+				if (!bIsBoss && FMath::Abs(HitLocation.Z - ShapeCenter.Z) > DamageShapeParams.ZTolerance)
 				{
 					continue;
 				}
@@ -158,7 +159,9 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 			if (IsValidDamageTarget(InstigatorActor, HitActor))
 			{
 				FVector HitLocation = HitActor->GetActorLocation();
-				if (FMath::Abs(HitLocation.Z - ShapeCenter.Z) <= DamageShapeParams.ZTolerance)
+				// 보스는 캡슐이 크기 때문에 Z 체크를 건너뜀
+				bool bIsBoss = HitActor->IsA<ABossBase>();
+				if (bIsBoss || FMath::Abs(HitLocation.Z - ShapeCenter.Z) <= DamageShapeParams.ZTolerance)
 				{
 					OverlappedActors.AddUnique(HitActor);
 				}
@@ -213,7 +216,8 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 			DamageShapeParams.DamageCoefficient * DamageMultiplier
 		);
 
-		if (InstigatorASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC).WasSuccessfullyApplied())
+		FActiveGameplayEffectHandle ApplyHandle = InstigatorASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+		if (ApplyHandle.WasSuccessfullyApplied())
 		{
 			HitCount++;
 		}

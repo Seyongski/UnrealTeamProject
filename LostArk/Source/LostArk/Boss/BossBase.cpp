@@ -47,7 +47,7 @@ ABossBase::ABossBase()
 	// GAS: ASC + 어트리뷰트 (다수 플레이어 대상 보스이므로 이펙트 복제는 Minimal)
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
 	AttributeSet = CreateDefaultSubobject<UBossAttributeSet>(TEXT("AttributeSet"));
 
@@ -181,6 +181,26 @@ void ABossBase::OnHealthChanged(const FOnAttributeChangeData& Data)
 		const float Percent = (Max > 0.f) ? (Data.NewValue / Max) * 100.f : 0.f;
 		PatternComponent->NotifyHealthPercent(Percent);
 	}
+}
+
+void ABossBase::Die()
+{
+	if (HasAuthority())
+	{
+		HandleDeath();
+	}
+}
+
+void ABossBase::SetCombatState(FGameplayTag NewStateTag)
+{
+	CurrentStateTag = NewStateTag;
+	// Boss uses BossPatternComponent for state management usually, but store the tag just in case
+}
+
+void ABossBase::ShowDamageText(float DamageAmount)
+{
+	// 몬스터와 동일하게, 보스가 피격될 때는 공격한 주체(플레이어)의 클라이언트에서 데미지 텍스트를 처리합니다.
+	// 자체 처리 로직이 필요한 경우 이 곳 또는 블루프린트에서 위젯 컴포넌트를 통해 구현할 수 있습니다.
 }
 
 void ABossBase::HandleDeath()

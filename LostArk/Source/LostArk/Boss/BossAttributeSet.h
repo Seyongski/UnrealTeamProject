@@ -50,6 +50,10 @@ public:
 	FGameplayAttributeData MaxStaggerGauge;
 	ATTRIBUTE_ACCESSORS(UBossAttributeSet, MaxStaggerGauge)
 
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Meta")
+	FGameplayAttributeData IncomingDamage;
+	ATTRIBUTE_ACCESSORS(UBossAttributeSet, IncomingDamage)
+
 protected:
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldValue);

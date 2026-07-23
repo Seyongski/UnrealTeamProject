@@ -59,6 +59,9 @@ namespace LostArkTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_Grabbed);	// 잡기 성공 (1명 이상)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_AoeHit);	// 장판 적중 (1명 이상)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_JustGuarded);	// 저스트가드 성공 (1명 이상, Branch 조건용)
+	// 저스트가드 기믹 실패 확정 (전부-아니면-전무 모드에서 지정자 실패 시). 패턴 종료까지 유지 ->
+	// 43(부수기) 분기 + 남은 저스트가드 창 무시 게이트 (카운터의 CounterFailed 대응)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_JustGuardFailed);
 
 	// 카운터 결과 (수명이 서로 다른 3종 — BossCounterComponent 가 발행)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternResult_Countered);		// 진짜 카운터 성공. 패턴 종료까지 유지 -> 그로기 분기용
@@ -73,9 +76,16 @@ namespace LostArkTags
 	// 가드 시점의 방향은 보스가 Instigator 의 전방 벡터로 읽으므로 페이로드에 방향을 실을 필요 없다.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Boss_JustGuardInput);
 
+	// 무력화 감소 이벤트: 플레이어 스킬/디버그가 보스 무력화 게이지를 깎는다.
+	// SendGameplayEventToActor(보스, 이 태그, EventMagnitude=무력화 수치). 판정은 보스 쪽.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Boss_StaggerHit);
+
 	// SetByCaller: 데미지 GE에 공격력계수를 실어 보내는 데이터 태그
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 
 	// SetByCaller: 지속시간형 GE(그로기 등)에 지속시간(초)을 실어 보내는 데이터 태그
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Duration);
+
+	// SetByCaller: 무력화 감소량 (스킬별 무력화 수치). 이벤트 EventMagnitude 로도 전달 가능
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Stagger);
 }

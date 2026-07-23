@@ -103,6 +103,15 @@ protected:
 	FVector LocationOffset = FVector::ZeroVector;
 
 	/**
+	 * 켜면 스폰 '방향'을 소켓(헤드) 정면의 X/Y 로 맞춘다 (yaw 만, pitch/roll=0 → Z 무시).
+	 * 레이저처럼 "보스 헤드가 바라보는 X/Y 방향으로 발사"해야 하는 패턴용.
+	 * SpawnSocketName(헤드 소켓)을 지정하면 그 소켓 정면, 없으면 보스 액터 정면을 평면으로 눕혀 쓴다.
+	 * (끄면 기존 동작: 회전 = 보스 액터 회전)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe")
+	bool bAimBySocketForward = false;
+
+	/**
 	 * 본체 VFX(나이아가라)를 이 노티파이에서 지정. 켜면 AoeClass BP 의 BodyEffect 를 덮어쓴다.
 	 * 같은 장판 BP 를 패턴마다 다른 몸통 이펙트로 쓰고 싶을 때 사용(예: 뻗어나가는 원장판을
 	 * 빨간 경고 대신 토네이도 등 이펙트로). 비우면 BP 기본값 유지.

@@ -53,9 +53,13 @@ public:
 	/** 클리어 마킹 (서버 전용. GameMode 클리어 연출 시퀀스가 호출) -> 전 머신 방송 + 배너 표시 */
 	void MarkRaidCleared();
 
-	/** 피자 조각 수 (레벨별 GameState BP에서 설정) */
+	/**
+	 * 파괴 판정 슬라이스(사분면) 수. 기본 4 — 한 라운드에 십자 사분면 하나(=바닥 조각 2개)가
+	 * 같이 무너지는 설계라, '논리적 슬라이스'는 바닥 조각(BP_MordoomFloorPiece, 8개) 단위가 아니라
+	 * 그 절반인 사분면 단위로 잡는다. 레벨별로 다르면 GameState BP 에서 재설정.
+	 */
 	UPROPERTY(EditDefaultsOnly, Replicated, BlueprintReadOnly, Category = "Arena")
-	int32 SliceCount = 8;
+	int32 SliceCount = 4;
 
 	/** 아레나 중심 (GameMode가 조우 시작 시 세팅) */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Arena")
@@ -81,6 +85,13 @@ public:
 	/** 월드 좌표가 속한 조각 인덱스 (0 = +X 축부터 반시계, 각 조각 = 360/SliceCount 도) */
 	UFUNCTION(BlueprintPure, Category = "Arena")
 	int32 GetSliceIndexAt(const FVector& WorldLocation) const;
+
+	/**
+	 * 슬라이스 N 중심 방향의 월드 위치 (아레나 중심에서 Radius 만큼). GetSliceIndexAt 의 역함수격.
+	 * 보스가 '이번에 파괴되는 슬라이스'를 바라볼 때 등에 사용. 범위 밖 인덱스면 아레나 중심 반환.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Arena")
+	FVector GetSliceCenterLocation(int32 SliceIndex, float Radius = 500.f) const;
 
 	/** 조각 파괴 마킹 (서버 전용. GameMode::DestroySlice 가 호출) */
 	void MarkSliceDestroyed(int32 SliceIndex);

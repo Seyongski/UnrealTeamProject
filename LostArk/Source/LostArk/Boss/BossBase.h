@@ -118,13 +118,41 @@ protected:
 	 */
 	virtual void HandleDeath();
 
-	/** 사망 몽타주 재생 (전 머신). 종료 시 마지막 포즈로 고정(bPauseAnims) — 일어나기 방지 */
+	/**
+	 * 사망 몽타주 재생 (전 머신). 종료 시 마지막 포즈로 고정(bPauseAnims) — 일어나기 방지.
+	 * 이어서 bDestroyAfterDeathMontage 면 소멸 시퀀스를 예약한다
+	 * (DeathDisappearDelay -> OnBossDisappear 방송 -> DisappearFXDuration -> Destroy).
+	 */
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayDeathMontage();
 
 	/** 사망 몽타주 (BP 에서 지정. 미지정 시 로그만 남기고 포즈 유지) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Death")
 	TObjectPtr<UAnimMontage> DeathMontage;
+
+	/** 사망 몽타주가 끝나면 보스를 월드에서 소멸시킬지. 끄면 시체가 그대로 남는다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Death")
+	bool bDestroyAfterDeathMontage = true;
+
+	/**
+	 * 몽타주 종료 후 소멸 연출까지의 대기(초). 시체를 잠깐 보여주는 여유.
+	 * 클리어 카메라/배너 타이밍(BossRaidGameMode 의 ClearBannerDelay 등)과 맞춰서 조절할 것.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Death",
+		meta = (EditCondition = "bDestroyAfterDeathMontage", ClampMin = "0.0"))
+	float DeathDisappearDelay = 2.f;
+
+	/** 소멸 연출(OnBossDisappear) 방송 후 실제 액터 소멸까지의 유예(초). 디졸브 길이에 맞출 것 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Death",
+		meta = (EditCondition = "bDestroyAfterDeathMontage", ClampMin = "0.0"))
+	float DisappearFXDuration = 0.f;
+
+	/**
+	 * 소멸 연출 훅 (전 머신에서 호출). 디졸브 머티리얼/파티클/사운드를 BP 에서 붙인다.
+	 * 이게 불린 뒤 DisappearFXDuration 초 후 서버가 액터를 Destroy 한다.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Boss|Death")
+	void OnBossDisappear();
 
 	/** 백/헤드 어택 방향을 표시하는 지면 데칼 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boss|BackHead")
@@ -178,9 +206,25 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Stats")
 	float InitialMaxStaggerGauge = 1000.f;
 
+	/** 소멸 연출 방송 (전 머신). BP 의 OnBossDisappear 를 호출 */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastBossDisappear();
+
 private:
-	/** 사망 몽타주 종료 콜백: 마지막 포즈 고정 */
+	/** 사망 몽타주 종료 콜백: 마지막 포즈 고정 + (옵션) 소멸 예약 */
 	void OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	/** 소멸 예약 (서버 전용, 1회). DeathDisappearDelay 후 BeginDisappear */
+	void ScheduleDisappear();
+
+	/** 소멸 연출 방송 + DisappearFXDuration 후 실제 Destroy (서버) */
+	void BeginDisappear();
+
+	/** 소멸 시퀀스 타이머 (대기 -> 연출 -> Destroy 공용) */
+	FTimerHandle DisappearTimer;
+
+	/** 소멸 예약 1회 가드 (몽타주 종료가 여러 번 와도 안전) */
+	bool bDisappearScheduled = false;
 
 	/** 재빙의 시 어트리뷰트 리셋/델리게이트 중복 바인딩/전투 재시작 방지 */
 	bool bGASInitialized = false;

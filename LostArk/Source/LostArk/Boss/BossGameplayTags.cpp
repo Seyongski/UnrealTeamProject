@@ -7,7 +7,8 @@ namespace LostArkTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Boss_Phase_1, "Boss.Phase.1", "1페이즈 (체력 100~75%)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Boss_Phase_2, "Boss.Phase.2", "2페이즈 (체력 75~50%)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Boss_Phase_3, "Boss.Phase.3", "3페이즈 (체력 50~25%)");
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Boss_Phase_4, "Boss.Phase.4", "4페이즈 (체력 25~0%)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Boss_Phase_4, "Boss.Phase.4", "4페이즈 (체력 25~5%)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Boss_Phase_5, "Boss.Phase.5", "5페이즈 (체력 5%~ 막공 기믹). 패턴 풀은 4페이즈 것을 폴백 사용 가능");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_Counterable, "State.Boss.Counterable", "카운터 창 부모 (하위 Normal/Multi/Fake, 부모 매치로 종류 무관 감지)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_Countered, "State.Boss.Countered", "(구) 카운터 성공. 분기는 State.Boss.PatternResult.Countered 를 사용할 것");
@@ -16,6 +17,7 @@ namespace LostArkTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_Counterable_Fake, "State.Boss.Counterable.Fake", "가짜 카운터 창 (치면 기믹 실패)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_Groggy, "State.Boss.Groggy", "무력화/그로기 상태");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_TrackTarget, "State.Boss.TrackTarget", "타겟 추적 회전 스위치 (NotifyState가 토글)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_Idle, "State.Boss.Idle", "패턴 사이 딜레이(휴식) 중 — 몽타주 없이 Idle");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Debuff_Shock, "State.Debuff.Shock", "감전 상태이상 (플레이어 대상)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Dead, "State.Dead", "사망 (타겟 후보 제외용)");

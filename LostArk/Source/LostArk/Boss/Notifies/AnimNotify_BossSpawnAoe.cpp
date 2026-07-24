@@ -108,6 +108,12 @@ ABossPatternActorBase* UAnimNotify_BossSpawnAoe::SpawnAoeActor(UWorld* World, AA
 			{
 				Aoe.SetKnockbackOverride(KnockbackOverride);	// 패턴별 피격 리액션(넉백/낙사) 주입
 			}
+			// 판정 중심 오프셋 (BeginPlay 의 ResolveOrigin 전에 주입, 0 은 BP 기본 유지).
+			// 같은 장판 BP 를 노티파이마다 다른 좌/우·전후 배치로 재사용하는 용도.
+			if (!ShapeOffset.IsNearlyZero())
+			{
+				Aoe.SetShapeOffset(ShapeOffset);
+			}
 			// 본체 VFX 노티파이 오버라이드 (BeginPlay 의 SpawnBodyEffect 전에 주입, null 은 BP 기본 유지)
 			if (BodyEffectOverride || BodyEffectCascadeOverride)
 			{

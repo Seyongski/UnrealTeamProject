@@ -89,6 +89,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Targeting", meta = (EditCondition = "bReselectTargetOnStart"))
 	ETargetSelectPolicy TargetPolicy = ETargetSelectPolicy::Nearest;
 
+	/**
+	 * 이 패턴이 끝난 뒤 다음 패턴까지 쉬는 시간(초) 개별 지정.
+	 * 음수(-1)면 브레인의 기본값(UBossPatternComponent::PatternIntervalSeconds)을 사용.
+	 * 큰 기믹 뒤에 길게 쉬거나, 연계 패턴을 딜 없이 붙일 때만 덮어쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Pattern", meta = (ClampMin = "-1.0"))
+	float PostPatternDelayOverride = -1.f;
+
 	/** 스텝 그래프 */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern")
 	TArray<FPatternStep> Steps;

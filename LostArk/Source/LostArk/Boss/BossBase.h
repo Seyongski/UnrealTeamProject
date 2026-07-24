@@ -46,16 +46,9 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	// Called every frame (기본 비활성. bDrawFacingDebug 켤 때만 틱)
-	virtual void Tick(float DeltaTime) override;
-
 	/** 캡슐 반경에 맞춰 백헤드 데칼 크기/위치 갱신. 캡슐 크기가 바뀔 때(버프 등) 호출 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|BackHead")
 	void UpdateBackHeadDecal();
-
-	/** 회전 검증용: 캡슐(액터) forward 방향을 화살표로 표시 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boss|Debug")
-	bool bDrawFacingDebug = false;
 
 	/** 체력 변동 방송 (서버/클라 모두). 보스 체력바 위젯이 여기 바인딩해서 갱신 */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|UI")
@@ -222,6 +215,9 @@ private:
 
 	/** 소멸 시퀀스 타이머 (대기 -> 연출 -> Destroy 공용) */
 	FTimerHandle DisappearTimer;
+
+	/** 백헤드 데칼 지면 재투영 타이머 (발판 스폰 타이밍 대응, 바닥 잡으면 정지) */
+	FTimerHandle DecalGroundTimer;
 
 	/** 소멸 예약 1회 가드 (몽타주 종료가 여러 번 와도 안전) */
 	bool bDisappearScheduled = false;

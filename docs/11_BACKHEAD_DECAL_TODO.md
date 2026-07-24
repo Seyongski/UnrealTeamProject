@@ -6,17 +6,14 @@
 
 ---
 
-## 0. 현재 상태 스냅샷 (2026-07-22)
+## 0. 현재 상태 스냅샷 (2026-07-22 · PIE 표시 성공)
 
-- **C++**: 원본 상태(색 주입/지면 트레이스 코드는 되돌려짐).
-  - `UBackHeadDecalComponent`(`LostArk/Source/LostArk/Boss/BackHeadDecalComponent.*`)
-    는 `UpdateRadius()` 에서 **`Radius` 스칼라 파라미터만** MID 에 주입한다.
-  - 데칼 위치는 `ABossBase::UpdateBackHeadDecal()` 에서 **보스 발밑(`-HalfHeight`) 고정**.
-    → 공중에 뜬 보스는 지면이 아니라 발밑 허공에 투영됨(= "데칼이 저 아래 뜨는" 문제, **아직 미해결** → §C).
-- **머티리얼**: `M_BossBackHead` 제작 중.
-  - 색/각도는 **머티리얼 파라미터의 Default 값에 직접 baked**(하양/파랑/45°). C++ 색 주입은 **안 씀**.
-  - 파라미터로 만들어 두면 나중에 Material Instance 로 튜닝 가능(이름 자유, C++ 의존 없음).
-- **남은 핵심 작업**: ① 머티리얼 노드 그래프 완성 → ② 보스 BP 데칼 슬롯에 지정 → ③ PIE 정렬 확인.
+- **동작**: 데칼이 발판 위에 헤드=하양/백=파랑 링으로 **PIE 에서 잘 나옴**.
+- **C++**: `ABossBase::UpdateBackHeadDecal()` 이 발판 Z(트레이스→`ArenaFloorZ`→발밑)를 구해
+  스케일/깊이 방어까지 해서 데칼을 발판에 얹는다(§C). 진단 로그·회전 화살표는 제거됨.
+  - `UBackHeadDecalComponent::UpdateRadius()` 는 `Radius` 스칼라 주입 + 투영 깊이 최소 128 클램프.
+- **머티리얼**: `M_BossBackHead` 완성. 색/각도는 **머티리얼 파라미터 Default 에 baked**(하양/파랑/45°). C++ 색 주입은 안 씀.
+- **남은 것**: §D 두 이슈(크기 조절 D-1 / 플레이어 색 D-2) — 나중에 수정.
 
 ---
 
@@ -134,29 +131,68 @@ Scalar Parameter: **`Opacity` Default 0.6**
 
 ---
 
-## C. (선택/미해결) 데칼을 발판 위에 올리기 — C++ 개선안
+## C. 데칼을 발판 위에 올리기 — C++ (✅ 적용됨, 리빌드 필요)
 
-현재 `ABossBase::UpdateBackHeadDecal()` 은 데칼을 **보스 발밑(`-HalfHeight`) 고정**이라,
-공중에 뜬 보스는 지면이 아니라 허공에 투영된다("저 아래 뜨는" 문제).
+### 왜 "에디터는 되는데 PIE 는 안 보이나"
 
-**해결 방향**: 발밑에서 **아래로 라인트레이스** 해 실제 발판 Z 를 찾아 그 위에 데칼을 얹는다(AOE 데칼처럼).
-- 데칼은 캡슐에 부착돼 있어 **XY/Yaw(앞=헤드/뒤=백)는 자동 정렬** → **Z 만** 지면에 맞추면 됨.
-- 트레이스는 프로젝트에 이미 검증된 규칙을 그대로 따를 것:
-  참고: `ABossPatternActorBase::TraceGroundZ`
-  (`LostArk/Source/LostArk/Boss/Damage/BossPatternActorBase.cpp`)
-  - `bTraceComplex = true` — 병합 바닥 메시(`SM_MERGED_*`)는 복합 콜리전만 있어 이게 없으면 못 맞춤
-  - `LineTraceSingleByObjectType` + `ECC_WorldStatic` / `ECC_WorldDynamic` — 바닥이 Visibility Block 안 해도 잡힘
-- 보스 이동/지형파괴로 발판 Z 가 바뀔 수 있으니, 0.1초 주기 타이머로 재투영하면 안전.
+`UpdateBackHeadDecal()` 은 **BeginPlay(런타임)에서만** 실행된다.
+- **에디터 뷰포트**: 이 함수가 안 돌아 데칼이 놔둔 자리에 그려짐 → 바닥에 잘 보임.
+- **PIE**: BeginPlay 에서 데칼을 **캡슐 발밑(`-HalfHeight`)** 으로 내리는데, 이 보스는 **캡슐째 공중 부양**
+  → 발밑도 공중이라 얕은 투영 박스(±ProjectionDepth)가 저 아래 바닥에 **안 닿아 안 보임**.
 
-> 이전 세션에서 위 방식으로 C++ 를 수정했다가 되돌린 상태. 필요하면 재적용.
+### 수정 내용 (적용 완료 — PIE 확인됨)
+
+`ABossBase::UpdateBackHeadDecal()` 이 발판 Z 를 **AoE(`ResolveGroundZ`)와 동일 규칙**으로 구해
+그 위에 데칼을 얹는다. 데칼은 캡슐에 부착돼 **XY/Yaw(앞=헤드/뒤=백)는 자동 정렬**, **Z 만** 지면에 맞춘다.
+
+1. **발밑 아래로 라인트레이스** — `bTraceComplex=true` + `LineTraceSingleByObjectType`(`WorldStatic`/`WorldDynamic`).
+   병합 바닥(`SM_MERGED_*`)이 복합 콜리전만 있고 Visibility Block 안 해도 잡힌다.
+2. **트레이스 실패 시 `GameState.ArenaFloorZ`** — 보스가 선 자리엔 바닥 콜리전이 안 잡히는 맵이 있어 필요.
+   `ABossRaidGameState::ArenaFloorZ`(아레나 바닥 단일 진실, GameState BP 에 지정)를 쓴다. AoE 도 동일 폴백.
+3. 그래도 없으면 발밑.
+
+추가로 **두 함정**을 처리:
+- **보스 스케일 대응**: 보스가 x5 등으로 크게 스케일돼 있으면 `SetRelativeLocation` 의 상대 Z 가 부모 스케일만큼
+  뻥튀기돼 데칼이 땅속으로 꺼진다 → **`SetWorldScale3D(1)` + `SetWorldLocation`(월드 좌표 직접 지정)** 으로 회피.
+- **투영 깊이 0 방어**: `UBackHeadDecalComponent::UpdateRadius` 에서 `DecalSize.X` 를 **최소 128 클램프**
+  (실수로 `ProjectionDepth=0` 세팅 시 데칼이 아예 안 그려지던 것 방지).
+- **스폰 타이밍**: 보스 BeginPlay 가 발판 스폰보다 먼저 도는 맵 대응 — 바닥값을 잡을 때까지 0.25초 재시도 후 정지(`DecalGroundTimer`).
+
+수정 파일: `LostArk/Source/LostArk/Boss/BossBase.cpp`(+`.h` 타이머), `BackHeadDecalComponent.cpp`(깊이 클램프).
+**C++ 변경이라 에디터 리빌드 필요.** (진단 로그/디버그 박스/회전 화살표는 제거 완료.)
+
+---
+
+## D. 알려진 이슈 / 나중에 수정 (TODO)
+
+### D-1. 데칼 크기를 `RadiusPadding` 으로 못 줄임
+
+- **증상**: `BackHeadDecal` 의 `RadiusPadding` 을 낮춰도 데칼 링이 작아지지 않음.
+- **원인 추정**: 크기(`DecalSize.Y/Z = GetScaledCapsuleRadius + RadiusPadding`)가 **캡슐 반경에 종속** →
+  스케일 큰 보스(x5)는 반경만 ~510 이라 패딩을 줄여도 여전히 큼. `RadiusPadding` 은 더하는 값이라 **음수**로 줄이거나,
+  크기를 캡슐 반경이 아니라 **별도 `EditAnywhere` 반경 파라미터**로 직접 지정하도록 바꿔야 함.
+- **수정 방향**: `UpdateRadius` 를 "캡슐 반경 연동" 대신 "고정 반경 프로퍼티(`DecalRadius`)" 로 바꾸거나,
+  `RadiusPadding` 클램프(음수 허용)로 조정 가능하게.
+
+### D-2. 데칼이 플레이어 위에도 투영돼 플레이어 색이 바뀜
+
+- **원함**: 데칼은 지면에만 그려지고 **플레이어 메시 색은 안 바뀌게**.
+- **원인**: Deferred Decal 이 데칼 박스 안의 **모든 Receives Decals 서프에이스**(=플레이어 메시 포함)에 투영됨.
+- **수정 방향 (택1)**:
+  1. **플레이어 메시** `SetReceivesDecals(false)` — 캐릭터 스켈레탈메시에서 데칼 수신 끄기(가장 간단).
+     (보스 메시는 이미 `SetReceivesDecals(false)` 처리돼 있음 — 같은 방식)
+  2. 데칼 머티리얼을 특정 **Decal Response/스텐실**로 제한해 바닥만 받게.
+  3. `ProjectionDepth` 를 얇게(발판만 덮게) 줄여 서 있는 플레이어 몸에 덜 닿게 — 부분 완화용.
 
 ---
 
 ## 완료 체크리스트
 
-- [ ] `M_BossBackHead` 생성 + Deferred Decal / Translucent 설정
-- [ ] §A 1~8 노드 그래프 연결 (Center → 각도/반경 → 존/링 마스크 → 색 합성 → 출력)
-- [ ] 파라미터 Default 채우기 (하양/파랑/45/45/0.6/0.15)
-- [ ] 보스 BP `BackHeadDecal` 슬롯에 머티리얼 지정
-- [ ] PIE 정렬 확인 (하양=정면) + 필요 시 atan2 입력 보정
-- [ ] (선택) §C 지면 트레이스로 발판 위 투영 적용
+- [x] `M_BossBackHead` 생성 + Deferred Decal / Translucent 설정
+- [x] §A 1~8 노드 그래프 연결 (Center → 각도/반경 → 존/링 마스크 → 색 합성 → 출력)
+- [x] 파라미터 Default 채우기 (하양/파랑/45/45/0.6/0.15)
+- [x] 보스 BP `BackHeadDecal` 슬롯에 머티리얼 지정
+- [x] PIE 에서 발판 위 표시 확인 (§C — ArenaFloorZ 폴백 + 스케일/깊이 방어)
+- [ ] (D-1) 데칼 크기 조절 가능하게 (`RadiusPadding`/전용 반경 프로퍼티)
+- [ ] (D-2) 플레이어 메시 `SetReceivesDecals(false)` 로 플레이어 색 안 바뀌게
+- [ ] (선택) PIE 정렬 미세조정 (하양=정면) — atan2 입력/AngleOffset 보정

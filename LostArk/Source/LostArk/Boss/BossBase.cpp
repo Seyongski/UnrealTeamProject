@@ -12,6 +12,7 @@
 #include "Boss/Gimmick/BossGimmickTower.h"
 #include "Boss/Pattern/BossPatternComponent.h"
 #include "Boss/Raid/BossRaidGameMode.h"
+#include "Boss/Raid/BossRaidGameState.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
 #include "Boss/Gimmick/BossTerrainGimmickComponent.h"
 #include "Boss/Weapon/BossWeaponComponent.h"
@@ -20,15 +21,17 @@
 #include "Animation/AnimMontage.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "DrawDebugHelpers.h"
+#include "Engine/World.h"
+#include "CollisionQueryParams.h"
+#include "TimerManager.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
 
 // Sets default values
 ABossBase::ABossBase()
 {
-	// 기본 틱은 꺼두고(성능), 디버그 표시가 필요할 때만 BeginPlay에서 켠다
-	PrimaryActorTick.bCanEverTick = true;
+	// 액터 틱은 사용 안 함(데칼 갱신은 타이머, 나머지는 컴포넌트/노티파이가 담당)
+	PrimaryActorTick.bCanEverTick = false;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	// 백헤드 데칼: 캡슐(루트)에 부착 -> 보스 회전을 따라가며 앞=헤드 / 뒤=백 정렬
@@ -113,9 +116,6 @@ void ABossBase::BeginPlay()
 
 	UpdateBackHeadDecal();
 
-	// 회전 검증 디버그가 켜져 있을 때만 틱 활성화
-	SetActorTickEnabled(bDrawFacingDebug);
-
 	// 보스는 '회전만' 하고 절대 이동하지 않는 설계.
 	// 캐릭터끼리 캡슐이 겹치면 각자의 CharacterMovement 가 매 틱 겹침을 해소하며 자기 위치를 옮긴다
 	// (속도 0이어도). Walking 모드면 보스가 스스로 밀려난다 -> 이동을 꺼서(MOVE_None) 원천 차단.
@@ -138,22 +138,6 @@ void ABossBase::BeginPlay()
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UBossAttributeSet::GetHealthAttribute())
 			.AddUObject(this, &ABossBase::OnHealthChanged);
 	}
-}
-
-void ABossBase::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-	if (!bDrawFacingDebug)
-	{
-		return;
-	}
-
-	// 캡슐(=액터, 루트) forward 를 화살표로. 캡슐이 실제로 얼마나 돌았는지 실시간 확인용
-	const FVector Origin = GetActorLocation();
-	const float Length = (GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleRadius() : 50.f) + 150.f;
-	DrawDebugDirectionalArrow(GetWorld(), Origin, Origin + GetActorForwardVector() * Length,
-		40.f, FColor::Yellow, false, -1.f, 0, 4.f);
 }
 
 void ABossBase::InitializeAttributes()
@@ -385,13 +369,74 @@ float ABossBase::GetMaxHealthValue() const
 
 void ABossBase::UpdateBackHeadDecal()
 {
-	if (!BackHeadDecal || !GetCapsuleComponent())
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (!BackHeadDecal || !Capsule)
 	{
 		return;
 	}
 
-	// 데칼을 발밑으로 내리고(캡슐 중심 기준 아래), 반경에 맞춰 크기 갱신
-	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	BackHeadDecal->SetRelativeLocation(FVector(0.f, 0.f, -HalfHeight));
-	BackHeadDecal->UpdateRadius(GetCapsuleComponent()->GetScaledCapsuleRadius());
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const FVector CapsuleCenter = Capsule->GetComponentLocation();
+
+	// 발판 Z 를 AoE(BossPatternActorBase::ResolveGroundZ)와 '동일한 규칙'으로 구한다.
+	//  1) 발밑 아래로 트레이스 (bTraceComplex=true + 오브젝트 질의: 병합 바닥 SM_MERGED_* 대응)
+	//  2) 실패 시 GameState.ArenaFloorZ (아레나 바닥 단일 진실 — 보스가 선 자리엔 바닥 콜리전이
+	//     안 잡히는 맵이 있어서 필요. AoE 도 같은 폴백을 쓴다)
+	//  3) 그래도 없으면 발밑
+	float GroundWorldZ = CapsuleCenter.Z - HalfHeight; // 최종 폴백: 발밑
+	bool bResolved = false;
+
+	if (UWorld* World = GetWorld())
+	{
+		const FVector TraceStart = CapsuleCenter;
+		const FVector TraceEnd = CapsuleCenter - FVector(0.f, 0.f, 10000.f);
+
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BackHeadDecalGround), /*bTraceComplex=*/true, this);
+		FCollisionObjectQueryParams ObjParams;
+		ObjParams.AddObjectTypesToQuery(ECC_WorldStatic);
+		ObjParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+		FHitResult Hit;
+		if (World->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjParams, Params))
+		{
+			GroundWorldZ = Hit.ImpactPoint.Z;
+			bResolved = true;
+		}
+		else if (const ABossRaidGameState* GS = World->GetGameState<ABossRaidGameState>())
+		{
+			if (!FMath::IsNearlyZero(GS->ArenaFloorZ))
+			{
+				GroundWorldZ = GS->ArenaFloorZ;
+				bResolved = true;
+			}
+		}
+	}
+
+	// 보스가 크게 스케일(예: x5)돼 있어도 데칼 위치/크기가 왜곡되지 않게:
+	//  - 데칼 자체 월드 스케일을 1 로 고정 → footprint 가 부모 스케일로 뻥튀기되는 것 방지
+	//    (UpdateRadius 가 GetScaledCapsuleRadius 로 이미 스케일 반영 → 여기서 또 곱하면 이중)
+	//  - 위치는 '월드 좌표'로 직접 지정 → SetRelativeLocation 은 부모 스케일이 곱해져
+	//    상대 Z 가 5배로 뻥튀기되며 데칼이 땅속으로 꺼지는 문제가 있어 이렇게 회피.
+	//    (부착 상태라 현재 컴포넌트 월드 XY 는 이미 보스 아래에 정렬돼 있음 → XY 유지, Z 만 지면에)
+	BackHeadDecal->SetWorldScale3D(FVector(1.f));
+	FVector DecalWorld = BackHeadDecal->GetComponentLocation();
+	DecalWorld.Z = GroundWorldZ + 4.f;
+	BackHeadDecal->SetWorldLocation(DecalWorld);
+	BackHeadDecal->UpdateRadius(Capsule->GetScaledCapsuleRadius());
+
+	// 보스 BeginPlay 가 '발판 스폰'보다 먼저 도는 맵이 있어(로그상 BackHeadDecal 이 첫 줄),
+	// 첫 트레이스는 바닥을 못 잡고 발밑 폴백으로 꺼질 수 있다.
+	// → 바닥을 잡을 때까지 짧게 재시도하고, 잡으면 타이머 정지. (보스는 MOVE_None 이라 이후 고정)
+	if (UWorld* World = GetWorld())
+	{
+		FTimerManager& TM = World->GetTimerManager();
+		if (bResolved)
+		{
+			TM.ClearTimer(DecalGroundTimer);
+		}
+		else if (!DecalGroundTimer.IsValid())
+		{
+			TM.SetTimer(DecalGroundTimer, this, &ABossBase::UpdateBackHeadDecal, 0.25f, /*bLoop=*/true);
+		}
+	}
 }

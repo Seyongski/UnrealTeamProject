@@ -12,6 +12,7 @@
 #include "Character/LostArkCharacter.h"
 #include "Monster/LostArkMonster.h"
 #include "Boss/BossBase.h"
+#include "Components/CapsuleComponent.h"
 
 static bool IsValidDamageTarget(AActor* Instigator, AActor* Target)
 {
@@ -208,6 +209,28 @@ void ULostArkGameplayAbility::ApplyDamageShape(FVector Origin, FRotator Rotation
 		if (bIsCounterSkill)
 		{
 			SpecHandle.Data->AddDynamicAssetTag(FGameplayTag::RequestGameplayTag(FName("Ability.Type.Counter"), false));
+
+			FGameplayEventData CounterEventData;
+			CounterEventData.Instigator = InstigatorActor;
+			CounterEventData.Target = HitActor;
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+				HitActor,
+				FGameplayTag::RequestGameplayTag(FName("Event.Boss.CounterHit"), false),
+				CounterEventData
+			);
+		}
+
+		if (StaggerAmount > 0.f)
+		{
+			FGameplayEventData StaggerEventData;
+			StaggerEventData.Instigator = InstigatorActor;
+			StaggerEventData.Target = HitActor;
+			StaggerEventData.EventMagnitude = StaggerAmount;
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+				HitActor,
+				FGameplayTag::RequestGameplayTag(FName("Event.Boss.StaggerHit"), false),
+				StaggerEventData
+			);
 		}
 
 		UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(

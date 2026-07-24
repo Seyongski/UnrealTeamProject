@@ -82,23 +82,8 @@ protected:
 	void OnTouchTriggered();
 	void OnTouchReleased();
 
-	// ===== [임시 디버그] Q -> 보스 카운터 강제 (헤드존 무시). 카운터/그로기 흐름 확인용. 나중에 전부 삭제 =====
-	void DebugForceCounterHit();
-	UFUNCTION(Server, Reliable)
-	void ServerDebugForceCounterHit();
-	// ============================================================================================
-
-	// ===== [임시 디버그] G -> 저스트가드 모션. 창이 없으면 '비활성화', 있으면 '발동'(+성공/실패는 장판이 표시). 나중에 삭제 =====
-	void DebugTryJustGuard();
-	UFUNCTION(Server, Reliable)
-	void ServerDebugTryJustGuard();
-	// ============================================================================================
-
-	// ===== [임시 디버그] E -> 보스 무력화 게이지 10 감소 (페이즈 중에만 유효). 나중에 스킬로 대체/삭제 =====
-	void DebugStaggerHit();
-	UFUNCTION(Server, Reliable)
-	void ServerDebugStaggerHit();
-	// ============================================================================================
+	/** G키 입력 시 저스트가드 시도 (State.Player.GuardReady 보유 시 발동) */
+	void TryJustGuardInput();
 
 private:
 	FVector CachedDestination;

@@ -92,6 +92,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|UI")
 	TSubclassOf<class ALostArkDamageTextActor> DamageTextClass;
 
+	/** 보스 기본 공격력 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boss|Stats")
+	float BaseAttackDamage = 100.f;
+
+	/** 플레이어 데미지 적용 이펙트 클래스 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Combat")
+	TSubclassOf<class UGameplayEffect> DefaultDamageEffectClass;
+
 	/** 위치 판정 존 각도 (UBossCombatStatics 가 읽어감) */
 	float GetHeadZoneHalfAngle() const { return HeadZoneHalfAngle; }
 	float GetBackZoneHalfAngle() const { return BackZoneHalfAngle; }

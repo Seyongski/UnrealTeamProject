@@ -90,6 +90,10 @@ void ALostArkMonster::PossessedBy(AController* NewController)
 
 		if (AttributeSet)
 		{
+			AttributeSet->InitMaxHealth(InitialMaxHealth);
+			AttributeSet->InitHealth(InitialMaxHealth);
+			AttributeSet->InitMaxMana(InitialMaxMana);
+			AttributeSet->InitMana(InitialMaxMana);
 			AttributeSet->InitAttackRange(BaseAttackRange);
 		}
 
@@ -200,7 +204,10 @@ void ALostArkMonster::OnAcquiredFromPool_Implementation()
 
 	if (AttributeSet)
 	{
-		AttributeSet->SetHealth(AttributeSet->GetMaxHealth());
+		AttributeSet->InitMaxHealth(InitialMaxHealth);
+		AttributeSet->InitHealth(InitialMaxHealth);
+		AttributeSet->InitMaxMana(InitialMaxMana);
+		AttributeSet->InitMana(InitialMaxMana);
 		AttributeSet->InitAttackRange(BaseAttackRange);
 	}
 	bIsDead = false;

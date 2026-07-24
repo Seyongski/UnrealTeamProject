@@ -22,6 +22,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
+#include "TimerManager.h"
 
 // Sets default values
 ABossBase::ABossBase()
@@ -308,6 +309,9 @@ void ABossBase::MulticastPlayDeathMontage_Implementation()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Boss] %s DeathMontage 미지정 — 사망 모션 없이 현재 포즈 유지"), *GetName());
+
+		// 몽타주가 없으면 종료 콜백도 안 오므로 여기서 바로 소멸 예약 (서버에서만)
+		ScheduleDisappear();
 	}
 }
 
@@ -318,6 +322,55 @@ void ABossBase::OnDeathMontageEnded(UAnimMontage* /*Montage*/, bool /*bInterrupt
 	{
 		MeshComp->bPauseAnims = true;
 	}
+
+	// 이 콜백은 전 머신에서 오지만, 액터 소멸은 서버 권위 (클라는 복제로 사라진다)
+	ScheduleDisappear();
+}
+
+void ABossBase::ScheduleDisappear()
+{
+	if (!bDestroyAfterDeathMontage || !HasAuthority() || bDisappearScheduled)
+	{
+		return;
+	}
+	bDisappearScheduled = true;
+
+	if (DeathDisappearDelay <= KINDA_SMALL_NUMBER)
+	{
+		BeginDisappear();
+		return;
+	}
+	GetWorldTimerManager().SetTimer(
+		DisappearTimer, this, &ABossBase::BeginDisappear, DeathDisappearDelay, false);
+}
+
+void ABossBase::BeginDisappear()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	// 디졸브/파티클 등 소멸 연출을 전 머신에서 먼저 재생
+	MulticastBossDisappear();
+
+	if (DisappearFXDuration <= KINDA_SMALL_NUMBER)
+	{
+		Destroy();
+		return;
+	}
+	// 연출이 끝난 뒤 실제 소멸 (서버가 Destroy -> 클라에서도 복제로 제거)
+	FTimerDelegate DestroyDelegate;
+	DestroyDelegate.BindWeakLambda(this, [this]()
+	{
+		Destroy();
+	});
+	GetWorldTimerManager().SetTimer(DisappearTimer, DestroyDelegate, DisappearFXDuration, false);
+}
+
+void ABossBase::MulticastBossDisappear_Implementation()
+{
+	OnBossDisappear();
 }
 
 float ABossBase::GetCurrentHealth() const

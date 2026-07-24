@@ -5,6 +5,7 @@
 #include "Boss/Pattern/BossPhaseDataAsset.h"
 #include "Boss/Pattern/PatternDataAsset.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
+#include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Engine/AssetManager.h"
@@ -53,11 +54,14 @@ void UBossPatternComponent::StopCombat()
 	bCombatStopped = true;
 	PendingPhaseIndex = INDEX_NONE;
 
-	// 그로기 대기 등으로 걸려 있던 발동 재시도 중단
+	// 그로기 대기 등으로 걸려 있던 발동 재시도 / 패턴 사이 딜타임 중단
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ActivateRetryTimer);
+		World->GetTimerManager().ClearTimer(PatternIntervalTimer);
 	}
+
+	SetIdleTag(false);
 }
 
 void UBossPatternComponent::NotifyHealthPercent(float HealthPercent)
@@ -143,12 +147,32 @@ void UBossPatternComponent::RunNextPattern()
 	if (UPatternDataAsset* Next = Phase->PickRandomWeighted())
 	{
 		RunPatternData(Next);
+		return;
 	}
-	// 뽑을 패턴이 없으면 대기 (StartCombat/전환 시 다시 시도됨)
+
+	// 이 페이즈에 일반 패턴이 없으면(예: 전환 기믹만 있는 최종 페이즈) 보스가 영원히 멈춘다.
+	// -> 패턴이 있는 가장 가까운 이전 페이즈의 패턴 풀을 그대로 재사용.
+	//    단 그 몽타주들은 프리로드가 풀린 상태라 첫 재생 때 동기 로드 히칭이 있다.
+	//    상시 쓸 거면 해당 페이즈 Patterns 에 직접 넣어 프리로드 대상에 포함시킬 것.
+	for (int32 i = CurrentPhaseIndex - 1; i >= 0; --i)
+	{
+		if (Phases[i])
+		{
+			if (UPatternDataAsset* Fallback = Phases[i]->PickRandomWeighted())
+			{
+				RunPatternData(Fallback);
+				return;
+			}
+		}
+	}
+	// 어느 페이즈에도 패턴이 없으면 대기 (StartCombat/전환 시 다시 시도됨)
 }
 
 void UBossPatternComponent::RunPatternData(UPatternDataAsset* Data)
 {
+	// 패턴이 시작되므로 딜타임 Idle 종료
+	SetIdleTag(false);
+
 	ActivePatternData = Data;
 
 	// 패턴 시작 시 타겟 선정 (정책은 패턴 데이터에서)
@@ -228,10 +252,59 @@ void UBossPatternComponent::PreloadPhaseAssets(const UBossPhaseDataAsset* Phase)
 	}
 }
 
+void UBossPatternComponent::SetIdleTag(bool bEnable)
+{
+	if (bIdleTagActive == bEnable)
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = GetASC())
+	{
+		if (bEnable)
+		{
+			ASC->AddLooseGameplayTag(LostArkTags::State_Boss_Idle);
+		}
+		else
+		{
+			ASC->RemoveLooseGameplayTag(LostArkTags::State_Boss_Idle);
+		}
+	}
+	bIdleTagActive = bEnable;
+}
+
 void UBossPatternComponent::OnPatternAbilityFinished()
 {
 	// 0) 전투 정지(사망 등) 후엔 다음 패턴을 돌리지 않는다
 	//    (사망 시 CancelAllAbilities 가 이 콜백을 부르며 들어오는 경로)
+	if (bCombatStopped)
+	{
+		return;
+	}
+
+	// 딜타임: 방금 끝난 패턴의 개별 지정(>=0)이 있으면 그걸, 없으면 컴포넌트 기본값을 쓴다.
+	// 이 동안 몽타주가 없으므로 ABP 는 자연히 Idle 로 떨어지고, State.Boss.Idle 태그가 붙는다.
+	const float Delay = (ActivePatternData && ActivePatternData->PostPatternDelayOverride >= 0.f)
+		? ActivePatternData->PostPatternDelayOverride
+		: PatternIntervalSeconds;
+
+	UWorld* World = GetWorld();
+	if (Delay > 0.f && World)
+	{
+		SetIdleTag(true);
+		World->GetTimerManager().SetTimer(
+			PatternIntervalTimer, this, &UBossPatternComponent::ProceedAfterInterval, Delay, false);
+		return;
+	}
+
+	ProceedAfterInterval();
+}
+
+void UBossPatternComponent::ProceedAfterInterval()
+{
+	SetIdleTag(false);
+
+	// 딜타임 중에 사망/전투정지가 들어왔을 수 있다
 	if (bCombatStopped)
 	{
 		return;

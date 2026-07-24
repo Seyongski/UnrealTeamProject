@@ -90,38 +90,73 @@ ABossGimmickTower* UBossTerrainGimmickComponent::SpawnGimmickTower(int32 TargetS
 
 	// 1) 이번 라운드 파괴 대상 = 몽타주(AN_SpawnTower)가 지정한 슬라이스.
 	//    바라보기(FaceSlice)/파괴(DestroySlice)가 모두 이 값을 따른다.
+	//    노티파이 값은 몽타주에 고정이라, 기믹 순서가 바뀌거나 같은 값이 두 번 쓰이면
+	//    '이미 파괴된 슬라이스'를 가리킬 수 있다 -> 남은 슬라이스 중 랜덤으로 대체.
+	if (GS->IsSliceDestroyed(TargetSlice))
+	{
+		TArray<int32> AliveSlices;
+		for (int32 Slice = 0; Slice < GS->SliceCount; ++Slice)
+		{
+			if (!GS->IsSliceDestroyed(Slice))
+			{
+				AliveSlices.Add(Slice);
+			}
+		}
+		if (AliveSlices.Num() == 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[TerrainGimmick] 남은 지형이 없음 — 라운드 스킵"));
+			return nullptr;
+		}
+
+		const int32 Replacement = AliveSlices[FMath::RandRange(0, AliveSlices.Num() - 1)];
+		UE_LOG(LogTemp, Warning,
+			TEXT("[TerrainGimmick] TargetSlice(%d) 는 이미 파괴됨 -> 남은 슬라이스 %d 로 대체"),
+			TargetSlice, Replacement);
+		TargetSlice = Replacement;
+	}
+
 	CurrentSliceIndex = TargetSlice;
 	CurrentGimmickLocation = GS->GetSliceCenterLocation(TargetSlice, GimmickLookRadius);
 	bHasGimmickLocation = true;
 
-	// 2) 타워 스폰 후보 = [미파괴 && 이번 파괴대상 아님 && 타워 없음 && 스폰 위치 있음].
-	//    타워가 곧 무너질 지형과 함께 사라지는 것을 방지 (이번에 부술 슬라이스를 제외).
-	TArray<int32> Candidates;
-	for (int32 Slice = 0; Slice < GS->SliceCount; ++Slice)
+	// 2) 타워 스폰 후보 = [미파괴 && 이번 파괴대상 아님 && 그 슬라이스에 타워 없음].
+	//    '어느 슬라이스 위인가'는 배열 인덱스가 아니라 스폰 지점의 실제 월드 위치로 판정한다.
+	//    TowerSpawnPoints 를 손으로 채우면서 순서가 규약(인덱스 N = 슬라이스 N)과 어긋나면
+	//    이미 파괴된 지형 위에 타워가 서기 때문. 위치 판정은 바닥 조각을 무너뜨리는 쪽
+	//    (UArenaFloorBridgeComponent::GetSliceIndexForLocation)과 같은 함수를 쓰므로 항상 일치한다.
+	TArray<TPair<int32, int32>> Candidates;	// (스폰 지점 인덱스, 그 지점이 서 있는 슬라이스)
+	for (int32 PointIndex = 0; PointIndex < TowerSpawnPoints.Num(); ++PointIndex)
 	{
-		if (GS->IsSliceDestroyed(Slice) || Slice == TargetSlice ||
-			LiveTowers.Contains(Slice) || !TowerSpawnPoints.IsValidIndex(Slice))
+		const int32 Slice = GS->GetSliceIndexAt(TowerSpawnPoints[PointIndex]);
+		if (Slice == INDEX_NONE)
 		{
 			continue;
 		}
-		Candidates.Add(Slice);
+		if (Slice != PointIndex)
+		{
+			// 데이터 점검용: 배열 순서와 실제 위치가 어긋남 (동작은 위치 기준으로 정상 진행)
+			UE_LOG(LogTemp, Warning,
+				TEXT("[TerrainGimmick] TowerSpawnPoints[%d] 는 실제로 슬라이스 %d 위에 있음 (배열 순서 확인 권장)"),
+				PointIndex, Slice);
+		}
+
+		if (GS->IsSliceDestroyed(Slice) || Slice == TargetSlice || LiveTowers.Contains(Slice))
+		{
+			continue;
+		}
+		Candidates.Emplace(PointIndex, Slice);
 	}
 
-	// 마지막 라운드 폴백: 남은 미파괴 지형이 파괴대상 하나뿐이라 제외 후 후보가 없으면
-	// 파괴대상 슬라이스 위에 스폰한다 (그곳 말고는 설 지형이 없으므로).
-	if (Candidates.Num() == 0 &&
-		!LiveTowers.Contains(TargetSlice) && TowerSpawnPoints.IsValidIndex(TargetSlice))
-	{
-		Candidates.Add(TargetSlice);
-	}
-
+	// 설 곳이 없으면(마지막 라운드 등) 이번 라운드는 타워 없이 진행한다.
+	// 예전엔 파괴대상 슬라이스 위에 폴백 스폰했지만, 곧 무너질 지형에 세우는 셈이라 제거.
 	if (Candidates.Num() == 0 || !TowerClass)
 	{
 		return nullptr;	// 파괴 대상만 확정, 타워는 생략 (스폰할 곳/클래스 없음)
 	}
 
-	const int32 SpawnSlice = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
-	const FVector TowerLoc = TowerSpawnPoints[SpawnSlice];
+	const TPair<int32, int32>& Picked = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+	const int32 SpawnSlice = Picked.Value;
+	const FVector TowerLoc = TowerSpawnPoints[Picked.Key];
 
 	const FTransform SpawnTM(FRotator::ZeroRotator, TowerLoc);
 	ABossGimmickTower* Tower = World->SpawnActorDeferred<ABossGimmickTower>(

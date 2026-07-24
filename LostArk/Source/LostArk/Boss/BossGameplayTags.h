@@ -15,11 +15,16 @@ namespace LostArkTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_2);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_3);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_4);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_5);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Counterable);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Countered);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Groggy);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_TrackTarget);
+
+	// 패턴과 패턴 사이 딜레이(휴식) 구간. 몽타주 없이 Idle 로 서 있는 동안만 부여.
+	// 브레인(UBossPatternComponent)이 켜고 끈다 — 연출/UI/디버그가 이 태그에 바인딩 가능
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Idle);
 
 	// 카운터 창: AnimNotifyState_BossCounter 가 구간 동안 부여.
 	// 부모(State.Boss.Counterable)로 매치하면 종류 무관 "카운터 창 열림"만 감지되므로

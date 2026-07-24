@@ -38,6 +38,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern")
 	TSubclassOf<UBossPatternAbility> DefaultPatternAbility;
 
+	/**
+	 * 패턴이 끝난 뒤 다음 패턴(또는 페이즈 전환 기믹)까지 쉬는 시간(초) — 딜타임.
+	 * 이 동안 보스는 몽타주 없이 Idle 로 서 있고 State.Boss.Idle 태그가 붙는다.
+	 * 패턴별로 다르게 하려면 UPatternDataAsset::PostPatternDelayOverride 로 덮어쓴다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (ClampMin = "0.0"))
+	float PatternIntervalSeconds = 1.f;
+
 	/** 패턴 어빌리티를 ASC에 부여. ASC 초기화(InitAbilityActorInfo) 이후에 호출할 것 */
 	void InitializePatterns();
 
@@ -68,6 +76,12 @@ private:
 	void EnterPhase(int32 PhaseIndex);
 	void SwapPhaseTag(const FGameplayTag& NewPhaseTag);
 	void RunNextPattern();
+
+	/** 딜타임이 끝난 뒤 실제로 다음 패턴/페이즈 전환을 결정 (OnPatternAbilityFinished 의 본체) */
+	void ProceedAfterInterval();
+	/** 딜타임 동안 State.Boss.Idle 토글 */
+	void SetIdleTag(bool bEnable);
+
 	void RunPatternData(UPatternDataAsset* Data);
 	void ActivateAbilityNow();
 
@@ -83,8 +97,11 @@ private:
 	bool bCombatStopped = false;			// StopCombat 이후 (사망 등) — 패턴 재개 금지
 	FGameplayTag CurrentPhaseTag;			// 현재 ASC에 부여 중인 페이즈 태그
 
+	bool bIdleTagActive = false;			// 딜타임 Idle 태그 부여 중인지
+
 	FGameplayAbilitySpecHandle PatternAbilityHandle;
 	FTimerHandle ActivateRetryTimer;			// 발동 실패(그로기 등) 시 재시도 타이머
+	FTimerHandle PatternIntervalTimer;			// 패턴 사이 딜타임 타이머
 	TSharedPtr<FStreamableHandle> PhasePreloadHandle;	// 현재 페이즈 몽타주 로드 유지 핸들
 
 	UPROPERTY(Transient)

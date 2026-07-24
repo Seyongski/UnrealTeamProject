@@ -10,6 +10,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "GameFramework/PlayerState.h"
 
 void ABossRaidGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -20,6 +21,25 @@ void ABossRaidGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ABossRaidGameState, ArenaFloorZ);
 	DOREPLIFETIME(ABossRaidGameState, bRaidCleared);
 	DOREPLIFETIME(ABossRaidGameState, RaidBgm);
+	DOREPLIFETIME(ABossRaidGameState, PlayerDamageList);
+}
+
+void ABossRaidGameState::AddPlayerDamage(APlayerState* PlayerState, float Damage)
+{
+	if (!HasAuthority() || !PlayerState) return;
+
+	for (FPlayerDamageInfo& Info : PlayerDamageList)
+	{
+		if (Info.PlayerState == PlayerState)
+		{
+			Info.DamageDealt += Damage;
+			ForceNetUpdate();
+			return;
+		}
+	}
+
+	PlayerDamageList.Add(FPlayerDamageInfo(PlayerState, Damage));
+	ForceNetUpdate();
 }
 
 bool ABossRaidGameState::IsSliceDestroyed(int32 SliceIndex) const
@@ -201,4 +221,31 @@ void ABossRaidGameState::RemoveClearWidgets()
 		}
 	}
 	ActiveClearWidgets.Empty();
+
+	ShowMvpWindowLocally();
+}
+
+void ABossRaidGameState::ShowMvpWindowLocally()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (!PC || !PC->IsLocalController()) continue;
+
+		if (MvpWidgetClass)
+		{
+			if (UUserWidget* Widget = CreateWidget<UUserWidget>(PC, MvpWidgetClass))
+			{
+				Widget->AddToViewport(100);
+				PC->SetShowMouseCursor(true);
+				
+				FInputModeUIOnly InputMode;
+				InputMode.SetWidgetToFocus(Widget->TakeWidget());
+				PC->SetInputMode(InputMode);
+			}
+		}
+	}
 }

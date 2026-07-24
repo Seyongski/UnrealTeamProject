@@ -57,8 +57,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability|Damage", meta = (ShowOnlyInnerProperties))
 	FDamageShapeParams DamageShapeParams;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability|Combat")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability|Combat")
 	bool bIsCounterSkill = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability|Damage", meta = (ClampMin = "0.0"))
+	float StaggerAmount = 10.f;
 
 	void ApplyDamageShape(FVector Origin, FRotator Rotation, AActor* InstigatorActor);
 

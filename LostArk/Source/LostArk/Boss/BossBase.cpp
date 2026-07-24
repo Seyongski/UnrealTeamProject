@@ -239,10 +239,14 @@ void ABossBase::HandleDeath()
 		AbilitySystemComponent->CancelAllAbilities();
 	}
 
-	// 3) 기믹 정리: 무력화 페이즈 내리기 (게이지 UI 숨김)
+	// 3) 기믹 정리: 무력화 페이즈 내리기 (게이지 UI 숨김) + 어그로 표식 회수 (마커가 남지 않게)
 	if (TerrainGimmickComponent)
 	{
 		TerrainGimmickComponent->EndStaggerPhase();
+	}
+	if (TargetingComponent)
+	{
+		TargetingComponent->ClearMark();
 	}
 
 	// 4) 남아있는 장판/타워 정리. 잡힌 플레이어는 장판 EndPlay(OnEndPlay)가 안전 복구한다

@@ -22,6 +22,8 @@ namespace LostArkTags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_Grabbed, "State.Player.Grabbed", "보스에게 잡힌 상태 (입력/이동 잠금은 플레이어 쪽에서 바인딩)");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_Marked, "State.Player.Marked", "어그로 표식: 기믹이 지정한 1명 (복제 루스, 몸통 마커 위젯 표시 게이트)");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boss_JustGuardable, "State.Boss.JustGuardable", "저스트가드 창 열림 (보스 노란 글로우 연출을 이 태그에 바인딩)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_GuardReady, "State.Player.GuardReady", "저스트가드 1회 가능 상태 (G 입력 소모 시 제거)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Player_Guarding, "State.Player.Guarding", "저스트가드 모션 재생 중 (이동/스킬 잠금은 플레이어 쪽에서 바인딩)");

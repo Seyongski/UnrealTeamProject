@@ -72,7 +72,8 @@ public:
 	FORCEINLINE class USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
+	UFUNCTION(Server, Reliable)
+	void Server_SetCharacterRotation(FRotator NewRotation);
 public:
 	UPROPERTY(BlueprintReadWrite, Category = "Character|Anim", Replicated)
 	bool bIsLeftFootForward;

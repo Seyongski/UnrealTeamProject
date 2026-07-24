@@ -109,7 +109,16 @@ protected:
 	TSubclassOf<class UGameplayAbility> ComboAttackAbilityClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Abilities")
+	TSubclassOf<class UGameplayAbility> JustGuardAbilityClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Abilities")
 	TArray<FLostArkSkillInputBind> SkillInputBinds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Stats")
+	float InitialMaxHealth = 1000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Stats")
+	float InitialMaxMana = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Movement")
 	float BaseRunSpeed;

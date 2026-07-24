@@ -251,11 +251,17 @@ void ULostArkSkill_Targeting::OnHitCheckReceived(FGameplayEventData Payload)
 	// ?대젃寃??섎㈃ 怨듯넻 ApplyDamageShape ?댁쓽 ?⑥닚 Abs(Z李⑥씠) 鍮꾧탳 ?곗궛 ?띾룄瑜?100% 媛蹂띻쾶 ?좎??????덉뒿?덈떎.
 	FVector AdjustedLocation = CachedTargetLocation + FVector(0.f, 0.f, 90.f);
 
+	// 장판 타겟팅 스킬은 마우스 클릭 타겟점이 중심점이 되도록 ForwardOffset 오차를 0으로 보정
+	float SavedForwardOffset = DamageShapeParams.ForwardOffset;
+	DamageShapeParams.ForwardOffset = 0.f;
+
 	ApplyDamageShape(
 		AdjustedLocation,
 		LookRot,
 		AvatarActor
 	);
+
+	DamageShapeParams.ForwardOffset = SavedForwardOffset;
 }
 
 void ULostArkSkill_Targeting::Multicast_OnTargetConfirmed_Implementation(FVector TargetLocation)

@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "Core/LostArkGameMode.h"
+#include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 
@@ -56,10 +57,13 @@ void ALostArkStagePortalArea::BeginPlay()
 			ActivatePortal();
 		}
 
-		// 멀티플레이어 PIE 클라이언트 접속 완료 시점에 맞춰 0.2초, 0.8초 후 인원수 및 상태를 클라이언트에 전송합니다.
-		FTimerHandle TimerHandle1, TimerHandle2;
-		GetWorldTimerManager().SetTimer(TimerHandle1, this, &ALostArkStagePortalArea::CheckAllPlayersReady, 0.2f, false);
-		GetWorldTimerManager().SetTimer(TimerHandle2, this, &ALostArkStagePortalArea::CheckAllPlayersReady, 0.8f, false);
+		// 멀티플레이어 PIE 및 클라이언트 접속 지연(로딩 시점 차이)에 대응하여
+		// 0.2초, 0.5초, 1.0초, 2.0초 다단계 시점에 세션 인원수를 자동 재계산 및 복제 동기화합니다.
+		FTimerHandle T1, T2, T3, T4;
+		GetWorldTimerManager().SetTimer(T1, this, &ALostArkStagePortalArea::CheckAllPlayersReady, 0.2f, false);
+		GetWorldTimerManager().SetTimer(T2, this, &ALostArkStagePortalArea::CheckAllPlayersReady, 0.5f, false);
+		GetWorldTimerManager().SetTimer(T3, this, &ALostArkStagePortalArea::CheckAllPlayersReady, 1.0f, false);
+		GetWorldTimerManager().SetTimer(T4, this, &ALostArkStagePortalArea::CheckAllPlayersReady, 2.0f, false);
 	}
 }
 
@@ -137,12 +141,31 @@ void ALostArkStagePortalArea::CheckAllPlayersReady()
 	}
 
 	int32 RequiredPlayers = 0;
-	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+
+	// GameState의 PlayerArray 수(세션에 접속된 전체 플레이어 수) 우선 카운트
+	if (AGameStateBase* GS = World->GetGameState())
 	{
-		APlayerController* PC = It->Get();
-		if (IsValid(PC) && PC->GetPawn())
+		RequiredPlayers = GS->PlayerArray.Num();
+	}
+
+	// 폴백: GameMode의 GetNumPlayers() 또는 PlayerControllerIterator
+	if (RequiredPlayers <= 0)
+	{
+		if (AGameModeBase* GM = World->GetAuthGameMode())
 		{
-			RequiredPlayers++;
+			RequiredPlayers = GM->GetNumPlayers();
+		}
+	}
+
+	if (RequiredPlayers <= 0)
+	{
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			APlayerController* PC = It->Get();
+			if (IsValid(PC))
+			{
+				RequiredPlayers++;
+			}
 		}
 	}
 

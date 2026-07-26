@@ -18,6 +18,9 @@ ULostArkJustGuardAbility::ULostArkJustGuardAbility()
 	ActivationOwnedTags.AddTag(GuardingTag);
 
 	AbilityTags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Skill.JustGuard"), false));
+
+	// 발동 조건: 플레이어에게 'State.Player.GuardReady' 태그가 있을 때만 발동 가능
+	ActivationRequiredTags.AddTag(FGameplayTag::RequestGameplayTag(FName("State.Player.GuardReady"), false));
 }
 
 void ULostArkJustGuardAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

@@ -6,6 +6,8 @@
 #include "Core/LostArkCombatInterface.h"
 #include "Engine/Engine.h"
 #include "Character/LostArkCharacter.h"
+#include "Boss/Raid/BossRaidGameState.h"
+#include "GameFramework/PlayerState.h"
 
 UBossAttributeSet::UBossAttributeSet()
 {
@@ -67,12 +69,26 @@ void UBossAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 				float RandomZ = FMath::RandRange(50.f, 150.f);
 				FVector DamageTextSpawnLoc = TargetActor->GetActorLocation() + FVector(RandomX, RandomY, RandomZ);
 
-				// 보스를 타격함 -> 공격한 플레이어의 클라이언트에서 데미지 텍스트 표시
+				// 보스를 타격함 -> 공격한 플레이어의 클라이언트에서 데미지 텍스트 표시 및 딜량 기록
 				if (SourceActor)
 				{
 					if (ALostArkCharacter* SourceLostChar = Cast<ALostArkCharacter>(SourceActor))
 					{
 						SourceLostChar->Client_ShowDamageText(LocalIncomingDamage, DamageTextSpawnLoc);
+
+						if (TargetActor->HasAuthority())
+						{
+							if (APlayerState* PS = SourceLostChar->GetPlayerState())
+							{
+								if (UWorld* World = TargetActor->GetWorld())
+								{
+									if (ABossRaidGameState* GS = World->GetGameState<ABossRaidGameState>())
+									{
+										GS->AddPlayerDamage(PS, LocalIncomingDamage);
+									}
+								}
+							}
+						}
 					}
 				}
 			}

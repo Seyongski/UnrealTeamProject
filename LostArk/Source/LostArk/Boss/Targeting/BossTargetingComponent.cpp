@@ -189,6 +189,13 @@ void UBossTargetingComponent::UpdateFacing(float DeltaTime)
 	{
 		LastTrackTurnSign = 0.f;
 	}
+	// 추적 종료 엣지: 속도 오버라이드 정리.
+	// 정상 경로에선 노티파이 NotifyEnd 가 지우지만, 몽타주 중단/CleanupStep 이 태그를 먼저
+	// 걷어가 NotifyEnd 를 놓치는 경우가 있어 다음 패턴으로 값이 새지 않게 여기서도 막는다.
+	if (!bTracking && bWasTracking)
+	{
+		ClearTurnSpeedOverride();
+	}
 	bWasTracking = bTracking;
 
 	if (!bTracking)
@@ -228,8 +235,39 @@ void UBossTargetingComponent::UpdateFacing(float DeltaTime)
 		}
 	}
 
-	const FRotator NewRot = FMath::RInterpTo(Current, FRotator(0.f, DesiredYaw, 0.f), DeltaTime, RotationInterpSpeed);
+	// 이번 구간에 노티파이 오버라이드가 있으면 그 값, 없으면 컴포넌트 기본값
+	const float InterpSpeed = (bTurnSpeedOverridden && OverrideInterpSpeed > 0.f) ? OverrideInterpSpeed : RotationInterpSpeed;
+	const float TurnRateCap = bTurnSpeedOverridden ? OverrideMaxTurnRate : MaxTurnRate;
+
+	FRotator NewRot = FMath::RInterpTo(Current, FRotator(0.f, DesiredYaw, 0.f), DeltaTime, InterpSpeed);
+
+	// 초당 회전량 상한. RInterpTo 는 각도 차에 비례해 돌기 때문에 큰 각도의 첫 프레임이
+	// 과하게 빠르다 -> 프레임 스텝을 (상한 x DeltaTime) 으로 잘라 등속에 가깝게 만든다.
+	if (TurnRateCap > 0.f)
+	{
+		const float Step = FMath::FindDeltaAngleDegrees(Current.Yaw, NewRot.Yaw);
+		const float MaxStep = TurnRateCap * DeltaTime;
+		if (FMath::Abs(Step) > MaxStep)
+		{
+			NewRot.Yaw = Current.Yaw + FMath::Sign(Step) * MaxStep;
+		}
+	}
+
 	Owner->SetActorRotation(FRotator(0.f, NewRot.Yaw, 0.f));
+}
+
+void UBossTargetingComponent::PushTurnSpeedOverride(float InInterpSpeed, float InMaxTurnRate)
+{
+	OverrideInterpSpeed = FMath::Max(InInterpSpeed, 0.f);
+	OverrideMaxTurnRate = FMath::Max(InMaxTurnRate, 0.f);
+	bTurnSpeedOverridden = true;
+}
+
+void UBossTargetingComponent::ClearTurnSpeedOverride()
+{
+	bTurnSpeedOverridden = false;
+	OverrideInterpSpeed = 0.f;
+	OverrideMaxTurnRate = 0.f;
 }
 
 void UBossTargetingComponent::BeginScriptedTurn(float TurnRateDegPerSec, float FallbackSign)

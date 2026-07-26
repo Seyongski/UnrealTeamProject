@@ -67,7 +67,37 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Raid|Charge")
 	void ApplyChargeResonancePulse();
 
+	/**
+	 * 클라 로드 완료 보고 (서버). 전원이 모일 때까지 이 플레이어를 대기 화면에 묶어 두고,
+	 * 기대 인원이 다 차면 게이트를 연다. @see OpenReadyGate
+	 */
+	virtual void NotifyPlayerLevelLoaded(APlayerController* PC) override;
+
 protected:
+	/** 전원 로드 완료 전까지 폰 스폰을 막는다 (모르둠 ON. 문제 생기면 BP 에서 끄면 기존 동작으로 복귀) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Ready")
+	bool bWaitForAllPlayers = true;
+
+	/**
+	 * 전원 대기 최대 시간(초). 초과 시 도착한 인원만으로 시작한다.
+	 * 로딩 중 이탈/크래시로 기대 인원이 영영 안 차는 무한 대기를 막는 안전장치.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Ready", meta = (EditCondition = "bWaitForAllPlayers", ClampMin = "1.0"))
+	float MaxWaitForPlayersSeconds = 30.f;
+
+	/**
+	 * 이전 레벨에서 넘어온 인원수 정보가 없을 때(보스 맵 직접 실행/PIE 단독 테스트) 쓸 기대 인원.
+	 * 0 또는 1 이면 기다리지 않고 즉시 시작 -> 기존 테스트 흐름 그대로.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Ready", meta = (EditCondition = "bWaitForAllPlayers", ClampMin = "0"))
+	int32 FallbackExpectedPlayerCount = 0;
+
+	/** 대기 중인 플레이어는 폰을 받지 못한다 -> 이동/스킬/카메라가 원천 차단된다 */
+	virtual bool PlayerCanRestart_Implementation(APlayerController* Player) override;
+
+	/** 대기 중 이탈 처리: 준비 명단에서 빼고 기대 인원을 낮춰 재판정 (무한 대기 방지) */
+	virtual void Logout(AController* Exiting) override;
+
 	/**
 	 * 플레이어 폰 possess 완료 콜백 (서버). 조우가 이미 시작된 뒤 늦게 접속/possess 한
 	 * 플레이어(리슨서버에서 호스트보다 늦게 join 하는 원격 클라 포함)도 여기서 전하 + 레이드
@@ -182,6 +212,23 @@ protected:
 	float PlayerSpawnSpacingRadius = 140.f;
 
 private:
+	// ─── 전원 로드 게이트 (리슨서버: 호스트가 먼저 로드돼 혼자 먼저 움직이는 것 방지) ───
+
+	/** 아직 전원을 기다리는 중인가 (대기 기능이 꺼져 있으면 항상 false) */
+	bool IsReadyGateClosed() const { return bWaitForAllPlayers && !bReadyGateOpen; }
+
+	/** 준비 명단에서 이미 파괴된 컨트롤러를 정리하고 유효 인원수를 센다 */
+	int32 CountReadyPlayers();
+
+	/** 기대 인원이 다 찼는지 판정해 충족 시 게이트 개방 */
+	void CheckAllPlayersReady();
+
+	/** 게이트 개방: 막아뒀던 폰을 일괄 스폰 + 전 클라 대기 화면 해제 + 보류된 조우 시작 */
+	void OpenReadyGate(const TCHAR* Reason);
+
+	/** 대기 시간 초과 -> 도착한 인원만으로 시작 */
+	void OnReadyWaitTimeout();
+
 	ABossBase* FindBoss() const;
 
 	/** possess 직후 폰을 스폰지점 주변 링 슬롯으로 흩어 캡슐 겹침(튕김)을 방지 (서버) */
@@ -235,6 +282,13 @@ private:
 
 	bool bEncounterStarted = false;
 	bool bBossDied = false;	// NotifyBossDied 1회 가드
+
+	// 전원 로드 게이트 상태 (서버 전용 — 클라가 읽을 값이 아니라 복제하지 않는다)
+	bool bReadyGateOpen = false;
+	bool bEncounterPendingOnGate = false;	// 대기 중 들어온 StartEncounter 요청 보류 플래그
+	int32 ExpectedPlayerCount = 0;			// 기다릴 인원 (이전 레벨에서 인계받은 파티 인원수)
+	TSet<TWeakObjectPtr<APlayerController>> ReadyPlayers;
+	FTimerHandle ReadyWaitTimeoutTimer;
 
 	// 스폰 분산: 첫 플레이어 스폰 위치를 링 중심으로 잡고, 접속 순서대로 슬롯을 하나씩 배정
 	FVector PartySpawnOrigin = FVector::ZeroVector;

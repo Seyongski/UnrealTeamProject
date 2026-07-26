@@ -66,7 +66,12 @@ void ULostArkGameInstance::BeginLoadingScreen(const FString& MapName)
 void ULostArkGameInstance::EndLoadingScreen(UWorld* InLoadedWorld)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[GameInstance] EndLoadingScreen Called"));
-	
+
+	HideLoadingScreen();
+}
+
+void ULostArkGameInstance::HideLoadingScreen()
+{
 	if (ActiveLoadingWidget)
 	{
 		ActiveLoadingWidget->RemoveFromParent();

@@ -35,8 +35,10 @@ void UBackHeadDecalComponent::UpdateRadius(float CapsuleRadius)
 {
 	const float Extent = CapsuleRadius + RadiusPadding;
 
-	// 회전(Pitch -90) 상태에서 X = 투영 깊이, Y/Z = 지면 풋프린트(반지름 크기)
-	DecalSize = FVector(ProjectionDepth, Extent, Extent);
+	// 회전(Pitch -90) 상태에서 X = 투영 깊이, Y/Z = 지면 풋프린트(반지름 크기).
+	// 깊이는 최소 128 보장 — 0 이면 데칼이 아예 안 그려진다(실수로 0 세팅 방어).
+	const float Depth = FMath::Max(ProjectionDepth, 128.f);
+	DecalSize = FVector(Depth, Extent, Extent);
 	MarkRenderStateDirty();
 
 	if (DecalMID)

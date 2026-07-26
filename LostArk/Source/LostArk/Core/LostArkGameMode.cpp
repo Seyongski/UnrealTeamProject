@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Core/LostArkGameMode.h"
+#include "Core/LostArkGameInstance.h"
 #include "Core/LostArkPlayerController.h"
 #include "Character/LostArkCharacter.h"
 #include "UObject/ConstructorHelpers.h"
@@ -132,6 +133,23 @@ void ALostArkGameMode::ExecuteServerTravel()
 		TravelURL += TEXT("?listen");
 	}
 
+	// 다음 레벨의 '전원 로드 대기' 기준이 될 파티 인원수를 GameInstance 에 실어 보낸다.
+	// (비-seamless 트래블이라 클라는 각자 재접속 -> 새 GameMode 는 원래 몇 명이었는지 알 수 없다)
+	if (ULostArkGameInstance* LostArkGI = GetGameInstance<ULostArkGameInstance>())
+	{
+		LostArkGI->SetPendingPartySize(GetNumPlayers());
+		UE_LOG(LogTemp, Log, TEXT("[GameMode] 다음 레벨로 파티 인원수 인계: %d명"), GetNumPlayers());
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("[GameMode] All players in Stage Portal Area! Executing ServerTravel to: %s"), *TravelURL);
 	World->ServerTravel(TravelURL, false);
+}
+
+void ALostArkGameMode::NotifyPlayerLevelLoaded(APlayerController* PC)
+{
+	// 기본 규칙: 기다리지 않는다 -> 보고 즉시 대기 해제 (튜토리얼/카오스던전은 기존 동작 그대로)
+	if (ALostArkPlayerController* LostArkPC = Cast<ALostArkPlayerController>(PC))
+	{
+		LostArkPC->ClientSetWaitingForPlayers(false);
+	}
 }

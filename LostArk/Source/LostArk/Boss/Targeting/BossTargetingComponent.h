@@ -94,6 +94,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
 	float RotationInterpSpeed = 6.f;
 
+	/**
+	 * 추적 회전의 초당 최대 회전량(도). 0 = 무제한(기존 동작).
+	 * RInterpTo 는 각도 차에 비례해 도는 방식이라 각도가 클 때 초반이 매우 빠르다
+	 * (180도 차이면 시작 순간 InterpSpeed x 180 도/초). "확 돈다"를 잡는 건 이 상한이다.
+	 * 권장: 180~360 (느리게 보이게 하려면 낮출 것)
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Targeting", meta = (ClampMin = "0.0"))
+	float MaxTurnRate = 0.f;
+
+	/**
+	 * 이번 추적 구간에만 쓸 회전 속도 오버라이드 (노티파이가 호출. 서버 전용).
+	 * BP 디폴트 값은 건드리지 않으므로 구간이 끝나면 원래 속도로 돌아온다.
+	 * @param InInterpSpeed 보간 속도. 0 이하면 컴포넌트 기본값 유지
+	 * @param InMaxTurnRate 초당 최대 회전량(도). 0 = 무제한
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Targeting")
+	void PushTurnSpeedOverride(float InInterpSpeed, float InMaxTurnRate);
+
+	/** 회전 속도 오버라이드 해제 (노티파이 구간 종료 시) */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Targeting")
+	void ClearTurnSpeedOverride();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -126,4 +148,11 @@ private:
 
 	/** 스크립트 회전 속도(도/초, 크기만). 부호는 LastTrackTurnSign */
 	float ScriptedTurnRate = 0.f;
+
+	/** 노티파이 구간 회전 속도 오버라이드 활성 여부 */
+	bool bTurnSpeedOverridden = false;
+
+	/** 오버라이드 값 (활성일 때만 유효). 0 이하면 각각 컴포넌트 기본값으로 폴백 */
+	float OverrideInterpSpeed = 0.f;
+	float OverrideMaxTurnRate = 0.f;
 };

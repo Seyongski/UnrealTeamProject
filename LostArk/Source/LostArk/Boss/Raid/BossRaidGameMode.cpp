@@ -7,6 +7,8 @@
 #include "Boss/Raid/BossChargeGaugeComponent.h"
 #include "Boss/Raid/BossReviveComponent.h"
 #include "Monster/ArenaSliceActor.h"
+#include "Core/LostArkGameInstance.h"
+#include "Core/LostArkPlayerController.h"
 #include "Boss/BossBase.h"
 #include "Boss/BossGameplayTags.h"
 #include "Boss/Combat/BossCombatStatics.h"
@@ -33,6 +35,46 @@ void ABossRaidGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 전원 로드 게이트 초기화: 몇 명을 기다릴지 확정한다.
+	// (BeginPlay 이전에 로그인한 플레이어는 PlayerCanRestart 가 이미 false 를 돌려 폰이 없는 상태 —
+	//  OpenReadyGate 가 그들까지 한꺼번에 스폰하므로 순서에 상관없이 복구된다)
+	if (bWaitForAllPlayers)
+	{
+		ExpectedPlayerCount = FallbackExpectedPlayerCount;
+		if (ULostArkGameInstance* LostArkGI = GetGameInstance<ULostArkGameInstance>())
+		{
+			const int32 CarriedPartySize = LostArkGI->ConsumePendingPartySize();
+			if (CarriedPartySize > 0)
+			{
+				ExpectedPlayerCount = CarriedPartySize;
+			}
+		}
+
+		if (ExpectedPlayerCount <= 1)
+		{
+			// 혼자거나 인계받은 인원수 정보가 없음 -> 기다릴 대상이 없다
+			OpenReadyGate(TEXT("대기 대상 없음"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Ready] 전원 로드 대기 시작: %d명 (최대 %.0f초)"),
+				ExpectedPlayerCount, MaxWaitForPlayersSeconds);
+
+			GetWorldTimerManager().SetTimer(
+				ReadyWaitTimeoutTimer, this, &ABossRaidGameMode::OnReadyWaitTimeout,
+				FMath::Max(MaxWaitForPlayersSeconds, 1.f), false);
+
+			// BeginPlay 보다 먼저 보고를 마친 플레이어(리슨 호스트)가 있을 수 있으므로 즉시 1회 판정
+			CheckAllPlayersReady();
+		}
+	}
+	else
+	{
+		// 대기 기능 OFF. 플래그만 세우면 안 된다 — BeginPlay 보다 먼저 보고한 클라가 대기 화면을
+		// 띄운 채 방치되므로, 개방 경로를 그대로 태워 해제 통보까지 보낸다.
+		OpenReadyGate(TEXT("전원 대기 비활성"));
+	}
+
 	// 레벨 BGM: GameState 로 넘겨 복제 -> 각 클라가 로컬 재생 (늦은 접속도 복제로 커버)
 	if (LevelBgm)
 	{
@@ -49,6 +91,144 @@ void ABossRaidGameMode::BeginPlay()
 		GetWorldTimerManager().SetTimer(
 			Tmp, this, &ABossRaidGameMode::StartEncounter,
 			FMath::Max(AutoStartDelay, 0.01f), false);
+	}
+}
+
+bool ABossRaidGameMode::PlayerCanRestart_Implementation(APlayerController* Player)
+{
+	// 전원이 모이기 전에는 폰을 주지 않는다 -> 먼저 로드된 사람이 혼자 움직이는 것을 원천 차단
+	if (IsReadyGateClosed())
+	{
+		return false;
+	}
+	return Super::PlayerCanRestart_Implementation(Player);
+}
+
+void ABossRaidGameMode::NotifyPlayerLevelLoaded(APlayerController* PC)
+{
+	if (!IsReadyGateClosed())
+	{
+		Super::NotifyPlayerLevelLoaded(PC);	// 대기 불필요 -> 즉시 해제
+		return;
+	}
+
+	if (PC)
+	{
+		ReadyPlayers.Add(PC);
+
+		// 아직 전원이 안 왔다 -> 이 클라는 대기 화면 유지
+		if (ALostArkPlayerController* LostArkPC = Cast<ALostArkPlayerController>(PC))
+		{
+			LostArkPC->ClientSetWaitingForPlayers(true);
+		}
+	}
+
+	CheckAllPlayersReady();
+}
+
+int32 ABossRaidGameMode::CountReadyPlayers()
+{
+	// 이탈로 파괴된 컨트롤러는 세지 않고 명단에서 정리한다
+	for (auto It = ReadyPlayers.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+	return ReadyPlayers.Num();
+}
+
+void ABossRaidGameMode::CheckAllPlayersReady()
+{
+	if (!IsReadyGateClosed())
+	{
+		return;
+	}
+
+	const int32 ReadyCount = CountReadyPlayers();
+	UE_LOG(LogTemp, Warning, TEXT("[Ready] 로드 완료 %d / %d 명"), ReadyCount, ExpectedPlayerCount);
+
+	if (ExpectedPlayerCount > 0 && ReadyCount >= ExpectedPlayerCount)
+	{
+		OpenReadyGate(TEXT("전원 로드 완료"));
+	}
+}
+
+void ABossRaidGameMode::OnReadyWaitTimeout()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Ready] 대기 %.0f초 초과 -> 도착한 %d / %d 명으로 시작"),
+		MaxWaitForPlayersSeconds, CountReadyPlayers(), ExpectedPlayerCount);
+
+	OpenReadyGate(TEXT("대기 시간 초과"));
+}
+
+void ABossRaidGameMode::OpenReadyGate(const TCHAR* Reason)
+{
+	if (bReadyGateOpen)
+	{
+		return;
+	}
+	bReadyGateOpen = true;
+	GetWorldTimerManager().ClearTimer(ReadyWaitTimeoutTimer);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Ready] 게이트 개방 (%s): 준비 %d / 기대 %d"),
+		Reason, ReadyPlayers.Num(), ExpectedPlayerCount);
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 막아뒀던 폰을 지금 일괄 스폰.
+	// RestartPlayer 를 직접 부르지 않고 HandleStartingNewPlayer 로 되돌려야 스폰 분산/전하/레이드
+	// 컴포넌트 세팅(이 클래스의 오버라이드)까지 기존 경로를 그대로 탄다.
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (!PC)
+		{
+			continue;
+		}
+
+		if (!PC->GetPawn())
+		{
+			HandleStartingNewPlayer(PC);
+		}
+
+		if (ALostArkPlayerController* LostArkPC = Cast<ALostArkPlayerController>(PC))
+		{
+			LostArkPC->ClientSetWaitingForPlayers(false);
+		}
+	}
+
+	// 대기 중 들어온 조우 시작 요청을 이제 처리 (possess/ASC 정착 후 읽도록 짧게 늦춘다)
+	if (bEncounterPendingOnGate)
+	{
+		bEncounterPendingOnGate = false;
+
+		FTimerHandle Tmp;
+		GetWorldTimerManager().SetTimer(
+			Tmp, this, &ABossRaidGameMode::StartEncounter,
+			FMath::Max(AutoStartDelay, 0.2f), false);
+	}
+}
+
+void ABossRaidGameMode::Logout(AController* Exiting)
+{
+	if (APlayerController* PC = Cast<APlayerController>(Exiting))
+	{
+		ReadyPlayers.Remove(TWeakObjectPtr<APlayerController>(PC));
+	}
+
+	Super::Logout(Exiting);	// 여기서 NumPlayers 가 감소한다
+
+	// 로딩 중 이탈/크래시로 기대 인원이 영영 안 차는 것을 막는다 (남은 인원 기준 재판정)
+	if (IsReadyGateClosed())
+	{
+		ExpectedPlayerCount = FMath::Min(ExpectedPlayerCount, GetNumPlayers());
+		CheckAllPlayersReady();
 	}
 }
 
@@ -81,6 +261,15 @@ void ABossRaidGameMode::SetViewTargetForAll(AActor* NewViewTarget, float BlendTi
 
 void ABossRaidGameMode::StartEncounter()
 {
+	// 아직 전원이 안 모였으면 보류. 폰이 없는 상태로 돌리면 전하 부여/카메라 전환이 통째로 누락된다.
+	// 게이트가 열릴 때 OpenReadyGate 가 다시 호출해 준다.
+	if (IsReadyGateClosed())
+	{
+		bEncounterPendingOnGate = true;
+		UE_LOG(LogTemp, Warning, TEXT("[Ready] 전원 로드 대기 중 -> StartEncounter 보류"));
+		return;
+	}
+
 	if (bEncounterStarted)
 	{
 		return;

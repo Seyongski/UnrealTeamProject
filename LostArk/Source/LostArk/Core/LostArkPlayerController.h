@@ -31,6 +31,14 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientShowLoadingScreen();
 
+	/**
+	 * 서버 -> 이 클라: 전원 로드 대기 상태 전환.
+	 * true 면 대기 화면을 유지하고, false 면 내려서 플레이를 시작한다.
+	 * (대기 중에는 서버가 폰 자체를 스폰하지 않으므로 입력이 새어나갈 구멍이 없다)
+	 */
+	UFUNCTION(Client, Reliable)
+	void ClientSetWaitingForPlayers(bool bWaiting);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	TSoftObjectPtr<UNiagaraSystem> FXCursor;
 
@@ -76,6 +84,19 @@ protected:
 	 */
 	void TryCreateBossHUD();
 
+	/** 이 클라의 레벨 로드 완료를 서버에 보고 (서버가 전원 도착 여부를 판정) */
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyLevelLoaded();
+
+	/**
+	 * 월드/GameState 준비를 확인한 뒤 로드 완료를 1회 보고한다 (로컬 컨트롤러 전용).
+	 * GameState 복제 = 서버 연결과 월드 준비가 끝났다는 신호. 아직이면 짧게 재시도.
+	 */
+	void TryReportLevelLoaded();
+
+	/** 서버 응답이 끝내 오지 않는 비정상 상황에서 대기 화면이 영구히 남는 것 방지 */
+	void ForceClearWaitingScreen();
+
 	void OnInputStarted();
 	void OnSetDestinationTriggered();
 	void OnSetDestinationReleased();
@@ -93,6 +114,16 @@ private:
 	/** 보스 HUD 생성 재시도 타이머/횟수 (GameState/보스 복제 대기용) */
 	FTimerHandle BossHUDRetryTimer;
 	int32 BossHUDRetryCount = 0;
+
+	/** 로드 완료 보고 재시도 타이머/횟수 (GameState 복제 대기용) */
+	FTimerHandle LevelLoadReportTimer;
+	int32 LevelLoadReportRetryCount = 0;
+
+	/** 로드 완료 보고 1회 가드 */
+	bool bLevelLoadReported = false;
+
+	/** 대기 화면 강제 해제 타이머 (@see ForceClearWaitingScreen) */
+	FTimerHandle WaitingScreenFailsafeTimer;
 };
 
 

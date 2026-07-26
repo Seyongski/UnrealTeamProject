@@ -1,5 +1,6 @@
 #include "Core/LostArkPlayerController.h"
 #include "Core/LostArkGameInstance.h"
+#include "Core/LostArkGameMode.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "NiagaraSystem.h"
@@ -59,6 +60,97 @@ void ALostArkPlayerController::BeginPlay()
 
 		// 보스 레벨에서만 보스 체력 HUD 생성 (GameState 로 판별. 내부에서 복제 대기 재시도)
 		TryCreateBossHUD();
+
+		// 이 클라의 레벨 로드 완료를 서버에 보고 (보스 레벨의 '전원 로드 후 시작' 게이트용)
+		TryReportLevelLoaded();
+	}
+}
+
+void ALostArkPlayerController::TryReportLevelLoaded()
+{
+	if (bLevelLoadReported || !IsLocalController())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// GameState 복제 = 서버 연결과 월드 준비 완료 신호. 스트리밍 레벨까지 올라온 뒤에 보고한다.
+	AGameStateBase* GameState = World->GetGameState();
+	if (!GameState || !World->AreAlwaysLoadedLevelsLoaded())
+	{
+		if (LevelLoadReportRetryCount++ < 200) // 0.1s * 200 = 20s 상한
+		{
+			World->GetTimerManager().SetTimer(
+				LevelLoadReportTimer, this, &ALostArkPlayerController::TryReportLevelLoaded, 0.1f, false);
+		}
+		return;
+	}
+
+	bLevelLoadReported = true;
+
+	// 보스 레벨이면 서버 응답 전에 미리 대기 화면을 올린다.
+	// (로딩 위젯은 PostLoadMapWithWorld 에서 이미 내려가 있어서, 안 올리면 폰 없는 맵이 잠깐 보인다)
+	if (GameState->IsA<ABossRaidGameState>())
+	{
+		if (ULostArkGameInstance* LostArkGI = Cast<ULostArkGameInstance>(GetGameInstance()))
+		{
+			LostArkGI->ShowLoadingScreen();
+		}
+		World->GetTimerManager().SetTimer(
+			WaitingScreenFailsafeTimer, this, &ALostArkPlayerController::ForceClearWaitingScreen, 60.f, false);
+	}
+
+	ServerNotifyLevelLoaded();
+}
+
+void ALostArkPlayerController::ServerNotifyLevelLoaded_Implementation()
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (ALostArkGameMode* GameMode = World->GetAuthGameMode<ALostArkGameMode>())
+		{
+			GameMode->NotifyPlayerLevelLoaded(this);
+			return;
+		}
+	}
+
+	// LostArk GameMode 가 아닌 맵(테스트 맵 등) -> 기다릴 주체가 없으므로 즉시 해제
+	ClientSetWaitingForPlayers(false);
+}
+
+void ALostArkPlayerController::ClientSetWaitingForPlayers_Implementation(bool bWaiting)
+{
+	ULostArkGameInstance* LostArkGI = Cast<ULostArkGameInstance>(GetGameInstance());
+	if (!LostArkGI)
+	{
+		return;
+	}
+
+	if (bWaiting)
+	{
+		LostArkGI->ShowLoadingScreen();
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(WaitingScreenFailsafeTimer);
+	}
+	LostArkGI->HideLoadingScreen();
+}
+
+void ALostArkPlayerController::ForceClearWaitingScreen()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Ready] 서버 응답 없음 -> 대기 화면 강제 해제 (PC=%s)"), *GetName());
+
+	if (ULostArkGameInstance* LostArkGI = Cast<ULostArkGameInstance>(GetGameInstance()))
+	{
+		LostArkGI->HideLoadingScreen();
 	}
 }
 

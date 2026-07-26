@@ -1,4 +1,5 @@
 #include "Core/LostArkPlayerController.h"
+#include "Core/LostArkGameInstance.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "NiagaraSystem.h"
@@ -21,6 +22,9 @@
 #include "Boss/BossBase.h"
 #include "Boss/Combat/BossCounterComponent.h"
 #include "Boss/Combat/BossJustGuardComponent.h"
+#include "Boss/Gimmick/BossTerrainGimmickComponent.h"
+#include "Boss/Raid/BossRaidGameState.h"
+#include "Boss/UI/BossHUDWidget.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -52,6 +56,65 @@ void ALostArkPlayerController::BeginPlay()
 				HUDWidget->BindAttributeDelegates();
 			}
 		}
+
+		// 보스 레벨에서만 보스 체력 HUD 생성 (GameState 로 판별. 내부에서 복제 대기 재시도)
+		TryCreateBossHUD();
+	}
+}
+
+void ALostArkPlayerController::TryCreateBossHUD()
+{
+	// 로컬 화면 위젯이므로 로컬 컨트롤러만. 클래스 미지정/이미 생성됐으면 스킵.
+	if (!IsLocalController() || !BossHUDWidgetClass || BossHUDWidget)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 보스 레벨 판별: 이 GameState 는 보스 레이드 레벨에서만 쓴다 (튜토/카오스던전은 다른 GameState).
+	AGameStateBase* GameState = World->GetGameState();
+	if (!GameState)
+	{
+		// GameState 아직 미복제 -> 잠깐 후 재시도 (아직 보스 레벨인지 알 수 없음)
+		if (BossHUDRetryCount++ < 40) // 0.25s * 40 = 10s 상한
+		{
+			World->GetTimerManager().SetTimer(BossHUDRetryTimer, this, &ALostArkPlayerController::TryCreateBossHUD, 0.25f, false);
+		}
+		return;
+	}
+	if (!GameState->IsA<ABossRaidGameState>())
+	{
+		// 보스 레벨 아님 -> HUD 안 띄움 (재시도도 중단)
+		return;
+	}
+
+	// 보스 찾기 (레벨 배치/스폰 후 복제까지 지연될 수 있음)
+	ABossBase* Boss = nullptr;
+	for (TActorIterator<ABossBase> It(World); It; ++It)
+	{
+		Boss = *It;
+		break;
+	}
+	if (!Boss)
+	{
+		if (BossHUDRetryCount++ < 40)
+		{
+			World->GetTimerManager().SetTimer(BossHUDRetryTimer, this, &ALostArkPlayerController::TryCreateBossHUD, 0.25f, false);
+		}
+		return;
+	}
+
+	// 생성 + 배치 + 보스 체력 바인딩
+	BossHUDWidget = CreateWidget<UBossHUDWidget>(this, BossHUDWidgetClass);
+	if (BossHUDWidget)
+	{
+		BossHUDWidget->AddToViewport();
+		BossHUDWidget->InitForBoss(Boss);
 	}
 }
 
@@ -76,78 +139,32 @@ void ALostArkPlayerController::SetupInputComponent()
 		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input Component!"), *GetNameSafe(this));
 	}
 
-	// [임시 디버그] Q/G 직접 바인딩 (Enhanced Input IA/매핑 없이). 나중에 이 줄 삭제
 	if (InputComponent)
 	{
-		InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &ALostArkPlayerController::DebugForceCounterHit);
-		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ALostArkPlayerController::DebugTryJustGuard);
+		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ALostArkPlayerController::TryJustGuardInput);
 	}
 }
 
-// ===== [임시 디버그] 아래 함수들은 카운터/그로기 확인용. 나중에 전부 삭제 =====
-void ALostArkPlayerController::DebugForceCounterHit()
+void ALostArkPlayerController::TryJustGuardInput()
 {
-	// 입력은 클라이언트에서 들어오므로 서버 권한으로 넘겨서 실제 판정을 돌린다
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow, TEXT("[DEBUG] Q -> 카운터 강제 시도"));
-	}
-	ServerDebugForceCounterHit();
-}
+	APawn* ControlledPawn = GetPawn();
+	if (!ControlledPawn) return;
 
-void ALostArkPlayerController::ServerDebugForceCounterHit_Implementation()
-{
-	APawn* MyPawn = GetPawn();
-	UWorld* World = GetWorld();
-	if (!MyPawn || !World)
+	if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(ControlledPawn))
 	{
-		return;
-	}
-
-	// 월드의 첫 번째 보스를 찾아 헤드존 무시로 카운터 적중 강제 (창이 열려 있어야 실제로 먹힘)
-	for (TActorIterator<ABossBase> It(World); It; ++It)
-	{
-		if (UBossCounterComponent* Counter = It->FindComponentByClass<UBossCounterComponent>())
+		if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 		{
-			Counter->NotifyCounterAttackHit(MyPawn, /*bBypassHeadZone=*/true);
-		}
-		break;	// 보스 1개 가정 (임시)
-	}
-}
-
-void ALostArkPlayerController::DebugTryJustGuard()
-{
-	// 실제 판정/가드가능 여부는 서버가 안다 -> 서버로 넘겨 처리 + 메시지도 서버(리슨)에서 표시
-	ServerDebugTryJustGuard();
-}
-
-void ALostArkPlayerController::ServerDebugTryJustGuard_Implementation()
-{
-	APawn* MyPawn = GetPawn();
-	UWorld* World = GetWorld();
-	if (!MyPawn || !World)
-	{
-		return;
-	}
-
-	// 월드의 첫 보스의 저스트가드 컴포넌트로 가드 가능 여부 판단
-	for (TActorIterator<ABossBase> It(World); It; ++It)
-	{
-		UBossJustGuardComponent* JustGuard = It->FindComponentByClass<UBossJustGuardComponent>();
-		if (JustGuard && JustGuard->HasGuardReady(MyPawn))
-		{
-			// 창 열림 + 아직 가드 안 씀 -> 1회 가드 모션 발동 (성공/실패는 장판이 판정 시각에 표시)
+			const bool bHasGuardReady = ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Player.GuardReady"), false));
 			if (GEngine)
 			{
-				GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Cyan, TEXT("[DEBUG] G -> 저스트가드 모션 발동"));
+				GEngine->AddOnScreenDebugMessage(1004, 2.5f, bHasGuardReady ? FColor::Yellow : FColor::Silver,
+					FString::Printf(TEXT("[G키 입력] 저스트가드 시도 (GuardReady 상태: %s)"), bHasGuardReady ? TEXT("ON") : TEXT("OFF")));
 			}
-			JustGuard->NotifyGuardInput(MyPawn);
+
+			// 보스로부터 State.Player.GuardReady 태그를 받았을 때 G키 입력 시 저스트가드 어빌리티 시전
+			ASC->AbilityLocalInputPressed(static_cast<int32>(ELostArkAbilityInputID::JustGuard));
+			ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(FGameplayTag::RequestGameplayTag(FName("Ability.Skill.JustGuard"), false)));
 		}
-		else if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Silver, TEXT("[DEBUG] G -> 저스트가드 모션 비활성화"));
-		}
-		break;	// 보스 1개 가정 (임시)
 	}
 }
 // ==============================================================================
@@ -299,6 +316,17 @@ void ALostArkPlayerController::ClientShowStageClearUI_Implementation()
 		if (StageClearWidget)
 		{
 			StageClearWidget->AddToViewport();
+		}
+	}
+}
+
+void ALostArkPlayerController::ClientShowLoadingScreen_Implementation()
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (ULostArkGameInstance* LostArkGI = Cast<ULostArkGameInstance>(GameInstance))
+		{
+			LostArkGI->ShowLoadingScreen();
 		}
 	}
 }

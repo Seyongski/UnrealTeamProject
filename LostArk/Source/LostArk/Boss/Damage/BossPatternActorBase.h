@@ -261,6 +261,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Aoe")
 	void SetSpawnOriginPolicy(EAoeSpawnOrigin InOrigin) { SpawnOrigin = InOrigin; }
 
+	/**
+	 * 판정 중심 오프셋을 코드에서 주입 (BeginPlay 전 호출). 스폰 노티파이가 패턴마다
+	 * 다른 좌/우·전후 배치를 같은 장판 BP 로 만들 때 사용. 단위 cm, X=전방 / Y=우측.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Aoe")
+	void SetShapeOffset(const FVector2D& InOffset) { ShapeOffset = InOffset; }
+
 	// ─── 행동 오브젝트(UBossAoeEffect)가 쓰는 공개 API ───
 
 	/** 시전자(보스) */
@@ -388,6 +395,22 @@ protected:
 	/** CasterSocket/Follow(소켓) 일 때 사용할 시전자 메시 소켓 이름 (망치 머리 등) */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Spawn", meta = (EditCondition = "SpawnOrigin == EAoeSpawnOrigin::CasterSocket"))
 	FName SpawnSocketName = NAME_None;
+
+	/**
+	 * 판정 중심을 도형 로컬축으로 미는 오프셋(cm). X=전방(Forward), Y=우측(Right, +가 오른쪽).
+	 * 모든 도형(원/사각/부채꼴/...) 공통이며 예고·본체 VFX·디버그 도형이 전부 함께 따라온다.
+	 *
+	 * 노티파이의 LocationOffset 과의 차이:
+	 *  - LocationOffset = '스폰 트랜스폼'을 미는 값 -> ResolveOrigin 이 SpawnOrigin(CasterLocation 등)으로
+	 *    위치를 덮어쓰거나 Follow 모드가 매 틱 중심을 되돌리면 흔적 없이 사라진다.
+	 *  - ShapeOffset    = 원점이 해석된 '뒤에' 적용 -> SpawnOrigin/TargetingMode 와 무관하게 항상 유지된다.
+	 * 보스 헤드 앞 좌/우 두 장 배치처럼 '중심에서 벌리는' 용도는 이쪽을 쓸 것.
+	 *
+	 * 주의: Homing/Straight/Spiral 처럼 매 틱 위치가 누적되는 모드에서는 스폰 시 1회만 적용된다
+	 *       (매 틱 더하면 계속 밀려나므로). Fixed/Follow/FollowTarget 은 매 틱 유지된다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Aoe|Spawn")
+	FVector2D ShapeOffset = FVector2D::ZeroVector;
 
 	/** 공격력계수. GE에 SetByCaller(DamageSetByCallerTag)로 전달. InitAoe로 덮어쓸 수 있음 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aoe|Damage")
@@ -559,6 +582,13 @@ protected:
 
 	/** 스폰 원점 정책을 해석해 액터 위치/회전 + AttackCenter + Forward/Right 캐싱 */
 	void ResolveOrigin();
+
+	/**
+	 * ShapeOffset 을 현재 도형축 기준으로 AttackCenter 에 반영하고 액터도 함께 옮긴다.
+	 * (부착된 예고 메시/VFX 가 자동으로 따라오도록 SetActorLocation 까지 수행)
+	 * 반드시 CacheShapeAxes() 로 축이 확정된 뒤에 호출할 것. Z 는 건드리지 않는다(바닥 스냅 유지).
+	 */
+	void ApplyShapeOffset();
 
 	/** 예고 종료 시점(CastTime 경과) 콜백: 예고 제거 -> 첫 판정 -> 유지/소멸 결정 */
 	void OnCastFinished();

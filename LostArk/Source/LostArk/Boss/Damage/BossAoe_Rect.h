@@ -11,6 +11,7 @@
  * - HalfLength : 전방(Forward) 반길이
  * - HalfWidth  : 측면(Right) 반너비
  * - ForwardOffset : 중심을 전방으로 밀어 '보스 앞 직사각형' 표현 (0이면 중심 대칭)
+ *   (좌우로 미는 건 베이스의 ShapeOffset 을 쓴다 — 모든 도형 공통)
  * 도형 확장 예시: IsInsideShape/BuildTelegraph 두 개만 구현.
  */
 UCLASS(Blueprintable)

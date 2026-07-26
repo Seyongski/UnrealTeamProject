@@ -15,11 +15,16 @@ namespace LostArkTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_2);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_3);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_4);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Boss_Phase_5);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Counterable);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Countered);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Groggy);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_TrackTarget);
+
+	// 패턴과 패턴 사이 딜레이(휴식) 구간. 몽타주 없이 Idle 로 서 있는 동안만 부여.
+	// 브레인(UBossPatternComponent)이 켜고 끈다 — 연출/UI/디버그가 이 태그에 바인딩 가능
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Idle);
 
 	// 카운터 창: AnimNotifyState_BossCounter 가 구간 동안 부여.
 	// 부모(State.Boss.Counterable)로 매치하면 종류 무관 "카운터 창 열림"만 감지되므로
@@ -33,6 +38,11 @@ namespace LostArkTags
 
 	// 잡기 패턴: 보스에게 잡힌 상태 (플레이어 쪽 입력/이동 잠금은 팀원이 이 태그에 바인딩)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Grabbed);
+
+	// 어그로 표식: 기믹이 지정한 1명에게 부여 (복제 루스). 몸통 마커 위젯 표시 게이트용.
+	// SelectTarget(타겟 선정)과는 독립 — 이 태그는 UBossTargetingComponent::MarkCurrentTarget/ClearMark 로만
+	// 켜고 끈다(=표식을 원하는 기믹 몽타주에만 노티로 배치). 일반 패턴의 타겟 선정은 이 태그를 건드리지 않는다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Marked);
 
 	// 저스트가드 패턴 (설계: docs/09_JUSTGUARD_PATTERN.md)
 	// 창 열림: AnimNotifyState_BossJustGuard 가 구간 동안 보스에 부여 (카운터의 Counterable 대응).

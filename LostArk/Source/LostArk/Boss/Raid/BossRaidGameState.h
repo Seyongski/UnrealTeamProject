@@ -7,6 +7,29 @@
 #include "BossRaidGameState.generated.h"
 
 class UUserWidget;
+class USoundBase;
+class UAudioComponent;
+class APlayerState;
+
+USTRUCT(BlueprintType)
+struct FPlayerDamageInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "MVP")
+	APlayerState* PlayerState;
+
+	UPROPERTY(BlueprintReadWrite, Category = "MVP")
+	float DamageDealt;
+
+	FPlayerDamageInfo()
+		: PlayerState(nullptr), DamageDealt(0.f)
+	{}
+
+	FPlayerDamageInfo(APlayerState* InPlayerState, float InDamage)
+		: PlayerState(InPlayerState), DamageDealt(InDamage)
+	{}
+};
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnArenaSlicesChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRaidCleared);
@@ -45,6 +68,18 @@ public:
 	/** 클리어 배너 유지 시간(초). 지나면 자동 RemoveFromParent (0이면 위젯이 스스로 관리) */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
 	float ClearWidgetLifetime = 5.f;
+
+	/** MVP 위젯 (배너가 지워진 후 등장) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear")
+	TSubclassOf<UUserWidget> MvpWidgetClass;
+
+	/** MVP 딜량 리스트 */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|MVP")
+	TArray<FPlayerDamageInfo> PlayerDamageList;
+
+	/** 서버 전용: 플레이어 딜량 누적 */
+	UFUNCTION(BlueprintCallable, Category = "Raid|MVP")
+	void AddPlayerDamage(APlayerState* PlayerState, float Damage);
 
 	/** 클리어 여부 (복제) */
 	UFUNCTION(BlueprintPure, Category = "Raid|Clear")
@@ -96,6 +131,14 @@ public:
 	/** 조각 파괴 마킹 (서버 전용. GameMode::DestroySlice 가 호출) */
 	void MarkSliceDestroyed(int32 SliceIndex);
 
+	// ─── 레벨 BGM (레벨 진입 시 각 클라 로컬 재생. 늦은 접속도 복제로 자동 재생) ───
+
+	/**
+	 * 재생할 BGM 지정 (서버 전용. GameMode::BeginPlay 가 BP_MordumGameMode 의 LevelBgm 을 전달).
+	 * 복제되어 각 클라(리슨 호스트 포함)가 로컬로 1회 재생한다.
+	 */
+	void SetRaidBgm(USoundBase* InBgm);
+
 protected:
 	/** 파괴 상태 비트마스크 (bit N = 조각 N 파괴) */
 	UPROPERTY(ReplicatedUsing = OnRep_DestroyedSliceMask, BlueprintReadOnly, Category = "Arena")
@@ -111,15 +154,36 @@ protected:
 	UFUNCTION()
 	void OnRep_RaidCleared();
 
+	/** 레벨 BGM (복제). GameMode 가 세팅 -> 각 머신 OnRep 에서 로컬 재생 */
+	UPROPERTY(ReplicatedUsing = OnRep_RaidBgm)
+	TObjectPtr<USoundBase> RaidBgm;
+
+	UFUNCTION()
+	void OnRep_RaidBgm();
+
 private:
 	/** 공통 클리어 처리: 방송 + 로컬 배너 (서버 마킹/클라 OnRep 양쪽에서 호출) */
 	void HandleRaidCleared();
 
+	/**
+	 * 이 머신에서 BGM 을 로컬로 1회 재생 (서버 세팅/클라 OnRep 양쪽에서 호출).
+	 * 데디 서버(로컬 플레이어 없음)와 중복 재생(재복제)은 가드. 핸들을 보관해 추후 정지/전환 가능.
+	 */
+	void PlayBgmLocally();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> BgmComponent;
+
+	bool bBgmStarted = false;
+
 	/** 이 머신의 로컬 플레이어 화면마다 클리어 배너 생성 (데디 서버는 로컬 플레이어 없음 -> no-op) */
 	void ShowClearBannerLocally();
 
-	/** 배너 수명 종료 -> 제거 */
+	/** 배너 수명 종료 -> 제거 및 MVP 창 팝업 */
 	void RemoveClearWidgets();
+
+	/** MVP 창 띄우기 (로컬 플레이어 화면) */
+	void ShowMvpWindowLocally();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UUserWidget>> ActiveClearWidgets;

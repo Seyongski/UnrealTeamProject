@@ -11,8 +11,8 @@
  * 기믹 패턴(TransitionGimmick)의 시작 몽타주(포효 등) 프레임에 배치.
  *
  * 서버에서 UBossTerrainGimmickComponent::SpawnGimmickTower 호출:
- *  - 4개 지정 위치 중 (지형 미파괴 + 타워 없음) 랜덤 선정 -> 이번 라운드 파괴 대상 슬라이스 확정
- *  - 그 위치에 감전 타워 스폰
+ *  - TargetSlice 로 이번 라운드 파괴 대상 확정 (이미 파괴된 곳이면 남은 곳으로 자동 대체)
+ *  - 지정 위치 중 [지형 미파괴 + 이번 파괴대상 아님 + 타워 없음] 랜덤 1곳에 감전 타워 스폰
  * 이어서 (기본값) 무력화 페이즈 시작: 게이지 리필 + 클라 UI 게이지 표시 태그.
  */
 UCLASS(meta = (DisplayName = "Boss Gimmick: Spawn Tower"))

@@ -14,6 +14,7 @@ ALostArkProjectile::ALostArkProjectile()
 	CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComponent"));
 	CollisionComponent->InitSphereRadius(15.0f);
 	CollisionComponent->BodyInstance.SetCollisionProfileName("Projectile");
+	CollisionComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	CollisionComponent->OnComponentHit.AddDynamic(this, &ALostArkProjectile::OnProjectileStop);
 	CollisionComponent->OnComponentBeginOverlap.AddDynamic(this, &ALostArkProjectile::OnProjectileOverlap);
 	
@@ -34,6 +35,21 @@ void ALostArkProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 	SetLifeSpan(5.0f);
+
+	// 스폰 즉시 이미 겹쳐 있는 Pawn(보스/몬스터)이 있을 경우 피격 처리 수행
+	if (CollisionComponent)
+	{
+		TArray<AActor*> OverlappingActors;
+		CollisionComponent->GetOverlappingActors(OverlappingActors, APawn::StaticClass());
+		for (AActor* OverlappedActor : OverlappingActors)
+		{
+			if (OverlappedActor && OverlappedActor != GetInstigator() && OverlappedActor != this)
+			{
+				HandleImpact(OverlappedActor, GetActorLocation());
+				break;
+			}
+		}
+	}
 }
 
 void ALostArkProjectile::OnProjectileStop(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
@@ -99,6 +115,15 @@ void ALostArkProjectile::HandleImpact(AActor* OtherActor, const FVector& ImpactL
 		return true;
 	};
 
+	TArray<AActor*> HitTargets;
+
+	// 1) 직접 충돌한 타겟(OtherActor)이 존재하면 1순위로 포함 (Z축 오차 및 캡슐 쿼리 누락 방지)
+	if (OtherActor && CanHitTarget(OtherActor))
+	{
+		HitTargets.AddUnique(OtherActor);
+	}
+
+	// 2) 폭발 반경이 존재하는 경우 주변 쿼리로 타겟 수집
 	if (ExplodeRadius > 0.f)
 	{
 		TArray<FOverlapResult> Overlaps;
@@ -119,20 +144,41 @@ void ALostArkProjectile::HandleImpact(AActor* OtherActor, const FVector& ImpactL
 			AActor* HitActor = Overlap.GetActor();
 			if (CanHitTarget(HitActor))
 			{
-				if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor))
-				{
-					TargetASC->ApplyGameplayEffectSpecToSelf(*DamageEffectSpecHandle.Data.Get());
-				}
+				HitTargets.AddUnique(HitActor);
 			}
 		}
 	}
-	else if (OtherActor)
+
+	// 3) 수집된 타겟들에 대해 데미지, 카운터, 무력화 일괄 처리
+	for (AActor* TargetActor : HitTargets)
 	{
-		if (CanHitTarget(OtherActor))
+		if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor))
 		{
-			if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
+			TargetASC->ApplyGameplayEffectSpecToSelf(*DamageEffectSpecHandle.Data.Get());
+
+			if (bIsCounterSkill)
 			{
-				TargetASC->ApplyGameplayEffectSpecToSelf(*DamageEffectSpecHandle.Data.Get());
+				FGameplayEventData CounterEventData;
+				CounterEventData.Instigator = InstigatorActor;
+				CounterEventData.Target = TargetActor;
+				UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+					TargetActor,
+					FGameplayTag::RequestGameplayTag(FName("Event.Boss.CounterHit"), false),
+					CounterEventData
+				);
+			}
+
+			if (StaggerAmount > 0.f)
+			{
+				FGameplayEventData StaggerEventData;
+				StaggerEventData.Instigator = InstigatorActor;
+				StaggerEventData.Target = TargetActor;
+				StaggerEventData.EventMagnitude = StaggerAmount;
+				UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+					TargetActor,
+					FGameplayTag::RequestGameplayTag(FName("Event.Boss.StaggerHit"), false),
+					StaggerEventData
+				);
 			}
 		}
 	}

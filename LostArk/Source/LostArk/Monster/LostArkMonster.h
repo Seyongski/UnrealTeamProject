@@ -69,7 +69,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|UI")
 	TSubclassOf<class ALostArkDamageTextActor> DamageTextClass;
 
-	/** ?먮뵒?곗뿉??議곗젅 媛?ν븳 紐ъ뒪??湲곕낯 怨듦꺽 ?ш굅由?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Stats")
+	float InitialMaxHealth = 500.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Stats")
+	float InitialMaxMana = 100.f;
+
+	/** ?먮뵒?곗뿉??議곗젅 媛€?ν븳 紐ъ뒪??湲곕낯 怨듦꺽 ?ш굅由?*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Settings")
 	float BaseAttackRange = 300.f;
 

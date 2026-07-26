@@ -72,7 +72,8 @@ public:
 	FORCEINLINE class USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
+	UFUNCTION(Server, Reliable)
+	void Server_SetCharacterRotation(FRotator NewRotation);
 public:
 	UPROPERTY(BlueprintReadWrite, Category = "Character|Anim", Replicated)
 	bool bIsLeftFootForward;
@@ -109,7 +110,16 @@ protected:
 	TSubclassOf<class UGameplayAbility> ComboAttackAbilityClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Abilities")
+	TSubclassOf<class UGameplayAbility> JustGuardAbilityClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Abilities")
 	TArray<FLostArkSkillInputBind> SkillInputBinds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Stats")
+	float InitialMaxHealth = 1000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Stats")
+	float InitialMaxMana = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Movement")
 	float BaseRunSpeed;

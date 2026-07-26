@@ -111,19 +111,26 @@
 
 ### 2-1. 화면 상단 체력바
 
-**현황 (C++ 준비 완료 — 위젯만 만들면 됨)**
+**현황 (C++ 준비 완료 — WBP Reparent + 그래프만 만들면 됨)**
 
-- `ABossBase::OnBossHealthChanged(NewHealth, MaxHealth)` — 서버/클라 모두 방송되는 델리게이트. 위젯이 여기 바인딩.
+- `ABossBase::OnBossHealthChanged(NewHealth, MaxHealth)` — 서버/클라 모두 방송되는 델리게이트.
 - `ABossBase::TotalHealthBars`(기본 500줄), `GetCurrentHealth()` / `GetMaxHealthValue()` — 위젯 최초 구성용.
 - `UBossHealthBarLibrary` (BlueprintPure 3종):
   - `GetHealthFraction` — 퍼센트 텍스트용 (0~1)
   - `GetBarsRemaining` — `xN줄` 표기
   - `GetCurrentBarFill` — 지금 깎이는 '한 줄'의 0~1 채움 (줄 경계마다 1.0 리필, 위젯에서 보간하면 피 닳는 연출)
+- **`UBossHUDWidget`** (`Boss/UI/BossHUDWidget.h`, 신규) — WBP_BossHUD 의 C++ 베이스. `BossPlayerStatusWidget` 과 동일한 주입 패턴.
+  - `InitForBoss(Boss)` (컨트롤러가 호출) → `OnBossHealthChanged` 바인딩 + 초기값 1회 반영 + `GameState.OnRaidCleared` 구독.
+  - `OnBossHealthUpdated(NewHealth, MaxHealth)` — **BlueprintImplementableEvent**. WBP 가 여기서 라이브러리로 막대/줄수/퍼센트 갱신. `Boss->TotalHealthBars` 로 줄 수 참조.
+  - `OnRaidCleared` — **BlueprintNativeEvent**. 기본 Collapsed(숨김), WBP 에서 페이드 연출로 오버라이드 가능.
+- **생성/배치는 `ALostArkPlayerController::TryCreateBossHUD()`** — 로컬 컨트롤러 BeginPlay 에서 호출. **보스 레벨 판별 = 월드 GameState 가 `ABossRaidGameState` 인지** (튜토/카오스던전은 다른 GameState 라 자동 제외). GameState/보스 복제 지연 시 0.25s 간격으로 최대 10s 재시도. 생성 후 `AddToViewport` + `InitForBoss`.
 
-**남은 작업**
+**남은 작업 (전부 에디터)**
 
-- [ ] **WBP_BossHealthBar 제작**: 화면 상단 고정. 구성 = 보스 이름 + 체력바(한 줄 채움) + `xN` 줄 수 + 퍼센트. `OnBossHealthChanged` 바인딩, 표시 값은 위 라이브러리 함수로 계산.
-- [ ] **표시/숨김 타이밍**: 조우 시작 시 추가, 보스 사망/조우 종료 시 제거. 클라가 조우 상태를 알 방법이 현재 없음 → §3 에서 `ABossRaidGameState` 에 조우 상태 복제 추가할 때 함께 처리 (임시로는 레벨에 보스 존재 시 표시로 시작해도 됨).
+- [ ] **WBP_BossHUD 부모 재지정**: `UBossHUDWidget` 으로 Reparent (`Content/Levels/UI/WBP_BossHUD`).
+- [ ] **WBP 그래프**: `OnBossHealthUpdated(NewHealth, MaxHealth)` 이벤트 구현 → `UBossHealthBarLibrary`(`GetHealthFraction`/`GetBarsRemaining`/`GetCurrentBarFill`, 줄수는 `Boss->TotalHealthBars`)로 체력바·`xN`·퍼센트 갱신. 화면 상단 고정 + 보스 이름.
+- [ ] **PlayerController BP 에 `BossHUDWidgetClass = WBP_BossHUD` 지정** (UI 카테고리). 보스 레벨이 쓰는 컨트롤러 BP 에 설정하면 됨 — 게이트가 있어 튜토/카오스던전에 같은 PC 를 써도 안 뜬다.
+- [ ] (선택) `OnRaidCleared` 오버라이드로 클리어 시 페이드아웃. (기본은 즉시 숨김)
 - [ ] (선택) 페이즈 표시: `Boss.Phase.N` 태그 기반.
 
 ### 2-2. 무력화(스태거) 게이지 — 보스 메쉬 아래(발밑) 표시로 확정
@@ -175,6 +182,28 @@
 - **UV 전방 축 확인**: 데칼이 Pitch -90 으로 지면 투영되므로 UV 의 +X 가 보스 전방과 일치하는지 PIE 에서 확인. 90° 틀어져 있으면 머티리얼에서 각도에 오프셋 상수 하나만 더하면 된다.
 - 데칼 크기/판정은 이미 캡슐 반경 연동(`UpdateBackHeadDecal`) — 머티리얼은 UV 0~1 만 신경 쓰면 된다.
 - (선택) 약점포착(`State.Boss.WeakPointExposed`) 중에는 어디서 때려도 보너스이므로 링 전체를 금색으로 바꾸는 연출을 붙이면 판정 규칙(§`BossCombatStatics` 주석)과 표시가 일치한다.
+
+### 2-4. 어그로 표식(몸통 마커) — 지정된 1명 시각화 (✅ C++ 완료, WBP만 남음)
+
+기믹이 랜덤 지정한 **1명의 몸통**에 마커를 띄워 "이 사람이 어그로(레이저 대상 + 나중에 나올 저스트가드 담당)"임을 전원에게 보여준다.
+머리 위(전하)·발밑(무력화 게이지)과 겹치지 않게 **몸통 중앙(Z=+30)** 에 표시.
+
+**현황 (C++ 완료 — 빌드 검증됨)**
+
+- 태그: `State.Player.Marked` (복제 루스). **타겟 선정(`SelectTarget`)과 독립** — 이 태그는 아래 API/노티로만 켠다. 그래서 일반 패턴의 타겟 선정으론 마커가 안 뜬다.
+- `UBossTargetingComponent::MarkCurrentTarget()` / `ClearMark()` — 현재 타겟에 표식 부여/회수(항상 최대 1명, 대상은 스냅샷 보관). `GetMarkedTarget()` 조회.
+- 노티파이 2개: **`Boss Mark Target (표식 켜기)`** / **`Boss Clear Mark (표식 끄기)`** (서버 게이트, `Boss Select Target` 과 동일 패턴).
+- 위젯 호스트: `UBossChargeGaugeComponent` 에 몸통 슬롯 추가 — `BodyMarkWidgetClass` / `BodyMarkZOffset(+30)` / `BodyMarkDrawSize`. 표식 태그 감시 → `OnMarkedChanged(bool)` 델리게이트 + `IsMarked()`.
+- 안전장치: 보스 사망(`ABossBase::HandleDeath`) 시 `ClearMark()` 자동 호출(몽타주 중단돼도 마커 안 남음).
+
+**남은 작업 (전부 에디터)**
+
+- [ ] **`WBP_BossMark` 제작** 후 부모를 `UBossPlayerStatusWidget` 으로 **Reparent** (전하/게이지 위젯과 동일 베이스).
+- [ ] WBP 그래프: `OnStatusInitialized` 에서 `ChargeComponent->OnMarkedChanged` 바인딩 → 표식 시 Visible / 해제 시 Collapsed. Construct 초기값은 `IsMarked()`. (기본 Hidden)
+- [ ] 전하 게이지 컴포넌트 디폴트의 `Boss|Charge|UI > BodyMarkWidgetClass` 에 `WBP_BossMark` 지정 (몸통 높이는 `BodyMarkZOffset`).
+- [ ] **기믹 몽타주 노티 배치**: `Boss Select Target(랜덤)` → 바로 뒤 `Boss Mark Target` … 레이저·저스트가드 지나 시퀀스 끝에 `Boss Clear Mark`.
+
+> ⚠️ 저스트가드는 판정 순간 `GetCurrentTarget()` 을 쓰고 마커는 켠 시점 스냅샷이므로, **표식~저스트가드 사이에 다른 `SelectTarget` 을 부르면 대상이 어긋난다.** 이 기믹 몽타주 안에서 재선정을 안 하면 항상 일치(현재 방식). 중간 재선정이 필요해지면 저스트가드가 `GetMarkedTarget()` 을 쓰도록 바꿔 묶을 것.
 
 ---
 

@@ -11,6 +11,7 @@
 #include "AbilitySystemComponent.h"
 #include "Character/LostArkAttributeSet.h"
 #include "Abilities/LostArkCharacterComboAttackAbility.h"
+#include "Abilities/LostArkJustGuardAbility.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "UI/LostArkDamageTextActor.h"
@@ -69,6 +70,8 @@ ALostArkCharacter::ALostArkCharacter()
 	{
 		DamageTextClass = DamageTextClassFinder.Class;
 	}
+
+	JustGuardAbilityClass = ULostArkJustGuardAbility::StaticClass();
 
 	PrimaryActorTick.bCanEverTick = false;
 	PrimaryActorTick.bStartWithTickEnabled = false;
@@ -130,9 +133,22 @@ void ALostArkCharacter::PossessedBy(AController* NewController)
 
 		if (HasAuthority())
 		{
+			if (AttributeSet)
+			{
+				AttributeSet->InitMaxHealth(InitialMaxHealth);
+				AttributeSet->InitHealth(InitialMaxHealth);
+				AttributeSet->InitMaxMana(InitialMaxMana);
+				AttributeSet->InitMana(InitialMaxMana);
+			}
+
 			if (ComboAttackAbilityClass && !ComboAttackAbilityHandle.IsValid())
 			{
 				ComboAttackAbilityHandle = AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(ComboAttackAbilityClass, 1, 0, this));
+			}
+
+			if (JustGuardAbilityClass)
+			{
+				AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(JustGuardAbilityClass, 1, static_cast<int32>(ELostArkAbilityInputID::JustGuard), this));
 			}
 
 			for (const FLostArkSkillInputBind& Bind : SkillInputBinds)
@@ -305,10 +321,39 @@ void ALostArkCharacter::SetCombatState(FGameplayTag NewStateTag)
 
 void ALostArkCharacter::OnSkillInputPressed(ELostArkAbilityInputID InputID)
 {
+	if (IsLocallyControlled())
+	{
+		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			FHitResult HitResult;
+			if (PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+			{
+				FVector Dir = HitResult.ImpactPoint - GetActorLocation();
+				Dir.Z = 0.f;
+				if (!Dir.IsNearlyZero())
+				{
+					FRotator TargetRotation = Dir.Rotation();
+
+					// 1. 내 화면(로컬)에서 즉시 회전 (반응 속도 개선)
+					SetActorRotation(TargetRotation);
+
+					// 2. 서버에 내가 바라보는 방향을 동기화 요청
+					Server_SetCharacterRotation(TargetRotation);
+				}
+			}
+		}
+	}
+
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->AbilityLocalInputPressed(static_cast<int32>(InputID));
 	}
+}
+
+// 서버 RPC 실제 구현부 추가
+void ALostArkCharacter::Server_SetCharacterRotation_Implementation(FRotator NewRotation)
+{
+	SetActorRotation(NewRotation);
 }
 
 void ALostArkCharacter::OnSkillInputReleased(ELostArkAbilityInputID InputID)

@@ -22,6 +22,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
+#include "TimerManager.h"
 
 // Sets default values
 ABossBase::ABossBase()
@@ -47,7 +48,7 @@ ABossBase::ABossBase()
 	// GAS: ASC + 어트리뷰트 (다수 플레이어 대상 보스이므로 이펙트 복제는 Minimal)
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
 	AttributeSet = CreateDefaultSubobject<UBossAttributeSet>(TEXT("AttributeSet"));
 
@@ -114,6 +115,18 @@ void ABossBase::BeginPlay()
 
 	// 회전 검증 디버그가 켜져 있을 때만 틱 활성화
 	SetActorTickEnabled(bDrawFacingDebug);
+
+	// 보스는 '회전만' 하고 절대 이동하지 않는 설계.
+	// 캐릭터끼리 캡슐이 겹치면 각자의 CharacterMovement 가 매 틱 겹침을 해소하며 자기 위치를 옮긴다
+	// (속도 0이어도). Walking 모드면 보스가 스스로 밀려난다 -> 이동을 꺼서(MOVE_None) 원천 차단.
+	// 회전은 SetActorRotation(BossTargetingComponent)이라 영향 없고, 캡슐은 계속 Pawn 을 Block 하므로
+	// 플레이어는 보스를 통과하지 못한다(백/헤드어택 위치 판정 유지). 전 머신에서 적용.
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->StopMovementImmediately();
+		Move->DisableMovement();                 // MOVE_None: 겹침 해소로 자기 위치를 옮기지 않음 = 안 밀림
+		Move->bEnablePhysicsInteraction = false; // 물리 상호작용 push 로도 안 밀리게
+	}
 
 	// 클라이언트: 태그/큐 표현을 위해 ActorInfo 초기화 (서버는 PossessedBy에서 처리)
 	if (AbilitySystemComponent && !HasAuthority())
@@ -183,6 +196,26 @@ void ABossBase::OnHealthChanged(const FOnAttributeChangeData& Data)
 	}
 }
 
+void ABossBase::Die()
+{
+	if (HasAuthority())
+	{
+		HandleDeath();
+	}
+}
+
+void ABossBase::SetCombatState(FGameplayTag NewStateTag)
+{
+	CurrentStateTag = NewStateTag;
+	// Boss uses BossPatternComponent for state management usually, but store the tag just in case
+}
+
+void ABossBase::ShowDamageText(float DamageAmount)
+{
+	// 몬스터와 동일하게, 보스가 피격될 때는 공격한 주체(플레이어)의 클라이언트에서 데미지 텍스트를 처리합니다.
+	// 자체 처리 로직이 필요한 경우 이 곳 또는 블루프린트에서 위젯 컴포넌트를 통해 구현할 수 있습니다.
+}
+
 void ABossBase::HandleDeath()
 {
 	if (bDead || !HasAuthority())
@@ -207,10 +240,14 @@ void ABossBase::HandleDeath()
 		AbilitySystemComponent->CancelAllAbilities();
 	}
 
-	// 3) 기믹 정리: 무력화 페이즈 내리기 (게이지 UI 숨김)
+	// 3) 기믹 정리: 무력화 페이즈 내리기 (게이지 UI 숨김) + 어그로 표식 회수 (마커가 남지 않게)
 	if (TerrainGimmickComponent)
 	{
 		TerrainGimmickComponent->EndStaggerPhase();
+	}
+	if (TargetingComponent)
+	{
+		TargetingComponent->ClearMark();
 	}
 
 	// 4) 남아있는 장판/타워 정리. 잡힌 플레이어는 장판 EndPlay(OnEndPlay)가 안전 복구한다
@@ -272,6 +309,9 @@ void ABossBase::MulticastPlayDeathMontage_Implementation()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Boss] %s DeathMontage 미지정 — 사망 모션 없이 현재 포즈 유지"), *GetName());
+
+		// 몽타주가 없으면 종료 콜백도 안 오므로 여기서 바로 소멸 예약 (서버에서만)
+		ScheduleDisappear();
 	}
 }
 
@@ -282,6 +322,55 @@ void ABossBase::OnDeathMontageEnded(UAnimMontage* /*Montage*/, bool /*bInterrupt
 	{
 		MeshComp->bPauseAnims = true;
 	}
+
+	// 이 콜백은 전 머신에서 오지만, 액터 소멸은 서버 권위 (클라는 복제로 사라진다)
+	ScheduleDisappear();
+}
+
+void ABossBase::ScheduleDisappear()
+{
+	if (!bDestroyAfterDeathMontage || !HasAuthority() || bDisappearScheduled)
+	{
+		return;
+	}
+	bDisappearScheduled = true;
+
+	if (DeathDisappearDelay <= KINDA_SMALL_NUMBER)
+	{
+		BeginDisappear();
+		return;
+	}
+	GetWorldTimerManager().SetTimer(
+		DisappearTimer, this, &ABossBase::BeginDisappear, DeathDisappearDelay, false);
+}
+
+void ABossBase::BeginDisappear()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	// 디졸브/파티클 등 소멸 연출을 전 머신에서 먼저 재생
+	MulticastBossDisappear();
+
+	if (DisappearFXDuration <= KINDA_SMALL_NUMBER)
+	{
+		Destroy();
+		return;
+	}
+	// 연출이 끝난 뒤 실제 소멸 (서버가 Destroy -> 클라에서도 복제로 제거)
+	FTimerDelegate DestroyDelegate;
+	DestroyDelegate.BindWeakLambda(this, [this]()
+	{
+		Destroy();
+	});
+	GetWorldTimerManager().SetTimer(DisappearTimer, DestroyDelegate, DisappearFXDuration, false);
+}
+
+void ABossBase::MulticastBossDisappear_Implementation()
+{
+	OnBossDisappear();
 }
 
 float ABossBase::GetCurrentHealth() const

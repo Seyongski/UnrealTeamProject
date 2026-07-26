@@ -107,6 +107,25 @@ void ALostArkGameMode::OnStagePortalAreaReady()
 		return;
 	}
 
+	// Tell all clients to show the loading screen
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ALostArkPlayerController* PC = Cast<ALostArkPlayerController>(It->Get()))
+		{
+			PC->ClientShowLoadingScreen();
+		}
+	}
+
+	// Give the UI 0.5 seconds to render before the main thread blocks for ServerTravel
+	FTimerHandle TravelTimerHandle;
+	GetWorldTimerManager().SetTimer(TravelTimerHandle, this, &ALostArkGameMode::ExecuteServerTravel, 0.5f, false);
+}
+
+void ALostArkGameMode::ExecuteServerTravel()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
 	FString TravelURL = NextLevelURL;
 	if (!TravelURL.Contains(TEXT("?listen")))
 	{

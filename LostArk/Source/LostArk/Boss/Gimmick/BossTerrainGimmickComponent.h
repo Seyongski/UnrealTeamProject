@@ -50,10 +50,14 @@ public:
 	/**
 	 * 라운드 시작: 이번 라운드 파괴 대상 슬라이스 확정(TargetSlice) + 타워 스폰 (서버).
 	 * TargetSlice 는 몽타주(AN_SpawnTower)가 명시 지정 — 바라보기(FaceSlice)/파괴(DestroySlice)가 모두 이 값을 따른다.
+	 * 지정된 슬라이스가 이미 파괴됐으면 남은 슬라이스 중 랜덤으로 대체한다(라운드가 헛돌지 않게).
 	 *
-	 * 타워 스폰 후보 = [미파괴 && 이번 파괴대상(TargetSlice) 아님 && 살아있는 타워 없음 && 스폰 위치 있음].
-	 * 후보가 없으면(=마지막 라운드, 남은 지형이 파괴대상 하나뿐) 파괴대상 슬라이스 위에 스폰(폴백).
-	 * 타워 위치는 TowerSpawnPoints[슬라이스] 로 직접 매핑된다(각도 계산 없음).
+	 * 타워 스폰 후보 = [미파괴 && 이번 파괴대상(TargetSlice) 아님 && 그 슬라이스에 살아있는 타워 없음].
+	 * 후보 중 랜덤 1곳. 설 곳이 없으면(마지막 라운드 등) 타워 없이 라운드를 진행한다 —
+	 * 이미 파괴된 지형이나 곧 파괴될 지형 위에는 절대 스폰하지 않는다.
+	 *
+	 * 스폰 지점이 '어느 슬라이스 위인가'는 배열 인덱스가 아니라 그 지점의 월드 위치로 판정한다
+	 * (GetSliceIndexAt — 바닥 조각을 무너뜨리는 판정과 동일 함수).
 	 * @return 스폰된 타워 (스폰 못 하면 nullptr — 파괴 대상 확정은 그래도 수행됨)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Boss|Gimmick")
@@ -106,9 +110,11 @@ public:
 	bool GetGimmickSliceLocation(FVector& OutLocation) const;
 
 	/**
-	 * 슬라이스별 타워 스폰 위치 (월드 좌표). 인덱스 = 슬라이스 인덱스 —
-	 * TowerSpawnPoints[N] = 슬라이스 N 위에 타워가 설 위치. SliceCount 개만큼 채운다.
+	 * 타워 스폰 후보 위치들 (월드 좌표). 슬라이스당 하나씩, SliceCount 개를 채운다.
 	 * (각 슬라이스 = 바닥 조각 2개이므로, 그 슬라이스를 대표하는 한 지점을 넣으면 된다)
+	 *
+	 * 배열 순서는 참고용이다 — 어느 슬라이스 위인지는 좌표로 판정하므로 순서가 어긋나도
+	 * 파괴된 지형에 스폰되지 않는다. 다만 어긋나면 로그 경고가 뜨니 맞춰두는 게 좋다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
 	TArray<FVector> TowerSpawnPoints;

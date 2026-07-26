@@ -79,7 +79,15 @@ void ULostArkSkillGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHan
 		}
 
 		FVector DashDirection = AvatarPawn->GetActorForwardVector();
-		float CalcDashSpeed = DashDuration > 0.f ? (DashDistance / DashDuration) : 0.f;
+
+		// 목적지 안전 보정: 벽/보스 앞에서 멈추고(보스 밀기 방지),
+		// 아레나 밖·파괴된 지형(발밑 바닥 없음)으로 못 나가게 클램프.
+		// bApplyDashForce 를 쓰는 모든 스킬(= 공용 스페이스 대시 포함)에 일괄 적용된다.
+		const FVector DashStart = AvatarPawn->GetActorLocation();
+		const FVector DesiredEnd = DashStart + DashDirection * DashDistance;
+		const FVector SafeEnd = ComputeSafeDashDestination(Cast<ACharacter>(AvatarPawn), DashStart, DesiredEnd);
+		const float SafeDist = FVector::Distance(DashStart, SafeEnd);
+		float CalcDashSpeed = DashDuration > 0.f ? (SafeDist / DashDuration) : 0.f;
 
 		UAbilityTask_ApplyRootMotionConstantForce* ForceTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
 			this,

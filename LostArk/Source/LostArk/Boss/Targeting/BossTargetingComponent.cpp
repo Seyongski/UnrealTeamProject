@@ -17,6 +17,7 @@ UBossTargetingComponent::UBossTargetingComponent()
 	// 네이티브 태그로 기본값 지정 (에디터에서 오버라이드 가능)
 	DeadTag = LostArkTags::State_Dead.GetTag();
 	TrackTargetTag = LostArkTags::State_Boss_TrackTarget.GetTag();
+	MarkTag = LostArkTags::State_Player_Marked.GetTag();
 }
 
 void UBossTargetingComponent::BeginPlay()
@@ -37,6 +38,10 @@ void UBossTargetingComponent::BeginPlay()
 	if (!TrackTargetTag.IsValid())
 	{
 		TrackTargetTag = FGameplayTag::RequestGameplayTag(FName("State.Boss.TrackTarget"), /*ErrorIfNotFound=*/false);
+	}
+	if (!MarkTag.IsValid())
+	{
+		MarkTag = FGameplayTag::RequestGameplayTag(FName("State.Player.Marked"), /*ErrorIfNotFound=*/false);
 	}
 }
 
@@ -109,6 +114,56 @@ AActor* UBossTargetingComponent::SelectTarget(ETargetSelectPolicy Policy)
 
 	CurrentTarget = Chosen;
 	return Chosen;
+}
+
+void UBossTargetingComponent::MarkCurrentTarget()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority())
+	{
+		return;
+	}
+
+	AActor* NewMarked = CurrentTarget;
+	if (MarkedTarget.Get() == NewMarked)
+	{
+		return;	// 이미 같은 대상이 표식 중 (중복 부여 방지)
+	}
+
+	// 이전 표식 대상에서 회수 (항상 최대 1명)
+	if (AActor* Prev = MarkedTarget.Get())
+	{
+		if (UAbilitySystemComponent* PrevASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Prev))
+		{
+			UBossCombatStatics::RemoveReplicatedLooseTag(PrevASC, MarkTag);
+		}
+	}
+
+	MarkedTarget = NewMarked;
+
+	if (UAbilitySystemComponent* ASC = NewMarked
+		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(NewMarked) : nullptr)
+	{
+		UBossCombatStatics::AddReplicatedLooseTag(ASC, MarkTag);
+	}
+}
+
+void UBossTargetingComponent::ClearMark()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority())
+	{
+		return;
+	}
+
+	if (AActor* Prev = MarkedTarget.Get())
+	{
+		if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Prev))
+		{
+			UBossCombatStatics::RemoveReplicatedLooseTag(ASC, MarkTag);
+		}
+	}
+	MarkedTarget = nullptr;
 }
 
 void UBossTargetingComponent::UpdateFacing(float DeltaTime)

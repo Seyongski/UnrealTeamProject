@@ -30,4 +30,22 @@ public:
 	/** 구간 동안 부여할 태그 (기본 State.Boss.TrackTarget) */
 	UPROPERTY(EditAnywhere, Category = "Boss")
 	FGameplayTag TrackTag;
+
+	/**
+	 * 이 구간만 회전 속도를 따로 쓴다. 끄면 타겟팅 컴포넌트의 BP 디폴트 값을 사용.
+	 * (패턴마다 "천천히 노려보며 돌기" / "빠르게 스냅" 을 구분하고 싶을 때)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Boss|Turn Speed")
+	bool bOverrideTurnSpeed = false;
+
+	/** 보간 속도 (클수록 빠름). 컴포넌트 기본값 6 */
+	UPROPERTY(EditAnywhere, Category = "Boss|Turn Speed", meta = (EditCondition = "bOverrideTurnSpeed", ClampMin = "0.0"))
+	float RotationInterpSpeed = 6.f;
+
+	/**
+	 * 초당 최대 회전량(도). 0 = 무제한.
+	 * "확 도는 느낌"을 잡는 건 보간 속도보다 이 상한이다 (권장 180~360).
+	 */
+	UPROPERTY(EditAnywhere, Category = "Boss|Turn Speed", meta = (EditCondition = "bOverrideTurnSpeed", ClampMin = "0.0"))
+	float MaxTurnRate = 270.f;
 };

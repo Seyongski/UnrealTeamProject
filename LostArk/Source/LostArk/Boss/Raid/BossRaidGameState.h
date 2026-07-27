@@ -9,6 +9,27 @@
 class UUserWidget;
 class USoundBase;
 class UAudioComponent;
+class APlayerState;
+
+USTRUCT(BlueprintType)
+struct FPlayerDamageInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "MVP")
+	APlayerState* PlayerState;
+
+	UPROPERTY(BlueprintReadWrite, Category = "MVP")
+	float DamageDealt;
+
+	FPlayerDamageInfo()
+		: PlayerState(nullptr), DamageDealt(0.f)
+	{}
+
+	FPlayerDamageInfo(APlayerState* InPlayerState, float InDamage)
+		: PlayerState(InPlayerState), DamageDealt(InDamage)
+	{}
+};
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnArenaSlicesChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRaidCleared);
@@ -47,6 +68,18 @@ public:
 	/** 클리어 배너 유지 시간(초). 지나면 자동 RemoveFromParent (0이면 위젯이 스스로 관리) */
 	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear", meta = (ClampMin = "0.0"))
 	float ClearWidgetLifetime = 5.f;
+
+	/** MVP 위젯 (배너가 지워진 후 등장) */
+	UPROPERTY(EditDefaultsOnly, Category = "Raid|Clear")
+	TSubclassOf<UUserWidget> MvpWidgetClass;
+
+	/** MVP 딜량 리스트 */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|MVP")
+	TArray<FPlayerDamageInfo> PlayerDamageList;
+
+	/** 서버 전용: 플레이어 딜량 누적 */
+	UFUNCTION(BlueprintCallable, Category = "Raid|MVP")
+	void AddPlayerDamage(APlayerState* PlayerState, float Damage);
 
 	/** 클리어 여부 (복제) */
 	UFUNCTION(BlueprintPure, Category = "Raid|Clear")
@@ -146,8 +179,11 @@ private:
 	/** 이 머신의 로컬 플레이어 화면마다 클리어 배너 생성 (데디 서버는 로컬 플레이어 없음 -> no-op) */
 	void ShowClearBannerLocally();
 
-	/** 배너 수명 종료 -> 제거 */
+	/** 배너 수명 종료 -> 제거 및 MVP 창 팝업 */
 	void RemoveClearWidgets();
+
+	/** MVP 창 띄우기 (로컬 플레이어 화면) */
+	void ShowMvpWindowLocally();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UUserWidget>> ActiveClearWidgets;

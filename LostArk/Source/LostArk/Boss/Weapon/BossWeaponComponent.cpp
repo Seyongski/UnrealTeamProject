@@ -26,11 +26,15 @@ void UBossWeaponComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 서버/클라 각자 로컬로 3개를 한 번만 스폰해 소켓에 부착 (전부 숨김으로 시작).
-	// Hammer2 는 양손이라 두 번 스폰, Hammer1 은 한 자루.
+	// 서버/클라 각자 로컬로 4개를 한 번만 스폰해 소켓에 부착 (전부 숨김으로 시작).
+	// Hammer2 는 양손이라 두 번 스폰, Hammer1 은 정방향/뒤집기 각각 한 자루.
+	// (뒤집기를 별도 인스턴스로 두는 이유: 전환 때 재부착/회전 대신 숨김 토글만 하면
+	//  노티파이가 씹혀도 상태가 꼬이지 않는다 — 이 컴포넌트의 기본 설계와 동일)
 	DualRightWeapon = SpawnAndAttachWeapon(DualWeaponClass, DualRightSocket);
 	DualLeftWeapon  = SpawnAndAttachWeapon(DualWeaponClass, DualLeftSocket);
 	TwoHandedWeapon = SpawnAndAttachWeapon(TwoHandedWeaponClass, TwoHandedSocket);
+	TwoHandedReversedWeapon = SpawnAndAttachWeapon(TwoHandedWeaponClass, TwoHandedReversedSocket,
+		TwoHandedReversedRotationOffset);
 
 	// late-join: 접속 시점의 복제된 WeaponState 를 반영.
 	// (OnRep 이 스폰보다 먼저 도착해 무기 ref 가 null 이었어도 여기서 다시 맞춰준다.)
@@ -56,14 +60,18 @@ void UBossWeaponComponent::ApplyWeaponState()
 {
 	const bool bDual = (WeaponState == EBossWeaponState::DualWield);
 	const bool bTwo  = (WeaponState == EBossWeaponState::TwoHanded);
+	const bool bTwoRev = (WeaponState == EBossWeaponState::TwoHandedReversed);
 
 	SetWeaponVisible(DualRightWeapon, bDual);
 	SetWeaponVisible(DualLeftWeapon, bDual);
 	SetWeaponVisible(TwoHandedWeapon, bTwo);
-	// Unarmed 는 세 조건 모두 false -> 전부 숨김.
+	SetWeaponVisible(TwoHandedReversedWeapon, bTwoRev);
+	// 상태는 배타적이라 정방향/뒤집기가 동시에 보이는 일은 없다.
+	// Unarmed 는 네 조건 모두 false -> 전부 숨김.
 }
 
-AActor* UBossWeaponComponent::SpawnAndAttachWeapon(TSubclassOf<AActor> WeaponClass, FName SocketName)
+AActor* UBossWeaponComponent::SpawnAndAttachWeapon(TSubclassOf<AActor> WeaponClass, FName SocketName,
+	const FRotator& RelativeRotation)
 {
 	if (!WeaponClass)
 	{
@@ -100,6 +108,13 @@ AActor* UBossWeaponComponent::SpawnAndAttachWeapon(TSubclassOf<AActor> WeaponCla
 	Weapon->SetReplicates(false);
 
 	Weapon->AttachToComponent(Mesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, SocketName);
+
+	// 소켓에 스냅된 '뒤' 상대 회전을 얹는다 (소켓 방향만으로 각이 안 나올 때의 미세조정).
+	// 0 이면 소켓 방향을 그대로 따른다.
+	if (!RelativeRotation.IsNearlyZero())
+	{
+		Weapon->SetActorRelativeRotation(RelativeRotation);
+	}
 
 	// 데미지는 AOE 가 처리 -> 무기 콜리전은 항상 꺼둔다(1회). 시작은 숨김.
 	Weapon->SetActorEnableCollision(false);

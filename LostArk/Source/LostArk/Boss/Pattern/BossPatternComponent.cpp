@@ -5,6 +5,7 @@
 #include "Boss/Pattern/BossPhaseDataAsset.h"
 #include "Boss/Pattern/PatternDataAsset.h"
 #include "Boss/Targeting/BossTargetingComponent.h"
+#include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/BossGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -105,6 +106,9 @@ void UBossPatternComponent::EnterPhase(int32 PhaseIndex)
 	// 페이즈 태그 교체 (다른 시스템/어빌리티가 현재 페이즈를 태그로 조회 가능)
 	SwapPhaseTag(Phase->PhaseTag);
 
+	// 약점포착 페이즈면 진입 즉시 부여 (전환 기믹이 도는 동안에도 유지)
+	ApplyPhaseWeakPoint(Phase->bWeakPointExposed);
+
 	// 전환 기믹이 있으면 먼저 실행 -> 끝나면 일반 패턴 선택
 	if (Phase->TransitionGimmick)
 	{
@@ -134,6 +138,30 @@ void UBossPatternComponent::SwapPhaseTag(const FGameplayTag& NewPhaseTag)
 		ASC->AddLooseGameplayTag(NewPhaseTag);
 	}
 	CurrentPhaseTag = NewPhaseTag;
+}
+
+void UBossPatternComponent::ApplyPhaseWeakPoint(bool bExposed)
+{
+	// 약점포착은 데미지 판정에 쓰이므로 서버 권위에서만 조작 (복제 루스 태그로 클라 표시까지 전파)
+	UAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || !ASC->IsOwnerActorAuthoritative() || bExposed == bPhaseWeakPointApplied)
+	{
+		return;
+	}
+
+	// 루스 태그는 참조 카운트라 '내 몫 +1 / 내 몫 -1' 로 다뤄야 남의 부여를 지우지 않는다.
+	// 지형 파괴(DestroySlice)가 따로 +1 해 뒀다면 페이즈가 꺼져도 카운트가 남아 태그가 유지된다.
+	// (bPhaseWeakPointApplied 가드 덕에 add/remove 는 항상 1:1 로 짝이 맞는다)
+	const FGameplayTag WeakTag = LostArkTags::State_Boss_WeakPointExposed;
+	if (bExposed)
+	{
+		UBossCombatStatics::AddReplicatedLooseTag(ASC, WeakTag);
+	}
+	else
+	{
+		UBossCombatStatics::RemoveReplicatedLooseTag(ASC, WeakTag);
+	}
+	bPhaseWeakPointApplied = bExposed;
 }
 
 void UBossPatternComponent::RunNextPattern()

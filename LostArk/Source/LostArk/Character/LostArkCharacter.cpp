@@ -61,6 +61,15 @@ ALostArkCharacter::ALostArkCharacter()
 	WeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
 	WeaponMesh->SetupAttachment(GetMesh(), TEXT("b_wp_1"));
 
+	// 지면 데칼(보스 백헤드 / 장판 예고 / 타겟팅)이 캐릭터 몸에 투영돼 색이 변하는 것 방지.
+	// 디퍼드 데칼은 박스 안의 불투명 지오메트리에 전부 찍히므로, 데칼 위에 서 있기만 해도
+	// 발/다리가 물든다 -> 받는 쪽에서 끈다. 보스도 같은 이유로 꺼져 있다(ABossBase 생성자).
+	if (GetMesh())
+	{
+		GetMesh()->SetReceivesDecals(false);
+	}
+	WeaponMesh->SetReceivesDecals(false);
+
 	bIsLeftFootForward = true;
 	bIsDead = false;
 	bIsWeaponEquipped = false;

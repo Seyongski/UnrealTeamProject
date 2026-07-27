@@ -41,4 +41,11 @@ protected:
 	virtual void BuildTelegraph() override;
 	virtual void DebugDrawShape() const override;
 	virtual void ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const override;
+
+	/**
+	 * 넉백 SweepSide/SweepSideBack 용 방향.
+	 * 경계 각도(끝 또는 시작)의 반지름 방향에 직교(±90도)하는 수평 방향을 돌려준다
+	 * = 부채꼴이 StartAngle -> EndAngle 로 훑을 때 맞은 사람이 쓸려나가는 쪽.
+	 */
+	virtual bool GetSweepPushDirection(bool bReverse, FVector& OutDir) const override;
 };

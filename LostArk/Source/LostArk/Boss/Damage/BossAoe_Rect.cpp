@@ -54,6 +54,21 @@ void ABossAoe_Rect::DebugDrawShape() const
 		FColor::Green, false, 4.f, 0, 4.f);
 }
 
+bool ABossAoe_Rect::GetSweepPushDirection(bool bReverse, FVector& OutDir) const
+{
+	// 사각형은 각도 구간이 없다. 길이축(Forward)에 직교하는 축 = 측면(Right) 이 곧 쓸기 방향.
+	// 부채꼴의 '끝 경계선에 직교' 와 같은 의미 (긴 변을 벽으로 보고 옆으로 밀어내기).
+	FVector Dir = bReverse ? -GetShapeRight() : GetShapeRight();
+	Dir.Z = 0.f;
+	if (!Dir.Normalize())
+	{
+		return false;	// 축이 퇴화 -> 베이스가 ShapeForward 로 폴백
+	}
+
+	OutDir = Dir;
+	return true;
+}
+
 void ABossAoe_Rect::ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const
 {
 	if (!NiagaraComp)

@@ -77,6 +77,30 @@ void ABossAoe_Sector::DebugDrawShape() const
 	}
 }
 
+bool ABossAoe_Sector::GetSweepPushDirection(bool bReverse, FVector& OutDir) const
+{
+	// 훑는 방향 부호: 보통 StartAngle < EndAngle 이라 각도가 커지는 쪽(=우측)이 진행 방향.
+	// (설정이 뒤집혀 있어도 부호로 흡수)
+	const float Sign = (EndAngle >= StartAngle) ? 1.f : -1.f;
+
+	// 기준 경계선: 정방향이면 끝 각도, 역방향이면 시작 각도.
+	// 그 경계선(반지름 방향)에 직교 = ±90도 회전 -> 부채꼴 바깥으로 밀어내는 접선 방향이 된다.
+	const float BoundaryDeg = bReverse ? StartAngle : EndAngle;
+	const float PushDeg = BoundaryDeg + (bReverse ? -90.f : 90.f) * Sign;
+
+	// 판정/디버그와 동일 규약: 각도 A 방향 = Forward*cos(A) + Right*sin(A) (전방=0°, 우측 +)
+	const float Rad = FMath::DegreesToRadians(PushDeg);
+	FVector Dir = GetShapeForward() * FMath::Cos(Rad) + GetShapeRight() * FMath::Sin(Rad);
+	Dir.Z = 0.f;
+	if (!Dir.Normalize())
+	{
+		return false;	// 축이 퇴화 -> 베이스가 ShapeForward 로 폴백
+	}
+
+	OutDir = Dir;
+	return true;
+}
+
 void ABossAoe_Sector::ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const
 {
 	if (!NiagaraComp)

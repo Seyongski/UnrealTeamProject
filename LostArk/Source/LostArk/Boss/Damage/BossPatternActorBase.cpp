@@ -183,6 +183,7 @@ void ABossPatternActorBase::ResolveOrigin()
 		CacheShapeAxes();
 		LaunchDirection = ShapeForward;
 		SpiralBasePos = AttackCenter;
+		TravelStart = AttackCenter;
 		UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s ResolveOrigin(클라): 위치=(%.1f,%.1f,%.1f) Yaw=%.1f Fwd=(%.2f,%.2f)"),
 			*GetName(), AttackCenter.X, AttackCenter.Y, AttackCenter.Z,
 			GetActorRotation().Yaw, ShapeForward.X, ShapeForward.Y);
@@ -252,6 +253,10 @@ void ABossPatternActorBase::ResolveOrigin()
 
 	// Spiral 모드: 나선 중심(직선 진행 위치)을 스폰 지점에서 시작
 	SpiralBasePos = AttackCenter;
+
+	// AlongTravel 넉백의 '시작 지점'. ShapeOffset/바닥 스냅까지 끝난 최종 중심을 기준으로 잡아야
+	// 이후 (AttackCenter - TravelStart) 가 순수한 이동량이 된다.
+	TravelStart = AttackCenter;
 
 	UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s ResolveOrigin(서버): 위치=(%.1f,%.1f,%.1f) Yaw=%.1f Fwd=(%.2f,%.2f)"),
 		*GetName(), AttackCenter.X, AttackCenter.Y, AttackCenter.Z,
@@ -930,6 +935,44 @@ FVector ABossPatternActorBase::ComputeKnockbackDirection(const AActor* Target) c
 
 	case EAoeKnockbackDirection::FromCaster:
 		Dir = Target->GetActorLocation() - (Caster ? Caster->GetActorLocation() : AttackCenter);
+		break;
+
+	case EAoeKnockbackDirection::AlongTravel:
+	case EAoeKnockbackDirection::AgainstTravel:
+	{
+		// 시작(스폰) 지점 -> 현재 지점 = 장판이 실제로 훑고 온 방향. 맞은 사람 위치와 무관하게
+		// 전원이 같은 방향으로 쓸려나간다 (파도/레이저가 밀고 지나가는 연출).
+		Dir = AttackCenter - TravelStart;
+		Dir.Z = 0.f;
+		if (Dir.IsNearlyZero())
+		{
+			// 아직 안 움직인 시점(예고 중 Straight, 스폰 직후 Homing 등) -> 앞으로 갈 방향으로 대체
+			if (TargetingMode == EAoeTargetingMode::Straight)
+			{
+				Dir = LaunchDirection;
+			}
+			else if (HomingTarget && (TargetingMode == EAoeTargetingMode::Homing
+				|| TargetingMode == EAoeTargetingMode::Spiral))
+			{
+				Dir = HomingTarget->GetActorLocation() - TravelStart;
+			}
+			// 그래도 퇴화면 아래 공통 폴백(ShapeForward)이 받는다
+		}
+		if (Knockback.Direction == EAoeKnockbackDirection::AgainstTravel)
+		{
+			Dir = -Dir;	// 끝 -> 시작 (장판이 온 쪽으로 되밀기)
+		}
+		break;
+	}
+
+	case EAoeKnockbackDirection::SweepSide:
+	case EAoeKnockbackDirection::SweepSideBack:
+		// 도형의 끝 경계선에 직교하는 방향 = 도형이 옆으로 훑고 지나가는 쪽. 도형(자식)이 계산한다.
+		// 지원 안 하는 도형이면 실패 -> 아래 공통 폴백(ShapeForward).
+		if (!GetSweepPushDirection(Knockback.Direction == EAoeKnockbackDirection::SweepSideBack, Dir))
+		{
+			Dir = FVector::ZeroVector;
+		}
 		break;
 
 	case EAoeKnockbackDirection::FromCenter:

@@ -75,6 +75,12 @@ private:
 
 	void EnterPhase(int32 PhaseIndex);
 	void SwapPhaseTag(const FGameplayTag& NewPhaseTag);
+
+	/**
+	 * 페이즈의 bWeakPointExposed 에 맞춰 약점포착 태그를 부여/회수 (서버 권위에서만).
+	 * 이 컴포넌트가 붙인 경우만 회수해, 지형 파괴로 붙은 약점포착은 건드리지 않는다.
+	 */
+	void ApplyPhaseWeakPoint(bool bExposed);
 	void RunNextPattern();
 
 	/** 딜타임이 끝난 뒤 실제로 다음 패턴/페이즈 전환을 결정 (OnPatternAbilityFinished 의 본체) */
@@ -96,6 +102,7 @@ private:
 	bool bRunningTransition = false;		// 지금 실행 중인 게 페이즈 전환 기믹인지
 	bool bCombatStopped = false;			// StopCombat 이후 (사망 등) — 패턴 재개 금지
 	FGameplayTag CurrentPhaseTag;			// 현재 ASC에 부여 중인 페이즈 태그
+	bool bPhaseWeakPointApplied = false;	// 약점포착을 '페이즈 설정 때문에' 부여 중인지 (회수 판단용)
 
 	bool bIdleTagActive = false;			// 딜타임 Idle 태그 부여 중인지
 

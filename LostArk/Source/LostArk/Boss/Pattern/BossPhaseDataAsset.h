@@ -46,6 +46,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Phase")
 	TObjectPtr<UPatternDataAsset> TransitionGimmick = nullptr;
 
+	/**
+	 * 이 페이즈 동안 약점포착(State.Boss.WeakPointExposed) 유지 여부.
+	 * 켜면 페이즈 진입 시점부터 '어디서 때려도' 백/헤드어택 보너스가 적용된다
+	 * (판정 규칙은 UBossCombatStatics::EvaluatePositionalBonus 참고).
+	 *
+	 * 끈 페이즈로 넘어가면 이 컴포넌트가 부여한 태그는 회수된다. 단 지형 파괴
+	 * (ABossRaidGameMode::DestroySlice)로 붙은 약점포착은 별개 경로라 유지된다.
+	 * 카운터 판정은 약점포착과 무관하게 항상 실제 헤드 존만 인정한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Phase")
+	bool bWeakPointExposed = false;
+
 	/** 이 페이즈에서 사용할 패턴들 (가중치 랜덤 선택) */
 	UPROPERTY(EditDefaultsOnly, Category = "Phase")
 	TArray<FBossWeightedPattern> Patterns;

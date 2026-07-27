@@ -124,7 +124,13 @@ void ULostArkShadowDashAbility::OnPrepareCompleted()
 		if (bApplyDashForce)
 		{
 			FVector DashDirection = AvatarPawn->GetActorForwardVector();
-			float CalcDashSpeed = DashDuration > 0.f ? (DashDistance / DashDuration) : 0.f;
+
+			// 목적지 안전 보정: 벽/보스 앞에서 멈추고(보스 밀기 방지), 아레나 밖(맵 뚫기)으로 못 나가게 클램프.
+			// (ShadowDash 는 대시 중 Pawn 을 Ignore 하지만, 목적지를 보스 앞으로 줄여 겹침->튕김을 막는다)
+			const FVector DesiredEnd = StartLocation + DashDirection * DashDistance;
+			const FVector SafeEnd = ComputeSafeDashDestination(Cast<ACharacter>(AvatarPawn), StartLocation, DesiredEnd);
+			const float SafeDist = FVector::Distance(StartLocation, SafeEnd);
+			float CalcDashSpeed = DashDuration > 0.f ? (SafeDist / DashDuration) : 0.f;
 
 			UAbilityTask_ApplyRootMotionConstantForce* ForceTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
 				this,

@@ -19,6 +19,9 @@ public:
 
 	void OnStagePortalAreaReady();
 
+	UFUNCTION()
+	void ExecuteServerTravel();
+
 protected:
 	virtual void BeginPlay() override;
 

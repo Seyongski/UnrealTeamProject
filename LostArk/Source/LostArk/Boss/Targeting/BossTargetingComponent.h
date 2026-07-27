@@ -44,6 +44,23 @@ public:
 	AActor* GetCurrentTarget() const { return CurrentTarget; }
 
 	/**
+	 * 어그로 표식 부여 (서버): 현재 타겟에게 MarkTag(State.Player.Marked) 복제 루스 태그를 건다.
+	 * 표식은 타겟 선정(SelectTarget)과 독립 — 이 함수를 호출하는 기믹에서만 마커가 뜬다.
+	 * 이미 다른 대상이 표식 중이면 그쪽에서 회수 후 새 대상에 부여(항상 최대 1명).
+	 * 표식 대상은 CurrentTarget 스냅샷으로 보관하므로, 이후 다른 패턴이 CurrentTarget 을 바꿔도 표식은 그대로 유지된다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Targeting")
+	void MarkCurrentTarget();
+
+	/** 어그로 표식 해제 (서버). 표식받은 플레이어에게서 MarkTag 회수. 기믹 종료/보스 사망 시 호출 */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Targeting")
+	void ClearMark();
+
+	/** 현재 표식 대상 (없으면 nullptr). 서버 권위 스냅샷 */
+	UFUNCTION(BlueprintPure, Category = "Boss|Targeting")
+	AActor* GetMarkedTarget() const { return MarkedTarget.Get(); }
+
+	/**
 	 * 직전 추적 회전과 같은 방향으로 초당 TurnRate(도)만큼 회전 시작 (서버).
 	 * 방향 부호는 TrackTarget 구간에서 캡처된 LastTrackTurnSign 을 재사용
 	 * -> 추적이 시계방향이었으면 이 회전도 시계방향.
@@ -69,6 +86,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
 	FGameplayTag TrackTargetTag;
 
+	/** 어그로 표식 태그. 표식받은 플레이어에 부여 (미설정 시 BeginPlay에서 State.Player.Marked 로 폴백) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
+	FGameplayTag MarkTag;
+
 	/** 회전 보간 속도 (클수록 빠르게 돎) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Targeting")
 	float RotationInterpSpeed = 6.f;
@@ -90,6 +111,9 @@ private:
 
 	UPROPERTY(Replicated, Transient)
 	TObjectPtr<AActor> CurrentTarget;
+
+	/** 현재 표식 대상 스냅샷 (서버 전용. 표식은 복제 루스 태그로 클라에 전파되므로 이 포인터는 복제 안 함) */
+	TWeakObjectPtr<AActor> MarkedTarget;
 
 	/** 마지막 추적 회전 방향 (+1/-1, 0=미정). 추적 세션 첫 유효 프레임에 확정 */
 	float LastTrackTurnSign = 0.f;

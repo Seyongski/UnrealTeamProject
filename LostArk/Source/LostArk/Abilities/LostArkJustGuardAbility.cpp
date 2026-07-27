@@ -13,13 +13,11 @@
 
 ULostArkJustGuardAbility::ULostArkJustGuardAbility()
 {
-	// 蹂댁뒪媛 ?댁뼱二쇰뒗 李??쒓렇 (???쒓렇媛 ?덉뼱?쇰쭔 諛쒕룞 媛??
-	FGameplayTag GuardReadyTag = FGameplayTag::RequestGameplayTag(FName("State.Player.GuardReady"), false);
-	ActivationRequiredTags.AddTag(GuardReadyTag);
-
-	// 媛??紐⑥뀡 以??좎????쒓렇
+	// 가드 모션 중 유지될 태그
 	FGameplayTag GuardingTag = FGameplayTag::RequestGameplayTag(FName("State.Player.Guarding"), false);
 	ActivationOwnedTags.AddTag(GuardingTag);
+
+	AbilityTags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Skill.JustGuard"), false));
 }
 
 void ULostArkJustGuardAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

@@ -15,6 +15,7 @@ class UWidgetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnChargeGaugeChanged, float, NewGauge, float, MaxGauge);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnChargeSideChanged, bool, bIsRedCharge);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMarkedChanged, bool, bMarked);
 
 /**
  * 플레이어 전하 게이지 (레이드 조우 시 BossRaidGameMode 가 각 플레이어 폰에 런타임 부착, 복제).
@@ -79,6 +80,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|Charge")
 	bool IsRedCharge() const;
 
+	/**
+	 * 어그로 표식(State.Player.Marked) 변경 방송. 서버/클라 모두 태그 변화를 직접 감시 → 원인 무관 반응.
+	 * 몸통 마커 위젯이 여기 바인딩해 Visible/Hidden 을 토글한다(태그 = 지정된 1명 게이트).
+	 * 표식은 UBossTargetingComponent::MarkCurrentTarget/ClearMark 로만 켜지므로, 일반 타겟 선정으론 안 뜬다.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Charge")
+	FOnMarkedChanged OnMarkedChanged;
+
+	/** 현재 이 플레이어가 어그로 표식 대상인지. 위젯 Construct 시 초기값 조회용 */
+	UFUNCTION(BlueprintPure, Category = "Boss|Charge")
+	bool IsMarked() const;
+
 	/** 게이지 최대치 */
 	UPROPERTY(EditDefaultsOnly, Category = "Boss|Charge", meta = (ClampMin = "1.0"))
 	float MaxGauge = 100.f;
@@ -127,6 +140,21 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Boss|Charge|UI")
 	FVector2D FootGaugeDrawSize = FVector2D(120.f, 16.f);
 
+	// ─── 몸통 어그로 마커 (지정된 1명에게만 표시. State.Player.Marked 태그가 게이트) ───
+
+	/** 몸통 어그로 마커 위젯 (UBossPlayerStatusWidget 자식 WBP). 비우면 마커 안 뜸.
+	 *  WBP 는 OnMarkedChanged 에 바인딩해 표식 있을 때만 Visible 로 만든다 */
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Charge|UI")
+	TSubclassOf<UUserWidget> BodyMarkWidgetClass;
+
+	/** 몸통 마커의 폰 기준 Z 오프셋(cm). 몸통 중앙 근처(전하=머리 위, 게이지=발밑 사이) */
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Charge|UI")
+	float BodyMarkZOffset = 30.f;
+
+	/** 몸통 마커 드로우 크기(px) */
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Charge|UI")
+	FVector2D BodyMarkDrawSize = FVector2D(64.f, 64.f);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -138,6 +166,9 @@ private:
 
 	/** Red/Blue 태그 변화 감시 콜백 -> OnChargeSideChanged 방송 (서버/클라 공통, 원인 무관) */
 	void HandleChargeTagChanged(const FGameplayTag Tag, int32 NewCount);
+
+	/** State.Player.Marked 태그 변화 감시 콜백 -> OnMarkedChanged 방송 (서버/클라 공통) */
+	void HandleMarkedTagChanged(const FGameplayTag Tag, int32 NewCount);
 
 	/** 렌더링 머신(데디서버 제외)에서 머리 위 아이콘/발밑 게이지 위젯 컴포넌트를 생성 + 주입 */
 	void SetupStatusWidgets();
@@ -152,6 +183,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWidgetComponent> FootGaugeComp;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidgetComponent> BodyMarkComp;
 
 	/** 과충전: 이 캐릭터를 따라다니는 거대 원장판 스폰 */
 	void TriggerOvercharge();

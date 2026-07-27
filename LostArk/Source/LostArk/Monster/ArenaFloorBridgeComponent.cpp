@@ -52,6 +52,8 @@ void UArenaFloorBridgeComponent::TryBind()
 	{
 		GS->OnArenaSlicesChanged.AddDynamic(this, &UArenaFloorBridgeComponent::HandleSlicesChanged);
 		bBound = true;
+		UE_LOG(LogTemp, Warning, TEXT("[FloorBridge] GameState 바인드 완료 (SliceCount=%d) — Owner=%s"),
+			GS->SliceCount, *GetNameSafe(GetOwner()));
 		HandleSlicesChanged();	// 늦은 참여/리로드 대비 현재 마스크 즉시 반영
 	}
 	else if (UWorld* World = GetWorld())
@@ -81,6 +83,7 @@ void UArenaFloorBridgeComponent::HandleSlicesChanged()
 		if (GS->IsSliceDestroyed(Index))
 		{
 			FiredMask |= Bit;
+			UE_LOG(LogTemp, Warning, TEXT("[FloorBridge] OnSliceDestroyed 방송: Slice=%d (BP 에서 이 인덱스 조각 BreakFloor 필요)"), Index);
 			OnSliceDestroyed.Broadcast(Index);
 		}
 	}

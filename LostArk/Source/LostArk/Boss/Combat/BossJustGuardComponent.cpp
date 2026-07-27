@@ -88,15 +88,36 @@ void UBossJustGuardComponent::OpenWindow(float InGuardStateDuration)
 
 	// 전 플레이어에 '1회 가드 가능' 부여. 복제 루스로 클라(소유자)까지 전파 -> G 어빌리티 게이트/UI
 	// (전용 대상이 지정돼 있으면 그 1명에게만 — 기믹 대상 전용 저스트가드)
+	// 전 플레이어에 '1회 가드 가능' 부여. 복제 루스로 클라(소유자)까지 전파 -> G 어빌리티 게이트/UI
+	// (전용 대상이 지정돼 있고 유효할 때만 1명으로 제한 — 유효하지 않으면 전원 허용으로 폴백)
 	TArray<APawn*> PlayerPawns;
 	UBossCombatStatics::GetPlayerPawns(GetWorld(), PlayerPawns);
+
+	bool bHasExclusiveTarget = ExclusiveGuardPlayer.IsValid();
+	if (bHasExclusiveTarget)
+	{
+		bool bFoundValidPlayer = false;
+		for (APawn* Pawn : PlayerPawns)
+		{
+			if (Pawn && Pawn == ExclusiveGuardPlayer.Get())
+			{
+				bFoundValidPlayer = true;
+				break;
+			}
+		}
+		if (!bFoundValidPlayer)
+		{
+			bHasExclusiveTarget = false; // 타깃을 못 찾으면 전원 허용 폴백
+		}
+	}
+
 	for (APawn* Pawn : PlayerPawns)
 	{
 		if (Pawn == Owner)
 		{
 			continue;
 		}
-		if (ExclusiveGuardPlayer.IsValid() && Pawn != ExclusiveGuardPlayer.Get())
+		if (bHasExclusiveTarget && Pawn != ExclusiveGuardPlayer.Get())
 		{
 			continue;
 		}
@@ -115,12 +136,13 @@ void UBossJustGuardComponent::OpenWindow(float InGuardStateDuration)
 
 	OnJustGuardWindowChanged.Broadcast(true);
 
-	// [임시 디버그] 창이 열린 순간을 화면에 표시 (G 를 이때 눌러야 함) — 확인 후 삭제
+	// [디버그] 창이 열린 순간을 화면과 로그에 명확히 표시
 	if (GEngine)
 	{
 		const int32 NumReady = ReadyPlayers.Num();
-		GEngine->AddOnScreenDebugMessage(/*Key*/1001, 3.f, FColor::Yellow,
-			FString::Printf(TEXT("[저스트가드] 창 열림 — G 누르세요 (가드가능 %d명)"), NumReady));
+		GEngine->AddOnScreenDebugMessage(1001, 3.5f, FColor::Yellow,
+			FString::Printf(TEXT("[저스트가드 창 열림!] G를 누르세요 (가드가능: %d명)"), NumReady));
+		UE_LOG(LogTemp, Warning, TEXT("[JustGuard] OpenWindow Called - Ready Players: %d"), NumReady);
 	}
 }
 
@@ -159,12 +181,6 @@ void UBossJustGuardComponent::NotifyGuardInput(AActor* Player)
 		return;
 	}
 
-	// GuardReady 를 아직 가진 플레이어만 유효 (패턴당 1회 게이트)
-	if (!HasGuardReady(Player))
-	{
-		return;
-	}
-
 	UWorld* World = GetWorld();
 
 	FJustGuardInput Input;
@@ -175,16 +191,11 @@ void UBossJustGuardComponent::NotifyGuardInput(AActor* Player)
 	Input.Facing.Normalize();
 	GuardInputs.Add(Player, Input);
 
-	// 가드 소모: GuardReady 제거 -> 이 패턴에서 다시 못 누른다
-	UBossCombatStatics::RemoveReplicatedLooseTag(
-		GetPlayerASC(Player), LostArkTags::State_Player_GuardReady.GetTag());
-	ReadyPlayers.Remove(Player);
-
-	// [임시 디버그] 입력이 기록된 순간 (성공/실패 판정은 장판이 판정 시각에 별도 표시) — 확인 후 삭제
+	// [디버그] 입력이 기록된 순간 화면에 선명하게 표시 (광클 시 최신 시각 갱신)
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(/*Key*/1002, 3.f, FColor::Cyan,
-			FString::Printf(TEXT("[저스트가드] 입력 기록 t=%.2f (판정 대기)"), Input.PressTime));
+		GEngine->AddOnScreenDebugMessage(1002, 3.f, FColor::Cyan,
+			FString::Printf(TEXT("[저스트가드 G키 수신] 입력시각: %.2f초 (최신 시각 갱신 완료)"), Input.PressTime));
 	}
 }
 
@@ -197,8 +208,6 @@ EJustGuardResult UBossJustGuardComponent::ResolveGuard(AActor* Player, const FJu
 	}
 
 	// 타이밍: 판정 시각 J = T + Delay. 성공 윈도우는 J 에서 끝나고 앞으로 Duration 만큼 = [J - Duration, J].
-	// (Delay=0 이면 [T - Duration, T] -> 다 차기 직전~다 차는 순간에 눌러야 성공.
-	//  Delay>0 이면 윈도우가 통째로 뒤로 밀려 '장판이 사라진 뒤 엇박에 눌러야' 성공)
 	const float JudgmentTime = Params.HitTime + FMath::Max(Params.JudgmentDelay, 0.f);
 	const float WindowStart = JudgmentTime - FMath::Max(Params.GuardWindowDuration, 0.f);
 	if (Input->PressTime < WindowStart || Input->PressTime > JudgmentTime)
@@ -275,20 +284,43 @@ EJustGuardResult UBossJustGuardComponent::JudgeGuardAtAttack(float GuardAngleTol
 		MarkJustGuardFailedResult();	// 43(부수기) 분기 + 남은 창 게이트
 	}
 
-	// [임시 디버그] 판정 결과 화면 표시 — 확인 후 삭제
+	// [디버그] 판정 결과 화면 및 로그 구체적 출력
 	if (GEngine)
 	{
 		const bool bOK = (Result == EJustGuardResult::Success);
-		FString Msg;
-		switch (Result)
+		FString ReasonMsg;
+		const FJustGuardInput* Input = Target ? GuardInputs.Find(Target) : nullptr;
+		float PressT = Input ? Input->PressTime : -1.f;
+		float JudgmentT = Params.HitTime + FMath::Max(Params.JudgmentDelay, 0.f);
+		float WindowStartT = JudgmentT - FMath::Max(Params.GuardWindowDuration, 0.f);
+
+		if (Result == EJustGuardResult::Success)
 		{
-		case EJustGuardResult::Success:			Msg = TEXT("저스트가드 성공 (무피해)"); break;
-		case EJustGuardResult::FailTiming:		Msg = TEXT("저스트가드 실패 (타이밍)"); break;
-		case EJustGuardResult::FailDirection:	Msg = TEXT("저스트가드 실패 (방향)"); break;
-		default:								Msg = TEXT("저스트가드 실패 (미입력)"); break;
+			ReasonMsg = FString::Printf(TEXT("저스트가드 성공!! (입력시각: %.2fs, 판정시각: %.2fs)"), PressT, JudgmentT);
 		}
-		GEngine->AddOnScreenDebugMessage(/*Key*/1003, 3.f, bOK ? FColor::Green : FColor::Red,
-			FString::Printf(TEXT("[저스트가드 판정] %s"), *Msg));
+		else if (Result == EJustGuardResult::FailTiming)
+		{
+			if (PressT < WindowStartT)
+			{
+				ReasonMsg = FString::Printf(TEXT("저스트가드 실패 (너무 일찍 누름! 입력: %.2fs, 윈도우시작: %.2fs, %.2fs 조기)"), PressT, WindowStartT, WindowStartT - PressT);
+			}
+			else
+			{
+				ReasonMsg = FString::Printf(TEXT("저스트가드 실패 (너무 늦게 누름! 입력: %.2fs, 판정시각: %.2fs, %.2fs 지연)"), PressT, JudgmentT, PressT - JudgmentT);
+			}
+		}
+		else if (Result == EJustGuardResult::FailDirection)
+		{
+			ReasonMsg = FString::Printf(TEXT("저스트가드 실패 (방향 틀림 — 보스를 바라봐야 함!)"));
+		}
+		else
+		{
+			ReasonMsg = FString::Printf(TEXT("저스트가드 실패 (미입력 — G키 누르지 않음)"));
+		}
+
+		GEngine->AddOnScreenDebugMessage(1003, 4.f, bOK ? FColor::Green : FColor::Red,
+			FString::Printf(TEXT("[저스트가드 판정] %s"), *ReasonMsg));
+		UE_LOG(LogTemp, Warning, TEXT("[JustGuard] Result: %s"), *ReasonMsg);
 	}
 
 	return Result;

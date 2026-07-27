@@ -33,6 +33,15 @@ void ABossRaidGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 레벨 BGM: GameState 로 넘겨 복제 -> 각 클라가 로컬 재생 (늦은 접속도 복제로 커버)
+	if (LevelBgm)
+	{
+		if (ABossRaidGameState* GS = GetGameState<ABossRaidGameState>())
+		{
+			GS->SetRaidBgm(LevelBgm);
+		}
+	}
+
 	// 테스트 편의: 폰 possess 이후 자동 조우 시작
 	if (bAutoStartOnBeginPlay)
 	{

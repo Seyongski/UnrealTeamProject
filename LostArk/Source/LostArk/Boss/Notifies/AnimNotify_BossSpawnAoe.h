@@ -103,6 +103,17 @@ protected:
 	FVector LocationOffset = FVector::ZeroVector;
 
 	/**
+	 * 판정 중심 오프셋(cm). X=전방, Y=우측(+가 오른쪽). 0,0 이면 장판 BP 기본값을 유지한다.
+	 * 모든 도형(원/사각/부채꼴/...) 공통이며 예고·본체 VFX·판정이 통째로 함께 밀린다.
+	 *
+	 * LocationOffset 과 달리 원점 해석(SpawnOrigin) '뒤에' 적용되므로, 장판 BP 가
+	 * CasterLocation/CasterSocket 이거나 Follow 모드라도 배치가 지워지지 않는다.
+	 * 같은 장판 BP 로 '보스 헤드 앞 좌/우 두 장' 을 만들 때 이 값만 ±로 바꿔 노티파이 2개를 놓으면 된다.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe")
+	FVector2D ShapeOffset = FVector2D::ZeroVector;
+
+	/**
 	 * 켜면 스폰 '방향'을 소켓(헤드) 정면의 X/Y 로 맞춘다 (yaw 만, pitch/roll=0 → Z 무시).
 	 * 레이저처럼 "보스 헤드가 바라보는 X/Y 방향으로 발사"해야 하는 패턴용.
 	 * SpawnSocketName(헤드 소켓)을 지정하면 그 소켓 정면, 없으면 보스 액터 정면을 평면으로 눕혀 쓴다.

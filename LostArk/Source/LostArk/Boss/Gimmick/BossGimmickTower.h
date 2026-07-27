@@ -21,7 +21,8 @@ class UStaticMeshComponent;
  *  - 서 있는 슬라이스가 지형파괴되면 (레이저에 안 죽었어도) 자연스럽게 함께 사라진다.
  *  - 스폰/판정/파괴는 서버 권위. 파괴 연출은 멀티캐스트로 전 머신 BP 이벤트 호출.
  *
- * 스폰은 UBossTerrainGimmickComponent::SpawnGimmickTower 가 담당 (4개 지정 위치 중 선택).
+ * 스폰은 UBossTerrainGimmickComponent::SpawnGimmickTower 가 담당
+ * (지정 위치 중 파괴되지 않았고 이번에 파괴되지도 않을 슬라이스에서 랜덤 선택).
  */
 UCLASS(Blueprintable)
 class LOSTARK_API ABossGimmickTower : public AActor

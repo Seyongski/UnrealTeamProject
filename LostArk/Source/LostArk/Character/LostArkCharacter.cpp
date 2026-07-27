@@ -11,6 +11,7 @@
 #include "AbilitySystemComponent.h"
 #include "Character/LostArkAttributeSet.h"
 #include "Abilities/LostArkCharacterComboAttackAbility.h"
+#include "Abilities/LostArkJustGuardAbility.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "UI/LostArkDamageTextActor.h"
@@ -69,6 +70,8 @@ ALostArkCharacter::ALostArkCharacter()
 	{
 		DamageTextClass = DamageTextClassFinder.Class;
 	}
+
+	JustGuardAbilityClass = ULostArkJustGuardAbility::StaticClass();
 
 	PrimaryActorTick.bCanEverTick = false;
 	PrimaryActorTick.bStartWithTickEnabled = false;
@@ -130,9 +133,22 @@ void ALostArkCharacter::PossessedBy(AController* NewController)
 
 		if (HasAuthority())
 		{
+			if (AttributeSet)
+			{
+				AttributeSet->InitMaxHealth(InitialMaxHealth);
+				AttributeSet->InitHealth(InitialMaxHealth);
+				AttributeSet->InitMaxMana(InitialMaxMana);
+				AttributeSet->InitMana(InitialMaxMana);
+			}
+
 			if (ComboAttackAbilityClass && !ComboAttackAbilityHandle.IsValid())
 			{
 				ComboAttackAbilityHandle = AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(ComboAttackAbilityClass, 1, 0, this));
+			}
+
+			if (JustGuardAbilityClass)
+			{
+				AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(JustGuardAbilityClass, 1, static_cast<int32>(ELostArkAbilityInputID::JustGuard), this));
 			}
 
 			for (const FLostArkSkillInputBind& Bind : SkillInputBinds)

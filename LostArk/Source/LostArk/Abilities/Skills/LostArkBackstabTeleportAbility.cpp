@@ -124,23 +124,8 @@ void ULostArkBackstabTeleportAbility::ActivateAbility(const FGameplayAbilitySpec
 	FVector DestLocation = TargetLoc - TargetForward * TeleportOffset;
 	FRotator DestRotation = TargetForward.Rotation();
 
-	float CapsuleRadius = AvatarChar->GetCapsuleComponent()->GetScaledCapsuleRadius();
-	float CapsuleHalfHeight = AvatarChar->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-
-	FHitResult ObstacleHit;
-	FCollisionQueryParams ObstacleParams;
-	ObstacleParams.AddIgnoredActor(AvatarChar);
-	ObstacleParams.AddIgnoredActor(Target);
-
-	FCollisionShape CharacterShape = FCollisionShape::MakeCapsule(CapsuleRadius, CapsuleHalfHeight);
-	FVector Start = TargetLoc;
-	FVector End = DestLocation;
-
-	bool bHitObstacle = GetWorld()->SweepSingleByChannel(ObstacleHit, Start, End, FQuat::Identity, ECC_WorldStatic, CharacterShape, ObstacleParams);
-	if (bHitObstacle)
-	{
-		DestLocation = ObstacleHit.Location + ObstacleHit.ImpactNormal * CapsuleRadius;
-	}
+	// 목적지 안전 보정: 벽/보스 앞 + 아레나 바닥 안으로 클램프 (타겟 몬스터/아군은 통과, 발밑 바닥 없으면 못 나감).
+	DestLocation = ComputeSafeDashDestination(AvatarChar, TargetLoc, DestLocation);
 
 	AvatarChar->SetActorLocationAndRotation(DestLocation, DestRotation, false, nullptr, ETeleportType::TeleportPhysics);
 

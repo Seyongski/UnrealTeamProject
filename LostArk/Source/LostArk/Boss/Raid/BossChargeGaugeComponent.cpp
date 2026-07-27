@@ -47,6 +47,11 @@ void UBossChargeGaugeComponent::BeginPlay()
 		ASC->RegisterGameplayTagEvent(LostArkTags::State_Charge_Blue, EGameplayTagEventType::NewOrRemoved)
 			.AddUObject(this, &UBossChargeGaugeComponent::HandleChargeTagChanged);
 
+		// 어그로 표식 감시 -> 몸통 마커 위젯 Visibility. 표식은 늦게(기믹 중) 부여되므로 초기 방송은 불필요
+		// (표식 상태에서 위젯이 뒤늦게 생겨도 Construct 에서 IsMarked() 로 초기값을 읽으면 됨)
+		ASC->RegisterGameplayTagEvent(LostArkTags::State_Player_Marked, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &UBossChargeGaugeComponent::HandleMarkedTagChanged);
+
 		// 부착 시점에 이미 전하가 부여돼 있으면(조우 시작 순서상 항상 그렇다) 즉시 1회 방송
 		// -> BeginPlay 이후 생성되는 위젯도 Construct 에서 IsRedCharge() 로 초기값을 놓치지 않음
 		if (ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red) ||
@@ -78,6 +83,11 @@ void UBossChargeGaugeComponent::SetupStatusWidgets()
 	{
 		FootGaugeComp = CreateStatusWidget(
 			FootGaugeWidgetClass, FootGaugeZOffset, FootGaugeDrawSize, TEXT("ChargeFootGauge"));
+	}
+	if (!BodyMarkComp && BodyMarkWidgetClass)
+	{
+		BodyMarkComp = CreateStatusWidget(
+			BodyMarkWidgetClass, BodyMarkZOffset, BodyMarkDrawSize, TEXT("BodyAggroMark"));
 	}
 }
 
@@ -116,10 +126,21 @@ void UBossChargeGaugeComponent::HandleChargeTagChanged(const FGameplayTag /*Tag*
 	OnChargeSideChanged.Broadcast(IsRedCharge());
 }
 
+void UBossChargeGaugeComponent::HandleMarkedTagChanged(const FGameplayTag /*Tag*/, int32 /*NewCount*/)
+{
+	OnMarkedChanged.Broadcast(IsMarked());
+}
+
 bool UBossChargeGaugeComponent::IsRedCharge() const
 {
 	const UAbilitySystemComponent* ASC = GetOwnerASC();
 	return ASC && ASC->HasMatchingGameplayTag(LostArkTags::State_Charge_Red);
+}
+
+bool UBossChargeGaugeComponent::IsMarked() const
+{
+	const UAbilitySystemComponent* ASC = GetOwnerASC();
+	return ASC && ASC->HasMatchingGameplayTag(LostArkTags::State_Player_Marked);
 }
 
 UAbilitySystemComponent* UBossChargeGaugeComponent::GetOwnerASC() const

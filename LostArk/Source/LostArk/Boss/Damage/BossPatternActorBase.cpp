@@ -60,6 +60,7 @@ void ABossPatternActorBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(ABossPatternActorBase, bTelegraphFill);
 	DOREPLIFETIME(ABossPatternActorBase, TargetingMode);
 	DOREPLIFETIME(ABossPatternActorBase, HomingSpeed);	// Straight/Homing/Spiral 이동속도 (SetupStraightProjectile 런타임 주입)
+	DOREPLIFETIME(ABossPatternActorBase, ShapeOffset);	// 중심 오프셋 (스폰 노티파이 런타임 주입, Follow 모드는 클라도 매 틱 재적용)
 }
 
 ABossPatternActorBase* ABossPatternActorBase::SpawnAoeDeferred(UWorld* World,
@@ -241,6 +242,11 @@ void ABossPatternActorBase::ResolveOrigin()
 
 	CacheShapeAxes();
 
+	// 원점 해석이 끝난 '뒤에' 중심 오프셋 적용 -> SpawnOrigin 이 무엇이든(CasterLocation 등으로
+	// 위치를 덮어써도) 좌/우·전후 배치가 살아남는다. 아래 LaunchDirection/SpiralBasePos 가
+	// 옮겨진 중심을 기준으로 잡히도록 이 순서를 지킬 것.
+	ApplyShapeOffset();
+
 	// Straight 모드: 스폰 시 전방을 발사 방향으로 캐싱 (수평 등속 직진, 추적 없음)
 	LaunchDirection = ShapeForward;
 
@@ -392,6 +398,18 @@ bool ABossPatternActorBase::TryGetPlayerGroundZ(const FVector& At, float& OutZ) 
 		}
 	}
 	return bFound;
+}
+
+void ABossPatternActorBase::ApplyShapeOffset()
+{
+	if (ShapeOffset.IsNearlyZero())
+	{
+		return;
+	}
+
+	// 도형 로컬축(평면 Forward/Right) 기준으로 밀기. Z 는 이미 바닥으로 스냅돼 있으므로 유지.
+	AttackCenter += ShapeForward * ShapeOffset.X + ShapeRight * ShapeOffset.Y;
+	SetActorLocation(AttackCenter);	// 부착된 예고 메시/본체 VFX 도 함께 이동
 }
 
 void ABossPatternActorBase::CacheShapeAxes()
@@ -606,6 +624,9 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 			AttackCenter.Z = ResolveGroundZ(AttackCenter);
 			SetActorLocationAndRotation(AttackCenter, Caster->GetActorRotation());
 			CacheShapeAxes();
+			// 중심을 시전자에서 새로 잡았으므로 오프셋도 다시 얹는다 (누적이 아니라 매 틱 재계산이라 안전).
+			// 보스가 회전하면 축도 함께 돌아 좌/우 배치가 정면 기준을 유지한다.
+			ApplyShapeOffset();
 		}
 		break;
 
@@ -625,6 +646,7 @@ void ABossPatternActorBase::UpdateCenter(float DeltaTime)
 		{
 			AttackCenter = GetFeetLocation(HomingTarget);
 			SetActorLocation(AttackCenter);
+			ApplyShapeOffset();	// 타겟 위치에서 새로 잡은 중심에 오프셋 재적용 (Follow 와 동일)
 		}
 		break;
 

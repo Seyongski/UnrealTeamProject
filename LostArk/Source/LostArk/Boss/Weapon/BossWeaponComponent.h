@@ -11,13 +11,15 @@
  *  - Unarmed  : 맨손 (조우 시 기본)
  *  - DualWield : 양손에 Hammer2 하나씩 (wp_RR + wp_L)
  *  - TwoHanded : 합쳐진 Hammer1 한 자루 (wp_R)
+ *  - TwoHandedReversed : 합체무기를 뒤집어 든 상태 (전용 소켓 wp_ReverseR)
  */
 UENUM(BlueprintType)
 enum class EBossWeaponState : uint8
 {
 	Unarmed		UMETA(DisplayName = "맨손"),
 	DualWield	UMETA(DisplayName = "양손무기(Hammer2 x2)"),
-	TwoHanded	UMETA(DisplayName = "합체무기(Hammer1)")
+	TwoHanded	UMETA(DisplayName = "합체무기(Hammer1)"),
+	TwoHandedReversed	UMETA(DisplayName = "합체무기 뒤집기(Hammer1 역방향)")
 };
 
 /**
@@ -83,6 +85,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Weapon")
 	FName TwoHandedSocket = TEXT("wp_R");
 
+	/** Hammer1(합체무기)을 뒤집어 드는 전용 소켓. TwoHandedReversed 상태에서 사용 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Weapon")
+	FName TwoHandedReversedSocket = TEXT("wp_ReverseR");
+
+	/**
+	 * 뒤집힌 합체무기의 소켓 기준 상대 회전. 부착 후 1회 적용된다.
+	 * 뒤집기는 wp_ReverseR 소켓 방향이 담당하므로 기본은 0(=소켓 그대로).
+	 * 소켓만으로 각이 안 나올 때 미세조정용으로만 쓸 것.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Weapon")
+	FRotator TwoHandedReversedRotationOffset = FRotator::ZeroRotator;
+
 private:
 	/** 현재 무기 상태(복제). 값이 바뀌면 클라에서 OnRep 로 표시 갱신 */
 	UPROPERTY(ReplicatedUsing = OnRep_WeaponState)
@@ -94,8 +108,12 @@ private:
 	/** 현재 WeaponState 에 맞춰 세 무기의 숨김 여부를 갱신 (멱등, null 안전) */
 	void ApplyWeaponState();
 
-	/** 무기 클래스를 소켓에 1회 스폰+부착하고 숨김/무콜리전으로 초기화 */
-	AActor* SpawnAndAttachWeapon(TSubclassOf<AActor> WeaponClass, FName SocketName);
+	/**
+	 * 무기 클래스를 소켓에 1회 스폰+부착하고 숨김/무콜리전으로 초기화.
+	 * RelativeRotation 이 0 이 아니면 부착 후 소켓 기준 상대 회전으로 적용(뒤집힌 무기용).
+	 */
+	AActor* SpawnAndAttachWeapon(TSubclassOf<AActor> WeaponClass, FName SocketName,
+		const FRotator& RelativeRotation = FRotator::ZeroRotator);
 
 	/** 개별 무기 표시/숨김 (null 안전) */
 	static void SetWeaponVisible(AActor* Weapon, bool bVisible);
@@ -109,4 +127,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> TwoHandedWeapon;
+
+	/** 뒤집힌 합체무기. 정방향과 소켓/회전만 다른 별도 인스턴스 (전환 시 재부착 없이 토글만) */
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> TwoHandedReversedWeapon;
 };

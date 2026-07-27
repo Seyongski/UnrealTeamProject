@@ -35,4 +35,11 @@ protected:
 	virtual void BuildTelegraph() override;
 	virtual void DebugDrawShape() const override;
 	virtual void ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const override;
+
+	/**
+	 * 넉백 SweepSide/SweepSideBack 용 방향.
+	 * 사각형은 각도가 없으므로 '길이축(Forward)에 직교' = 측면(Right) 축이 쓸기 방향이다.
+	 * bReverse=false -> 우측(+Right), true -> 좌측(-Right). 벽이 옆으로 훑고 지나가는 연출.
+	 */
+	virtual bool GetSweepPushDirection(bool bReverse, FVector& OutDir) const override;
 };

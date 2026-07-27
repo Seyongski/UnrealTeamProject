@@ -79,7 +79,26 @@ enum class EAoeKnockbackDirection : uint8
 	/** 장판 전방 (직선/사각 장판, 투사체 진행 방향으로 떠밀기) */
 	AlongForward	UMETA(DisplayName = "장판 전방"),
 	/** 시전자(보스) 중심 -> 대상 방향 (Follow 회전 장판 등 보스 기준 바깥으로) */
-	FromCaster		UMETA(DisplayName = "시전자에서 바깥")
+	FromCaster		UMETA(DisplayName = "시전자에서 바깥"),
+	/**
+	 * 장판이 지나온 이동 경로 방향 = 스폰(시작) 지점 -> 맞은 시점의 현재(끝) 지점.
+	 * Straight/Homing/Spiral 처럼 움직이는 장판이 훑고 지나갈 때, 맞은 사람 전원이
+	 * 장판 진행 방향으로 똑같이 쓸려나간다 (중심 기준 방사가 아니라 한 방향).
+	 * 아직 안 움직였으면(예고 중/Fixed) 발사 방향 -> 타겟 방향 -> 장판 전방 순으로 폴백.
+	 */
+	AlongTravel		UMETA(DisplayName = "장판 이동 경로 (시작->끝)"),
+	/** AlongTravel 의 반대 방향 = 끝 지점 -> 시작 지점 (장판이 온 쪽으로 되밀기) */
+	AgainstTravel	UMETA(DisplayName = "장판 이동 경로 (끝->시작)"),
+	/**
+	 * 도형이 훑는 방향으로 옆으로 쓸어내기 = 도형의 '끝 경계선'에 직교하는 수평 방향.
+	 * 맞은 사람 전원이 그 경계 바깥으로 같은 방향으로 밀린다 (좌우로 쓸림. 앞뒤 아님).
+	 *  - 부채꼴 : EndAngle 경계선에 직교 (StartAngle -> EndAngle 로 훑는 쪽)
+	 *  - 사각형 : 길이축(Forward)에 직교 = 우측(Right)
+	 * 경계 개념이 없는 도형(원 등)은 장판 전방으로 폴백한다.
+	 */
+	SweepSide		UMETA(DisplayName = "옆으로 쓸기 (시작->끝)"),
+	/** SweepSide 의 반대 방향 = 시작 경계선 기준 (부채꼴: StartAngle 직교 / 사각형: 좌측) */
+	SweepSideBack	UMETA(DisplayName = "옆으로 쓸기 (끝->시작)")
 };
 
 /**
@@ -347,6 +366,15 @@ protected:
 	 * (VFX는 지오메트리 마스킹 없이 크기만 맞추면 되므로 도형 각각 노출 파라미터명만 맞추면 됨)
 	 */
 	virtual void ConfigureTelegraphEffect(UNiagaraComponent* NiagaraComp) const {}
+
+	/**
+	 * 도형이 '옆으로 쓸어내는' 방향(넉백 SweepSide/SweepSideBack 용)을 계산한다. (자식 구현, 선택)
+	 * 자기 끝 경계선에 직교하는 수평 방향을 OutDir 로 채워주면 된다
+	 * (부채꼴 = EndAngle 경계에 직교, 사각형 = 길이축에 직교한 우측).
+	 * bReverse=false 면 시작->끝 쪽, true 면 끝->시작 쪽(정반대).
+	 * 경계 개념이 없는 도형(원 등)은 기본 구현대로 false 를 돌려주면 베이스가 ShapeForward 로 폴백한다.
+	 */
+	virtual bool GetSweepPushDirection(bool bReverse, FVector& OutDir) const { return false; }
 
 	// ═══════════════ 자식이 쓰는 헬퍼 ═══════════════
 
@@ -737,6 +765,12 @@ private:
 
 	/** 바닥 트레이스 결과를 이번 수명에 1회만 로그 (Follow 매 틱 스팸 방지, 진단용) */
 	mutable bool bGroundTraceLogged = false;
+
+	/**
+	 * 이동 경로의 '시작 지점' = 원점 해석이 끝난 스폰 위치 (AlongTravel 넉백 방향 기준).
+	 * 이후 AttackCenter 는 이동 모드에 따라 움직이므로 (AttackCenter - TravelStart) 가 진행 방향이 된다.
+	 */
+	FVector TravelStart = FVector::ZeroVector;
 
 	/** Spiral 모드: 나선 궤도의 중심이 되는 직선 진행 위치 (매 틱 타겟 쪽으로 전진) */
 	FVector SpiralBasePos = FVector::ZeroVector;

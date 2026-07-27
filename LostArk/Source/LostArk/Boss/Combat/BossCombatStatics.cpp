@@ -4,6 +4,7 @@
 #include "Boss/BossAttributeSet.h"
 #include "Boss/BossBase.h"
 #include "Boss/BossGameplayTags.h"
+#include "Boss/Raid/BossRaidGameState.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/PlayerController.h"
@@ -123,6 +124,19 @@ void UBossCombatStatics::GetPlayerPawns(const UWorld* World, TArray<APawn*>& Out
 			OutPawns.Add(Pawn);
 		}
 	}
+}
+
+bool UBossCombatStatics::GetArenaFloorZ(const UWorld* World, float& OutZ)
+{
+	// GameState 가 아직 없을 수 있다(클라에서 보스보다 늦게 복제되는 경우) -> 호출자가 재시도.
+	const ABossRaidGameState* GS = World ? World->GetGameState<ABossRaidGameState>() : nullptr;
+	if (!GS || FMath::IsNearlyZero(GS->ArenaFloorZ))
+	{
+		return false;	// 0 = 미설정 (아레나 밖/미구성 맵)
+	}
+
+	OutZ = GS->ArenaFloorZ;
+	return true;
 }
 
 bool UBossCombatStatics::IsAliveActor(const AActor* Actor, const FGameplayTag& DeadTag)

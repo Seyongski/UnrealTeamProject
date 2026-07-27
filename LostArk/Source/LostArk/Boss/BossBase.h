@@ -216,8 +216,14 @@ private:
 	/** 소멸 시퀀스 타이머 (대기 -> 연출 -> Destroy 공용) */
 	FTimerHandle DisappearTimer;
 
-	/** 백헤드 데칼 지면 재투영 타이머 (발판 스폰 타이밍 대응, 바닥 잡으면 정지) */
+	/** 백헤드 데칼 지면 재투영 타이머 (GameState 복제/발판 스폰 타이밍 대응, 바닥 확정하면 정지) */
 	FTimerHandle DecalGroundTimer;
+
+	/**
+	 * 위 타이머의 남은 재시도 횟수. ArenaFloorZ 가 없는 맵(테스트 레벨 등)에서 영원히 4Hz 로
+	 * 폴링하지 않도록 상한을 둔다. 소진되면 마지막으로 구한 Z 를 그대로 쓰고 타이머 정지.
+	 */
+	int32 DecalGroundRetriesLeft = 40;	// 0.25s * 40 = 10초
 
 	/** 소멸 예약 1회 가드 (몽타주 종료가 여러 번 와도 안전) */
 	bool bDisappearScheduled = false;

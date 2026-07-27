@@ -6,7 +6,6 @@
 #include "Boss/BossGameplayTags.h"
 #include "Boss/Combat/BossCombatStatics.h"
 #include "Boss/Gimmick/BossGimmickTower.h"
-#include "Boss/Raid/BossRaidGameState.h"
 #include "EngineUtils.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -263,7 +262,17 @@ void ABossPatternActorBase::ResolveOrigin()
 		GetActorRotation().Yaw, ShapeForward.X, ShapeForward.Y);
 }
 
-bool ABossPatternActorBase::TraceGroundZ(const FVector& At, float& OutZ) const
+namespace
+{
+	/**
+	 * 아레나 바닥 Z 를 아는 경우 트레이스를 시작할 여유 높이(cm).
+	 * 바닥 '바로 위'에서 쏴야 천장/다리/기둥 같은 머리 위 지오메트리를 아예 안 맞는다.
+	 * (캐릭터 캡슐 하나가 넉넉히 들어가는 높이면 충분)
+	 */
+	constexpr float ArenaTraceStartMargin = 200.f;
+}
+
+bool ABossPatternActorBase::TraceGroundZ(const FVector& At, float StartZ, float& OutZ) const
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -283,11 +292,11 @@ bool ABossPatternActorBase::TraceGroundZ(const FVector& At, float& OutZ) const
 	ObjParams.AddObjectTypesToQuery(ECC_WorldStatic);
 	ObjParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
-	// 위에서 아래로 훑는다. 시작 높이를 GroundTraceStartHeight 로 넉넉히 잡아, 보스 캡슐이
-	// 지형 아래로 잠겨 기준 Z(At) 가 바닥보다 낮은 맵에서도 시작점이 바닥 위가 되게 한다.
-	// (시작점이 바닥 밑이면 아래로 쏴봐야 바닥을 못 맞춰 데칼이 맵 아래에 찍힌다)
-	const FVector Start = At + FVector(0.f, 0.f, GroundTraceStartHeight);
-	const FVector End = At - FVector(0.f, 0.f, 5000.f);
+	// 위에서 아래로 훑는다. 시작 Z 는 호출자(ResolveGroundZ)가 정한다 — 바닥 위에서 시작해야
+	// 하고(시작점이 바닥 밑이면 아래로 쏴봐야 못 맞춘다), 너무 높으면 머리 위 지오메트리를 맞는다.
+	// 끝점은 시작점/기준점 중 낮은 쪽에서 5000cm 아래까지.
+	const FVector Start(At.X, At.Y, StartZ);
+	const FVector End(At.X, At.Y, FMath::Min(StartZ, At.Z) - 5000.f);
 
 	FHitResult Hit;
 	if (World->LineTraceSingleByObjectType(Hit, Start, End, ObjParams, Params))
@@ -296,15 +305,22 @@ bool ABossPatternActorBase::TraceGroundZ(const FVector& At, float& OutZ) const
 		if (!bGroundTraceLogged)
 		{
 			bGroundTraceLogged = true;
-			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 바닥 트레이스 적중: 액터=%s 컴포넌트=%s ImpactZ=%.1f (기준 Z=%.1f)"),
+			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 바닥 트레이스 적중: 액터=%s 컴포넌트=%s ImpactZ=%.1f (기준 Z=%.1f, 시작 Z=%.1f)"),
 				*GetName(), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()),
-				Hit.ImpactPoint.Z, At.Z);
+				Hit.ImpactPoint.Z, At.Z, StartZ);
 		}
 		OutZ = Hit.ImpactPoint.Z;
 		return true;
 	}
 
 	return false;	// 실패 시 로그는 ResolveGroundZ 가 폴백 수치와 함께 남긴다
+}
+
+bool ABossPatternActorBase::GetArenaFloorZ(float& OutZ) const
+{
+	// 백헤드 데칼(ABossBase::UpdateBackHeadDecal)과 같은 규칙을 쓰도록 공용 헬퍼로 위임.
+	// 미설정(0)이면 false -> 호출자가 트레이스/발밑 폴백으로 넘어간다.
+	return UBossCombatStatics::GetArenaFloorZ(GetWorld(), OutZ);
 }
 
 float ABossPatternActorBase::ResolveGroundZ(const FVector& At) const
@@ -320,32 +336,62 @@ float ABossPatternActorBase::ResolveGroundZ(const FVector& At) const
 		return AbsoluteGroundZ;
 	}
 
-	// 강제 폴백: 트레이스가 이상한 걸 잡을 때 수동 제어 (오프셋이 반드시 적용됨)
-	float TracedZ = 0.f;
-	if (!bForceGroundFallback && TraceGroundZ(At, TracedZ))
-	{
-		return TracedZ;
-	}
+	// 아레나 바닥 높이의 단일 진실 = GameState.ArenaFloorZ (디자이너가 GameState BP에 지정).
+	// 지정돼 있으면 이게 기준이고, 트레이스는 '단차/경사 보정'용으로만 쓴다(ArenaFloorZTolerance).
+	//
+	// 예전엔 트레이스를 무조건 먼저 신뢰했는데, 머리 위 지오메트리나 구덩이 밑바닥을 맞으면 장판이
+	// 허공/맵 아래에 찍혀서 BP 마다 절대 Z(bUseAbsoluteGroundZ)를 손으로 박아야 했다.
+	// -> 절대 Z 를 박은 도형(사각)만 제대로 찍히고 나머지(원/부채꼴/레이저/잡기)는 어긋나던 원인.
+	//
+	// bForceGroundFallback 은 트레이스와 아레나 Z 를 모두 건너뛰고 발밑+오프셋으로 수동 제어.
+	float ArenaZ = 0.f;
+	const bool bHasArenaZ = !bForceGroundFallback && GetArenaFloorZ(ArenaZ);
 
-	// 폴백 1순위: 아레나 바닥 높이의 단일 진실 = GameState.ArenaFloorZ (디자이너가 GameState BP에 지정).
-	// 0 이면 미설정으로 보고 다음 폴백으로 넘어간다.
-	// (각 BP 에 절대 Z 를 박지 않아도 이 한 값만 맞추면 모든 장판이 따라옴)
-	if (const ABossRaidGameState* GS = GetWorld() ? GetWorld()->GetGameState<ABossRaidGameState>() : nullptr)
+	// 아레나 바닥을 알고 허용 오차가 0 이면 트레이스는 볼 필요도 없다 (평평한 아레나 = 기본).
+	// 오차를 열어둔 맵(단차/경사)에서만 트레이스로 보정한다.
+	const bool bUseTrace = !bForceGroundFallback
+		&& (!bHasArenaZ || ArenaFloorZTolerance > KINDA_SMALL_NUMBER);
+
+	if (bUseTrace)
 	{
-		if (!FMath::IsNearlyZero(GS->ArenaFloorZ))
+		// 아레나 바닥을 알면 그 바로 위에서 쏜다 -> 천장/다리/기둥 등 머리 위 지오메트리를 애초에 안 맞음.
+		// 모르는 맵이면 기존대로 기준점 위 GroundTraceStartHeight 에서 쏜다.
+		const float StartZ = bHasArenaZ
+			? ArenaZ + ArenaTraceStartMargin
+			: At.Z + GroundTraceStartHeight;
+
+		float TracedZ = 0.f;
+		if (TraceGroundZ(At, StartZ, TracedZ))
 		{
-			const float ArenaZ = GS->ArenaFloorZ + GroundFallbackZOffset;
-			if (!bGroundTraceLogged)
+			// 아레나 바닥을 아는 경우엔 그 근처 값만 채택 (허용 오차 0 이면 항상 ArenaFloorZ 고정)
+			if (!bHasArenaZ || FMath::Abs(TracedZ - ArenaZ) <= ArenaFloorZTolerance)
 			{
-				bGroundTraceLogged = true;
-				UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 폴백 Z(아레나): ArenaFloorZ=%.1f + 오프셋=%.1f => %.1f"),
-					*GetName(), GS->ArenaFloorZ, GroundFallbackZOffset, ArenaZ);
+				return TracedZ;
 			}
-			return ArenaZ;
+
+			if (!bGroundTraceRejectLogged)
+			{
+				bGroundTraceRejectLogged = true;
+				UE_LOG(LogTemp, Warning,
+					TEXT("[Aoe] %s 트레이스 Z=%.1f 는 아레나 바닥 %.1f 에서 %.1f 벗어나 무시(허용=%.1f) -> ArenaFloorZ 사용"),
+					*GetName(), TracedZ, ArenaZ, FMath::Abs(TracedZ - ArenaZ), ArenaFloorZTolerance);
+			}
 		}
 	}
 
-	// 폴백 2순위: 생존 플레이어 발밑 Z. 플레이어는 실제 아레나 바닥에 서 있으므로,
+	// 아레나 바닥 채택. ArenaFloorZ 는 이미 '실제 바닥'이라 GroundFallbackZOffset(발밑 보정용)을
+	// 더하지 않는다 -> 도형 BP 마다 남아있는 보정값 차이가 장판 높이를 어긋나게 만들지 않는다.
+	if (bHasArenaZ)
+	{
+		if (!bGroundTraceLogged)
+		{
+			bGroundTraceLogged = true;
+			UE_LOG(LogTemp, Warning, TEXT("[Aoe] %s 바닥 Z(아레나): ArenaFloorZ=%.1f"), *GetName(), ArenaZ);
+		}
+		return ArenaZ;
+	}
+
+	// 폴백: 생존 플레이어 발밑 Z. 플레이어는 실제 아레나 바닥에 서 있으므로,
 	// 보스가 구덩이에 잠겨 시전자 발밑/트레이스가 바닥을 못 줄 때 이게 진짜 바닥이다.
 	{
 		float PlayerZ = 0.f;
@@ -362,7 +408,7 @@ float ABossPatternActorBase::ResolveGroundZ(const FVector& At) const
 		}
 	}
 
-	// 폴백 3순위: 시전자(보스) 발밑 Z + 수동 보정 (플레이어도 못 찾을 때)
+	// 최종 폴백: 시전자(보스) 발밑 Z + 수동 보정 (플레이어도 못 찾을 때)
 	if (Caster)
 	{
 		const float FeetZ = GetFeetLocation(Caster).Z;

@@ -378,15 +378,25 @@ void ABossBase::UpdateBackHeadDecal()
 	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
 	const FVector CapsuleCenter = Capsule->GetComponentLocation();
 
-	// 발판 Z 를 AoE(BossPatternActorBase::ResolveGroundZ)와 '동일한 규칙'으로 구한다.
-	//  1) 발밑 아래로 트레이스 (bTraceComplex=true + 오브젝트 질의: 병합 바닥 SM_MERGED_* 대응)
-	//  2) 실패 시 GameState.ArenaFloorZ (아레나 바닥 단일 진실 — 보스가 선 자리엔 바닥 콜리전이
-	//     안 잡히는 맵이 있어서 필요. AoE 도 같은 폴백을 쓴다)
+	// 발판 Z 를 AoE 장판(BossPatternActorBase::ResolveGroundZ)과 '동일한 규칙'으로 구한다.
+	//  1) GameState.ArenaFloorZ — 아레나 바닥 높이의 단일 진실 (보스는 MOVE_None 으로 아레나
+	//     중앙에 고정이므로 이 값이 곧 보스 발판이다)
+	//  2) 미설정 맵이면 발밑 아래로 트레이스 (bTraceComplex=true + 오브젝트 질의: 병합 바닥 SM_MERGED_* 대응)
 	//  3) 그래도 없으면 발밑
+	//
+	// 트레이스를 먼저 신뢰하면 안 된다: 보스는 중앙 구덩이에 잠겨 있어서 발밑 트레이스가
+	// '구덩이 밑바닥'을 맞고, 데칼이 아레나 바닥보다 아래에 깔려 바닥 메시에 가려 안 보인다.
+	// (에디터 뷰포트에선 갱신 전 기본 위치라 보이고, 플레이하면 사라지던 원인)
 	float GroundWorldZ = CapsuleCenter.Z - HalfHeight; // 최종 폴백: 발밑
-	bool bResolved = false;
+	UWorld* World = GetWorld();
+	bool bResolved = UBossCombatStatics::GetArenaFloorZ(World, GroundWorldZ);
 
-	if (UWorld* World = GetWorld())
+	// GameState 가 아직 없으면(클라에서 보스보다 늦게 복제) ArenaFloorZ 를 못 읽는다.
+	// 이때 트레이스 결과를 확정으로 받아들이면 구덩이 밑바닥에 고정돼 버리므로,
+	// 임시로만 쓰고 bResolved 를 세우지 않아 아래 재시도 타이머가 계속 돌게 한다.
+	const bool bGameStateReady = World && World->GetGameState<ABossRaidGameState>() != nullptr;
+
+	if (!bResolved && World)
 	{
 		const FVector TraceStart = CapsuleCenter;
 		const FVector TraceEnd = CapsuleCenter - FVector(0.f, 0.f, 10000.f);
@@ -400,15 +410,7 @@ void ABossBase::UpdateBackHeadDecal()
 		if (World->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjParams, Params))
 		{
 			GroundWorldZ = Hit.ImpactPoint.Z;
-			bResolved = true;
-		}
-		else if (const ABossRaidGameState* GS = World->GetGameState<ABossRaidGameState>())
-		{
-			if (!FMath::IsNearlyZero(GS->ArenaFloorZ))
-			{
-				GroundWorldZ = GS->ArenaFloorZ;
-				bResolved = true;
-			}
+			bResolved = bGameStateReady;	// GameState 대기 중이면 확정하지 않는다
 		}
 	}
 
@@ -424,19 +426,23 @@ void ABossBase::UpdateBackHeadDecal()
 	BackHeadDecal->SetWorldLocation(DecalWorld);
 	BackHeadDecal->UpdateRadius(Capsule->GetScaledCapsuleRadius());
 
-	// 보스 BeginPlay 가 '발판 스폰'보다 먼저 도는 맵이 있어(로그상 BackHeadDecal 이 첫 줄),
-	// 첫 트레이스는 바닥을 못 잡고 발밑 폴백으로 꺼질 수 있다.
-	// → 바닥을 잡을 때까지 짧게 재시도하고, 잡으면 타이머 정지. (보스는 MOVE_None 이라 이후 고정)
-	if (UWorld* World = GetWorld())
+	// 보스 BeginPlay 가 'GameState 복제/발판 스폰'보다 먼저 도는 경우가 있어(로그상 BackHeadDecal 이
+	// 첫 줄), 첫 시도는 바닥 높이를 확정하지 못하고 발밑 폴백으로 꺼질 수 있다.
+	// → 확정할 때까지 짧게 재시도하고, 확정되면 타이머 정지. (보스는 MOVE_None 이라 이후 고정)
+	if (World)
 	{
 		FTimerManager& TM = World->GetTimerManager();
-		if (bResolved)
+		if (bResolved || DecalGroundRetriesLeft <= 0)
 		{
 			TM.ClearTimer(DecalGroundTimer);
 		}
 		else if (!DecalGroundTimer.IsValid())
 		{
 			TM.SetTimer(DecalGroundTimer, this, &ABossBase::UpdateBackHeadDecal, 0.25f, /*bLoop=*/true);
+		}
+		else
+		{
+			--DecalGroundRetriesLeft;	// 타이머가 돌 때만 소진 (첫 호출은 BeginPlay 라 차감 안 함)
 		}
 	}
 }

@@ -92,6 +92,16 @@ public:
 	static void GetPlayerPawns(const UWorld* World, TArray<APawn*>& OutPawns);
 
 	/**
+	 * 아레나 바닥의 월드 Z (= GameState.ArenaFloorZ). 지정(비0)돼 있으면 OutZ 채우고 true.
+	 *
+	 * '바닥에 붙는' 모든 표시물(장판 예고 / 백헤드 데칼)의 높이는 이 값이 단일 진실이다.
+	 * 아래로 쏘는 바닥 트레이스는 보스가 잠긴 구덩이 밑바닥이나 머리 위 지오메트리를 맞아
+	 * 엉뚱한 Z 를 주는 경우가 있어서, 이 값이 있으면 트레이스보다 우선한다.
+	 * (BossPatternActorBase::ResolveGroundZ / ABossBase::UpdateBackHeadDecal 공용)
+	 */
+	static bool GetArenaFloorZ(const UWorld* World, float& OutZ);
+
+	/**
 	 * 대상이 생존 상태인지 (DeadTag 기준).
 	 * 규약: 액터 없음 = false / 태그 미지정·ASC 없음 = 판정 불가 -> 생존 간주(대상 포함)
 	 */

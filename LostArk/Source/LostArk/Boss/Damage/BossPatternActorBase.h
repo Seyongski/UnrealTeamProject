@@ -655,20 +655,23 @@ protected:
 	FVector GetCasterOriginLocation() const;
 
 	/**
-	 * At 위치의 바닥 Z 를 구한다 (위에서 아래로 트레이스). 성공 시 OutZ 채우고 true.
+	 * At 위치의 바닥 Z 를 구한다 (StartZ 에서 아래로 트레이스). 성공 시 OutZ 채우고 true.
 	 * 오브젝트 타입(WorldStatic/WorldDynamic) 쿼리라 바닥 메시의 Visibility 응답과 무관하게 잡힌다.
-	 * (거대 보스 캡슐 높이만큼 위에서 쏘고 충분히 아래까지 내려감)
+	 * StartZ 를 낮게 잡으면 머리 위 지오메트리(천장/다리/기둥/보스 부착물)를 애초에 안 맞는다
+	 * — ResolveGroundZ 는 아레나 바닥 Z 를 아는 경우 그 바로 위에서 쏜다.
 	 */
-	bool TraceGroundZ(const FVector& At, float& OutZ) const;
+	bool TraceGroundZ(const FVector& At, float StartZ, float& OutZ) const;
+
+	/** GameState 에 지정된 아레나 바닥의 월드 Z. 미설정(0)이면 false (= 아레나 밖/미구성 맵) */
+	bool GetArenaFloorZ(float& OutZ) const;
 
 	/**
 	 * At 위치의 바닥 Z 를 항상 반환 (폴백 포함).
-	 *  1) TraceGroundZ 성공 시 그 값
-	 *  2) GameState.ArenaFloorZ (지정 시)
-	 *  3) 생존 플레이어 발밑 Z — 플레이어는 실제 아레나 바닥에 서 있으므로, 보스가 구덩이에
-	 *     잠긴 맵에서도 이게 진짜 바닥이다 (TryGetPlayerGroundZ)
-	 *  4) 시전자(보스) 발밑 Z + 보정
-	 *  5) 시전자도 없으면 At.Z 그대로
+	 *  1) bUseAbsoluteGroundZ 면 AbsoluteGroundZ 로 고정 (BP 별 수동 고정)
+	 *  2) GameState.ArenaFloorZ 가 지정된 맵이면 그 값이 바닥의 단일 진실.
+	 *     트레이스는 ArenaFloorZ 바로 위에서 쏘고, 결과가 ArenaFloorZTolerance 안일 때만 채택한다
+	 *     (벗어나면 엉뚱한 지오메트리를 맞은 것으로 보고 ArenaFloorZ 를 그대로 사용)
+	 *  3) ArenaFloorZ 미설정 시: 트레이스 -> 생존 플레이어 발밑 -> 시전자 발밑 + 보정 -> At.Z
 	 */
 	float ResolveGroundZ(const FVector& At) const;
 
@@ -693,17 +696,32 @@ protected:
 	float GroundTraceStartHeight = 3000.f;
 
 	/**
-	 * 바닥 트레이스 실패 시 폴백 Z(시전자 캡슐 발밑)에 더할 수동 보정(cm).
+	 * GameState.ArenaFloorZ 가 지정된 맵에서, 바닥 트레이스 결과를 신뢰할 최대 높이차(cm).
+	 *  - 0(기본): 트레이스를 아예 쓰지 않고 ArenaFloorZ 로 고정 -> 모든 도형이 정확히 같은 높이에
+	 *    찍힌다. 평평한 아레나에선 이게 정답 (BP 마다 절대 Z 를 손으로 박을 필요가 없어짐).
+	 *  - >0: 트레이스 Z 가 ArenaFloorZ ± 이 값 안이면 채택(단차/경사 대응), 벗어나면 '바닥이 아닌
+	 *    걸 맞았다'로 보고 버린다. 아레나에 진짜 단차가 있으면 그 높이차보다 크게 잡을 것.
+	 * (ArenaFloorZ 미설정 맵에선 이 값과 무관하게 기존 트레이스 -> 발밑 폴백 순서를 그대로 탄다)
+	 */
+	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn", meta = (ClampMin = "0.0"))
+	float ArenaFloorZTolerance = 0.f;
+
+	/**
+	 * 바닥 트레이스 실패 시 폴백 Z(시전자/플레이어 캡슐 발밑)에 더할 수동 보정(cm).
 	 * 보스가 중앙 구덩이에 잠겨 있어 발밑이 실제 아레나 바닥보다 낮으면 그 차이만큼 +로 올린다.
 	 * (BP 디폴트에서 맵에 맞게 한 번 맞춰두면 됨. 트레이스가 잡히는 위치에선 사용되지 않음)
+	 *
+	 * 주의: GameState.ArenaFloorZ 는 이미 '실제 바닥' 값이므로 이 보정을 더하지 않는다
+	 * — 그래야 도형별로 남아있는 보정값 차이가 장판 높이를 서로 다르게 만들지 않는다.
 	 */
 	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
 	float GroundFallbackZOffset = 0.f;
 
 	/**
-	 * 켜면 바닥 트레이스를 아예 건너뛰고 항상 '시전자 발밑 Z + GroundFallbackZOffset' 을 바닥으로 사용.
-	 * 트레이스가 엉뚱한 것(투명 볼륨/부착 무기/구덩이 밑바닥 등)을 잡아 높이가 이상할 때
-	 * 수동으로 확실하게 제어하는 스위치. (켜면 오프셋이 반드시 적용됨)
+	 * 켜면 바닥 트레이스와 ArenaFloorZ 를 모두 건너뛰고 항상 '플레이어/시전자 발밑 Z +
+	 * GroundFallbackZOffset' 을 바닥으로 사용. 트레이스가 엉뚱한 것(투명 볼륨/부착 무기/구덩이
+	 * 밑바닥 등)을 잡고 ArenaFloorZ 도 못 믿을 때 수동으로 확실하게 제어하는 스위치.
+	 * (켜면 오프셋이 반드시 적용됨)
 	 */
 	UPROPERTY(EditAnywhere, Category = "Aoe|Spawn")
 	bool bForceGroundFallback = false;
@@ -765,6 +783,9 @@ private:
 
 	/** 바닥 트레이스 결과를 이번 수명에 1회만 로그 (Follow 매 틱 스팸 방지, 진단용) */
 	mutable bool bGroundTraceLogged = false;
+
+	/** 트레이스 Z 를 아레나 바닥과 동떨어져서 버렸다는 로그도 1회만 (원인 지오메트리 진단용) */
+	mutable bool bGroundTraceRejectLogged = false;
 
 	/**
 	 * 이동 경로의 '시작 지점' = 원점 해석이 끝난 스폰 위치 (AlongTravel 넉백 방향 기준).

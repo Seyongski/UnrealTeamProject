@@ -275,12 +275,28 @@ void ALostArkCharacter::Die()
 	{
 		return;
 	}
-
 	bIsDead = true;
+
+	if (HasAuthority())
+	{
+		Multicast_Die();
+	}
+	else
+	{
+		Multicast_Die_Implementation();
+	}
+}
+
+void ALostArkCharacter::Multicast_Die_Implementation()
+{
+	bIsDead = true;
+	StopAnimMontage();
+	SetCombatState(FGameplayTag::EmptyTag);
 
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dead"), false));
+		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
 		AbilitySystemComponent->CancelAllAbilities();
 	}
 
@@ -296,16 +312,66 @@ void ALostArkCharacter::Revive()
 	{
 		return;
 	}
-
 	bIsDead = false;
+
+	if (HasAuthority())
+	{
+		Multicast_Revive();
+	}
+	else
+	{
+		Multicast_Revive_Implementation();
+	}
+}
+
+void ALostArkCharacter::Multicast_Revive_Implementation()
+{
+	bIsDead = false;
+	StopAnimMontage();
+	SetCombatState(FGameplayTag::EmptyTag);
 
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dead")));
+		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking")));
 	}
 
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	GetCharacterMovement()->MaxWalkSpeed = BaseRunSpeed;
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->ResetIgnoreMoveInput();
+		PC->ResetIgnoreLookInput();
+
+		if (PC->IsLocalController())
+		{
+			FInputModeGameAndUI InputMode;
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			InputMode.SetHideCursorDuringCapture(false);
+			PC->SetInputMode(InputMode);
+			PC->SetShowMouseCursor(true);
+		}
+	}
+
+	if (GetMesh() && GetMesh()->GetAnimInstance())
+	{
+		GetMesh()->GetAnimInstance()->StopAllMontages(0.f);
+	}
+}
+
+void ALostArkCharacter::OnRep_IsDead()
+{
+	if (bIsDead)
+	{
+		Multicast_Die_Implementation();
+	}
+	else
+	{
+		Multicast_Revive_Implementation();
+	}
 }
 
 void ALostArkCharacter::SetCombatState(FGameplayTag NewStateTag)

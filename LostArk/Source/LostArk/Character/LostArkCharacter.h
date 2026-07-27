@@ -43,6 +43,15 @@ public:
 
 	virtual void Revive() override;
 
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_Die();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_Revive();
+
+	UFUNCTION()
+	void OnRep_IsDead();
+
 	virtual bool IsDead() const override { return bIsDead; }
 
 	virtual FGameplayTag GetCurrentStateTag() const override { return CurrentStateTag; }
@@ -124,7 +133,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character|Movement")
 	float BaseRunSpeed;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Character", Replicated)
+	UPROPERTY(BlueprintReadOnly, Category = "Character", ReplicatedUsing = OnRep_IsDead)
 	bool bIsDead;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Character|Weapon", ReplicatedUsing = OnRep_IsWeaponEquipped)

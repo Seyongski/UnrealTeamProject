@@ -53,6 +53,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Revive")
 	bool bReviveAtArenaCenter = true;
 
+	/** 부활 직후 무적 부여 시간(초) (Option A 안전 장치) */
+	UPROPERTY(EditDefaultsOnly, Category = "Revive", meta = (ClampMin = "0.0"))
+	float ReviveInvincibleDuration = 3.f;
+
 	/** 현재 사망 상태인지 (복제 -> 클라 UI) */
 	UFUNCTION(BlueprintPure, Category = "Revive")
 	bool IsDeadState() const { return bDeadState; }
@@ -91,6 +95,9 @@ private:
 	/** 실제 부활 처리 (서버) */
 	void DoRevive();
 
+	/** 부활 직후 3초 무적 해제 (서버) */
+	void RemoveReviveInvincibility();
+
 	UFUNCTION()
 	void OnRep_DeadState();
 
@@ -102,4 +109,5 @@ private:
 	float DeathServerTime = 0.f;
 
 	FTimerHandle AutoReviveTimer;
+	FTimerHandle ReviveInvincibleTimer;
 };

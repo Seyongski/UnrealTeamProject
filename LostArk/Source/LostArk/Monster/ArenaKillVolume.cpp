@@ -7,6 +7,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameFramework/Pawn.h"
+#include "Character/LostArkAttributeSet.h"
+#include "Core/LostArkCombatInterface.h"
 
 AArenaKillVolume::AArenaKillVolume()
 {
@@ -43,6 +45,13 @@ void AArenaKillVolume::OnBoxBeginOverlap(UPrimitiveComponent* /*OverlappedComp*/
 		return;
 	}
 
+	// ★ 이미 사망 상태이거나 부활 직후 무적(State.Invincible)인 경우 중복 낙사 처리 금지!
+	if (ASC->HasMatchingGameplayTag(LostArkTags::State_Dead) || 
+		ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Invincible"))))
+	{
+		return;
+	}
+
 	if (FallDeathEffect)
 	{
 		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
@@ -55,8 +64,20 @@ void AArenaKillVolume::OnBoxBeginOverlap(UPrimitiveComponent* /*OverlappedComp*/
 	}
 	else
 	{
-		// 폴백: 사망 태그만 부여 (실제 사망 처리는 플레이어 쪽 시스템)
+		// 사망 태그 부여 + 체력 0 세팅
 		ASC->AddLooseGameplayTag(LostArkTags::State_Dead);
 		ASC->AddReplicatedLooseGameplayTag(LostArkTags::State_Dead);
+
+		ASC->SetNumericAttributeBase(ULostArkAttributeSet::GetHealthAttribute(), 0.f);
+	}
+
+	// 캐릭터 CombatInterface 사망 함수 연동 (콜리전/이동 모드/애니메이션 정지 처리)
+	if (ILostArkCombatInterface* Combat = Cast<ILostArkCombatInterface>(OtherActor))
+	{
+		if (!Combat->IsDead())
+		{
+			Combat->Die();
+		}
 	}
 }
+
